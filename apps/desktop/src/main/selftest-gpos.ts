@@ -8,7 +8,7 @@
 //   - non-permission → FORBIDDEN + audit (R_AUDIT_003)
 //   - duplicate serial/tid/customer nickname → message cụ thể (R_UX_WARN)
 import { login, logout } from './auth-service.js';
-import { getDb } from './db.js';
+import { getDb, seedIfEmpty } from './db.js';
 import * as userSvc from './user-service.js';
 import * as customerSvc from './customer-service.js';
 import * as posSvc from './pos-service.js';
@@ -146,6 +146,28 @@ export async function runGposSelfTest(): Promise<number> {
   const deniedAfter = auditAfter.ok ? (auditAfter.data ?? []).length : -1;
   assert('permission denials were audited (R_AUDIT_003)', deniedAfter > deniedBefore, { deniedBefore, deniedAfter });
   await logout();
+
+  // ── G-POS-A01 regression: re-seed (reboot) KHÔNG được tự cấp lại quyền admin đã gỡ ──
+  // LEAD lock 9/7: app không tự ý hoàn tác/đổi dữ liệu âm thầm.
+  const salesRole = await db.role.findUnique({ where: { code: 'SALES' } });
+  if (salesRole) {
+    const perm = await db.permission.findUnique({ where: { code: 'CUSTOMER_CREATE' } });
+    if (perm) {
+      // admin gỡ quyền CUSTOMER_CREATE khỏi SALES
+      await db.rolePermission.deleteMany({ where: { roleId: salesRole.id, permissionId: perm.id } });
+      const afterRemove = await db.rolePermission.findFirst({ where: { roleId: salesRole.id, permissionId: perm.id } });
+      assert('admin removed CUSTOMER_CREATE from SALES', afterRemove === null);
+      // giả lập reboot: seed lại
+      await seedIfEmpty(db);
+      const afterReseed = await db.rolePermission.findFirst({ where: { roleId: salesRole.id, permissionId: perm.id } });
+      assert('re-seed KHÔNG tự cấp lại quyền đã gỡ (G-POS-A01 fixed)', afterReseed === null);
+      // trong khi role hệ thống mặc định vẫn còn nguyên các quyền khác (không bị xóa nhầm)
+      const salesStillHasView = await db.rolePermission.findFirst({
+        where: { roleId: salesRole.id, permission: { code: 'CUSTOMER_VIEW' } }
+      });
+      assert('quyền chưa bị gỡ vẫn giữ nguyên sau re-seed', salesStillHasView !== null);
+    }
+  }
 
   // eslint-disable-next-line no-console
   console.log(`SELFTEST3 SUMMARY | failures=${failures}`);

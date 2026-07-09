@@ -29,3 +29,15 @@ Counter: B = 3. Last audit: 2026-07-09 (G-POS.1 build).
 - **Fix:** test truyền `occurredAt` sớm hơn cho createPos (2026-06-01) để dữ liệu nhất quán. KHÔNG sửa code sản phẩm (event-sourcing sort-by-occurredAt là đúng thiết kế §A1).
 - **Regression (chặn tái diễn):** self-test đã lock thứ tự 5 event (STOCK_IN→DEPLOY→REPORT_DAMAGE→SEND_REPAIR→RECEIVE_REPAIRED) + assert mọi event có occurredAt hợp lệ. **Bài học:** khi test event-sourced timeline, occurredAt của MỌI event (kể cả create) phải set nhất quán chronological.
 
+### G-POS-A01 — Seed re-sync âm thầm hoàn quyền admin đã gỡ [FIXED — LEAD lock 9/7]
+- **Phát hiện bởi:** CMD_AUDIT (đọc `db.ts::seedIfEmpty`). **Luật LEAD 9/7:** *mọi thao tác/sửa đổi ghi log realtime, không xóa được; app KHÔNG tự ý hoàn tác/đổi dữ liệu.*
+- **Nguyên nhân:** `seedIfEmpty` upsert `DEFAULT_ROLE_PERMISSIONS` mỗi lần boot với `update:{}` → nếu admin gỡ 1 quyền default khỏi role, reboot `create`-lại quyền đó, **âm thầm, không audit** → vi phạm luật.
+- **Fix:** default role-permission chỉ seed khi role **tạo mới lần đầu** (`freshlyCreatedRoleCodes`). Role đã tồn tại → giữ nguyên cấu hình admin đã sửa. Catalog permission/role vẫn upsert tên (an toàn, không phải "revert").
+- **Regression (chặn tái diễn):** SELFTEST3 thêm 3 assert — admin gỡ CUSTOMER_CREATE khỏi SALES → re-seed → quyền vẫn bị gỡ (không tự cấp lại) + quyền chưa gỡ giữ nguyên. Chạy trên DB throwaway sạch: **failures=0**.
+
+### B04 — Self-test 2/3 ghi thẳng vào dev.db khi thiếu GLB_DB_URL → nhiễm dữ liệu [FIXED]
+- **Phát hiện bởi:** CMD_AUDIT — chạy SELFTEST3 lần 2 FAIL "user creates → DUPLICATE" do lần 1 đã ghi user vào dev.db (không cô lập).
+- **Nguyên nhân:** `resolveDatabaseUrl` fallback về dev.db khi `GLB_DB_URL` không set; self-test 2/3 mutate DB nên chạy lặp bị nhiễm, kết quả không lặp lại được (thất bại quy trình test).
+- **Fix:** guard trong `index.ts` — SELFTEST=2/3 mà thiếu `GLB_DB_URL` → **ABORT exit 2** kèm hướng dẫn (migrate deploy sang file tạm rồi trỏ GLB_DB_URL). Đã verify: abort đúng, không đụng dev.db.
+- **Regression (chặn tái diễn):** **Quy trình chuẩn chạy self-test:** `rm tmp.db && DATABASE_URL=file:tmp.db prisma migrate deploy && GLB_SELFTEST=N GLB_DB_URL=file:tmp.db electron .`. Guard bắt buộc cô lập. **Bài học:** test mutate DB phải chạy trên DB dùng-một-lần, cấm ghi vào DB dev/prod.
+

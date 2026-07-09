@@ -43,6 +43,18 @@ async function createWindow(): Promise<void> {
 }
 
 app.whenReady().then(async () => {
+  // Harness guard (B04): self-test 2/3 mutate the DB. Nếu KHÔNG chỉ định GLB_DB_URL riêng thì
+  // chúng sẽ ghi vào dev.db và làm nhiễm dữ liệu (chạy lần 2 hỏng). Bắt buộc chạy trên DB throwaway.
+  const st = process.env['GLB_SELFTEST'];
+  if ((st === '2' || st === '3') && !process.env['GLB_DB_URL']) {
+    // eslint-disable-next-line no-console
+    console.error(
+      `SELFTEST${st} ABORT | phải set GLB_DB_URL trỏ tới DB throwaway đã migrate ` +
+        `(tránh ghi vào dev.db). Ví dụ: migrate deploy sang file tạm rồi GLB_DB_URL=file:<tmp>.`
+    );
+    app.exit(2);
+    return;
+  }
   try {
     await initDb();
   } catch (err) {

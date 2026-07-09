@@ -39,7 +39,7 @@ export function getDb(): Db {
  * - the default admin is created only when NO admin exists (R001).
  * - every user missing an employee_code is backfilled a NV## code (adminroot → NV01, §D).
  */
-async function seedIfEmpty(db: Db): Promise<void> {
+export async function seedIfEmpty(db: Db): Promise<void> {
   for (const p of PERMISSIONS) {
     await db.permission.upsert({
       where: { code: p.code },
@@ -47,14 +47,23 @@ async function seedIfEmpty(db: Db): Promise<void> {
       create: { code: p.code, name: p.name, group: p.group }
     });
   }
+  // LEAD lock 9/7: app KHÔNG được tự ý hoàn tác/đổi dữ liệu (đặc biệt quyền) một cách âm thầm.
+  // → default role-permissions chỉ được gắn khi role được TẠO MỚI lần đầu. Với role đã tồn tại,
+  //   chỉnh tay của admin (thêm/bớt quyền) được GIỮ NGUYÊN — reboot KHÔNG tự cấp lại quyền đã gỡ.
+  //   (fix G-POS-A01)
+  const freshlyCreatedRoleCodes = new Set<string>();
   for (const r of ROLES) {
+    const existed = await db.role.findUnique({ where: { code: r.code }, select: { id: true } });
     await db.role.upsert({
       where: { code: r.code },
       update: { name: r.name, description: r.description, isSystem: r.isSystem },
       create: { name: r.name, code: r.code, description: r.description, isSystem: r.isSystem, status: 'ACTIVE' }
     });
+    if (!existed) freshlyCreatedRoleCodes.add(r.code);
   }
   for (const [roleCode, permCodes] of Object.entries(DEFAULT_ROLE_PERMISSIONS)) {
+    // Chỉ seed quyền mặc định cho role vừa tạo mới. Role cũ giữ nguyên cấu hình admin đã sửa.
+    if (!freshlyCreatedRoleCodes.has(roleCode)) continue;
     const role = await db.role.findUnique({ where: { code: roleCode } });
     if (!role) continue;
     for (const code of permCodes) {

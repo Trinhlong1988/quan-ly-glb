@@ -36,3 +36,9 @@ Exit code: `0`=PASS · `1`=FAIL · `2`=BLOCKED.
 
 ## Nguyên tắc chống overclaim
 Mọi trạng thái ghi rõ: `enforced` (có test/tool cưỡng chế) / `partial` / `roadmap`. Cấm ghi "done/100%/PASS" cho hạng mục chưa có bằng chứng chạy thật. Dùng "Engineering PASS / Ready for Production Validation".
+
+## R_AUDIT_TRAIL — LEAD lock 9/7 (TỐI THƯỢNG)
+**Mọi thao tác/sửa đổi dữ liệu trong app PHẢI ghi audit log realtime + log KHÔNG xóa được (không có endpoint xóa).** App **CẤM tự ý hoàn tác/thay đổi dữ liệu âm thầm** — không seed/migration/scheduler/re-sync nào được thay dữ liệu người dùng đã chỉnh mà không (a) do người dùng chủ động, hoặc (b) ghi audit rõ ràng. Vi phạm điển hình đã fix: G-POS-A01 (seed hoàn quyền admin). Áp mọi feature G1..Gn.
+
+## R_PROCESS_FEATURE_GATE + R_UI_DESKTOP_CONSISTENT — LEAD lock 9/7
+Build **từng tính năng** → CMD_AUDIT review + chạy pass (build + screenshot/click thật, 0 lỗi console) → commit → mới sang tính năng kế. CẤM gộp nhiều tính năng chưa review. UI mọi màn dùng **1 design-system nhất quán như app .exe** (sidebar navy · brand `#1657D0` · card · table · FilterBar · Modal/ConfirmDialog · toast · Be Vietnam Pro).
