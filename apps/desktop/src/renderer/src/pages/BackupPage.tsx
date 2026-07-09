@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { DatabaseBackup, Loader2, RotateCcw, HardDriveDownload } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
-import { hasPermission } from '@glb/shared';
+import { hasPermission, fmtDateTime } from '@glb/shared';
 import type { BackupDto } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
@@ -97,7 +97,7 @@ export function BackupPage({ user }: { user: AuthUser }): JSX.Element {
                     {b.fileName}
                     {!b.exists && <span className="ml-2 text-danger">(mất file)</span>}
                   </td>
-                  <td className="px-4 py-3 text-xs text-slate-500">{new Date(b.createdAt).toLocaleString('vi-VN')}</td>
+                  <td className="px-4 py-3 text-xs text-slate-500">{fmtDateTime(b.createdAt)}</td>
                   <td className="px-4 py-3 text-slate-600">{b.fileSize ? `${(b.fileSize / 1024).toFixed(1)} KB` : '—'}</td>
                   <td className="px-4 py-3 font-mono text-[11px] text-slate-400">{b.checksum?.slice(0, 16) ?? '—'}…</td>
                   <td className="px-4 py-3 text-right">

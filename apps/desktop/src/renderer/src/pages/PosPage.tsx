@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Plus, Loader2, HardDrive, History, Wrench } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
-import { hasPermission } from '@glb/shared';
+import { hasPermission, fmtDate, fmtTimeSec } from '@glb/shared';
 import type { PosDto, TimelineEventDto, CustomerDto, AgentDto } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
 import { Modal } from '../components/Modal.js';
@@ -279,7 +279,7 @@ function TimelineModal({ device, onClose }: { device: PosDto; onClose: () => voi
                   </span>
                 )}
               </div>
-              <div className="mt-1 text-xs text-slate-500">{new Date(e.occurredAt).toLocaleString('vi-VN')}</div>
+              <div className="mt-1 text-xs text-slate-500">{fmtDate(e.occurredAt)} {fmtTimeSec(e.occurredAt)}</div>
               {e.note && <div className="mt-0.5 text-sm text-slate-600">{e.note}</div>}
             </li>
           ))}

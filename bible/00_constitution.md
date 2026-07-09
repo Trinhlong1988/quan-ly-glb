@@ -40,5 +40,23 @@ Mọi trạng thái ghi rõ: `enforced` (có test/tool cưỡng chế) / `partia
 ## R_AUDIT_TRAIL — LEAD lock 9/7 (TỐI THƯỢNG)
 **Mọi thao tác/sửa đổi dữ liệu trong app PHẢI ghi audit log realtime + log KHÔNG xóa được (không có endpoint xóa).** App **CẤM tự ý hoàn tác/thay đổi dữ liệu âm thầm** — không seed/migration/scheduler/re-sync nào được thay dữ liệu người dùng đã chỉnh mà không (a) do người dùng chủ động, hoặc (b) ghi audit rõ ràng. Vi phạm điển hình đã fix: G-POS-A01 (seed hoàn quyền admin). Áp mọi feature G1..Gn.
 
+## R_LINK_VERIFY — LEAD lock 9/7 (TỐI THƯỢNG cho mọi tính năng có liên kết)
+Mọi tính năng có liên kết dữ liệu PHẢI thỏa 6 điều trước khi qua gate:
+1. **Xác thực đúng phương thức liên kết**: khai rõ mỗi trường link là FK-cứng(+cascade?)/scalar-id/join-table/IPC-channel. Không mơ hồ.
+2. **Không chồng chéo**: mỗi quan hệ có 1 chiều quản lý authoritative; không 2 nơi cùng sửa 1 sự thật.
+3. **Tường minh từng dòng code, từng trường**: bảng liên kết field-by-field trong report.
+4. **Phản biện đúng/sai**: nêu cả case đúng lẫn case sai kỳ vọng.
+5. **Kiểm thử 50 ĐÚNG + 50 SAI**: bộ test tối thiểu 50 hợp lệ (phải PASS) + 50 sai (phải bị chặn đúng lý do), chạy thật, **dán bằng chứng số liệu**.
+6. **Kiểm soát độc lập**: CMD_AUDIT tự chạy lại, không tin report builder.
+
+## R_DATE_FORMAT — LEAD lock 9/7
+Mọi hiển thị ngày = **dd/mm/yyyy** (dd, mm đủ 2 chữ số: 01,02…). Cột dữ liệu có thời điểm PHẢI **tách 2 cột: Ngày | Giờ** (giờ HH:mm:ss). Dùng util chung `@glb/shared` (`fmtDate`/`fmtTime`), cấm `toLocaleString` tự do.
+
+## R_BUTTON_SEMANTICS — LEAD lock 9/7
+Màu nút theo ngữ nghĩa: **Sửa = vàng** · **Thực hiện/Xác nhận/Lưu = xanh** · **Xóa = đỏ** · nút phụ (Hủy/Làm mới) = xám viền. Dialog báo thao tác SAI phải **TO, RÕ RÀNG** (nổi bật, icon cảnh báo, không toast nhỏ dễ lướt qua).
+
+## R_TRASH_RESTORE — LEAD lock 9/7
+Soft-delete toàn hệ thống: xóa = đánh dấu trạng thái "đã xóa" + vào **Thùng rác**, KHÔNG xóa vật lý. Xóa thực thể **có liên kết** → dialog cảnh báo rõ (liệt kê cái đang liên kết). **Admin có quyền phục hồi** từ thùng rác. Xóa user KHÔNG ảnh hưởng dữ liệu user đã tạo (scalar `createdBy`, không cascade).
+
 ## R_PROCESS_FEATURE_GATE + R_UI_DESKTOP_CONSISTENT — LEAD lock 9/7
 Build **từng tính năng** → CMD_AUDIT review + chạy pass (build + screenshot/click thật, 0 lỗi console) → commit → mới sang tính năng kế. CẤM gộp nhiều tính năng chưa review. UI mọi màn dùng **1 design-system nhất quán như app .exe** (sidebar navy · brand `#1657D0` · card · table · FilterBar · Modal/ConfirmDialog · toast · Be Vietnam Pro).

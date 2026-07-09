@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Loader2, ScrollText, Search } from 'lucide-react';
 import type { AuditRowDto } from '../../../preload/index.d';
+import { fmtDate, fmtTime, fmtDateTime } from '@glb/shared';
 import { useToast } from '../lib/toast.js';
 import { Modal } from '../components/Modal.js';
 import { inputCls } from '../components/Field.js';
@@ -92,7 +93,8 @@ export function AuditPage(): JSX.Element {
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
-              <th className="px-4 py-3">Thời gian</th>
+              <th className="px-4 py-3">Ngày</th>
+              <th className="px-4 py-3">Giờ</th>
               <th className="px-4 py-3">Người thao tác</th>
               <th className="px-4 py-3">Hành động</th>
               <th className="px-4 py-3">Đối tượng</th>
@@ -102,14 +104,14 @@ export function AuditPage(): JSX.Element {
           <tbody className="divide-y divide-line">
             {loading && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
                   <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                 </td>
               </tr>
             )}
             {!loading && rows.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-slate-400">
+                <td colSpan={6} className="px-4 py-10 text-center text-slate-400">
                   <ScrollText className="mx-auto mb-2 h-6 w-6" /> Chưa có nhật ký.
                 </td>
               </tr>
@@ -117,7 +119,8 @@ export function AuditPage(): JSX.Element {
             {!loading &&
               rows.map((r) => (
                 <tr key={r.id} className="hover:bg-appbg/60">
-                  <td className="px-4 py-3 text-xs text-slate-500">{new Date(r.createdAt).toLocaleString('vi-VN')}</td>
+                  <td className="px-4 py-3 text-xs text-slate-500">{fmtDate(r.createdAt)}</td>
+                  <td className="px-4 py-3 text-xs text-slate-500">{fmtTime(r.createdAt)}</td>
                   <td className="px-4 py-3 text-slate-600">{r.actorUsername ?? (r.actorUserId ? `#${r.actorUserId}` : '—')}</td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex rounded px-2 py-0.5 text-xs font-medium ${badge(r.action)}`}>{actionLabel(r.action)}</span>
@@ -143,7 +146,7 @@ export function AuditPage(): JSX.Element {
         <Modal title={`Nhật ký #${detail.id} — ${detail.action}`} onClose={() => setDetail(null)} width="max-w-2xl">
           <div className="space-y-3 text-sm">
             <div className="text-xs text-slate-500">
-              {new Date(detail.createdAt).toLocaleString('vi-VN')} · {detail.actorUsername ?? '—'} · {detail.deviceInfo ?? ''}
+              {fmtDateTime(detail.createdAt)} · {detail.actorUsername ?? '—'} · {detail.deviceInfo ?? ''}
             </div>
             {detail.beforeJson && (
               <div>
