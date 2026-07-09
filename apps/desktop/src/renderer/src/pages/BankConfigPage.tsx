@@ -9,6 +9,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
 import { Button } from '../components/Button.js';
+import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../components/Selection.js';
 import { exportCsv } from '../lib/exportCsv.js';
 
 type Tab = 'bank' | 'cardtype' | 'partner';
@@ -73,12 +74,15 @@ function BankTab({ canManage }: { canManage: boolean }): JSX.Element {
   const [toDate, setToDate] = useState('');
   const [form, setForm] = useState<{ mode: 'create' | 'edit'; row?: BankDto } | null>(null);
   const [del, setDel] = useState<BankDto | null>(null);
+  const [bulkDel, setBulkDel] = useState(false);
+  const sel = useRowSelection();
 
   async function reload(): Promise<void> {
     setLoading(true);
     const res = await window.api.bankList({ search: search || undefined, fromDate: fromDate || undefined, toDate: toDate || undefined });
     if (res.ok && res.data) setRows(res.data);
     else if (res.message) toast.alert(res.message);
+    sel.clear();
     setLoading(false);
   }
   useEffect(() => { void reload(); /* eslint-disable-next-line */ }, []);
@@ -88,6 +92,14 @@ function BankTab({ canManage }: { canManage: boolean }): JSX.Element {
     if (res.ok) toast.success(`Đã xóa ngân hàng ${b.code}`);
     else toast.alert(res.message ?? 'Xóa ngân hàng thất bại', 'Xóa thất bại');
     setDel(null);
+    await reload();
+  }
+
+  async function doBulkDelete(password?: string): Promise<void> {
+    const res = await window.api.bankDelete([...sel.selected], password ?? '');
+    if (res.ok) toast.success(`Đã xóa ${res.deleted ?? sel.count} ngân hàng`);
+    else toast.alert(res.message ?? 'Xóa ngân hàng thất bại', 'Xóa thất bại');
+    setBulkDel(false);
     await reload();
   }
 
@@ -101,10 +113,12 @@ function BankTab({ canManage }: { canManage: boolean }): JSX.Element {
         </div>
       </div>
       <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Tìm mã / tên ngân hàng…" fromDate={fromDate} toDate={toDate} onFromDate={setFromDate} onToDate={setToDate} onApply={reload} onReset={() => { setSearch(''); setFromDate(''); setToDate(''); setTimeout(reload, 0); }} />
+      {canManage && <SelectionBar count={sel.count} entityLabel="ngân hàng" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
       <div className="overflow-hidden rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>
+              {canManage && <SelectAllCell ids={rows.map((r) => r.id)} sel={sel} />}
               <th className="px-4 py-3">Mã</th>
               <th className="px-4 py-3">Tên ngân hàng</th>
               <th className="px-4 py-3">Người sửa gần nhất</th>
@@ -114,10 +128,11 @@ function BankTab({ canManage }: { canManage: boolean }): JSX.Element {
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {loading && <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
-            {!loading && rows.length === 0 && <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400"><Landmark className="mx-auto mb-2 h-6 w-6" /> Chưa có ngân hàng.</td></tr>}
+            {loading && <tr><td colSpan={canManage ? 7 : 5} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+            {!loading && rows.length === 0 && <tr><td colSpan={canManage ? 7 : 5} className="px-4 py-10 text-center text-slate-400"><Landmark className="mx-auto mb-2 h-6 w-6" /> Chưa có ngân hàng.</td></tr>}
             {!loading && rows.map((b) => (
-              <tr key={b.id} className="hover:bg-appbg/60">
+              <tr key={b.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(b.id) ? 'bg-brand-tint/40' : '')}>
+                {canManage && <SelectCell id={b.id} sel={sel} />}
                 <td className="px-4 py-3 font-mono text-xs font-semibold text-brand">{b.code}</td>
                 <td className="px-4 py-3 font-medium text-slate-800">{b.name}</td>
                 {trailCells(b)}
@@ -136,6 +151,7 @@ function BankTab({ canManage }: { canManage: boolean }): JSX.Element {
       </div>
       {form && <BankForm mode={form.mode} row={form.row} onClose={() => setForm(null)} onSaved={() => { setForm(null); void reload(); }} />}
       {del && <ConfirmDialog title="Xóa ngân hàng" message={`Ngân hàng "${del.name}" (${del.code}) sẽ vào Thùng rác (có thể phục hồi). Nhập lại mật khẩu để xác nhận.`} confirmLabel="Xóa" danger requirePassword onCancel={() => setDel(null)} onConfirm={(pwd) => doDelete(del, pwd)} />}
+      {bulkDel && <ConfirmDialog title="Xóa nhiều ngân hàng" message={`${sel.count} ngân hàng đã chọn sẽ vào Thùng rác (có thể phục hồi). Nhập lại mật khẩu để xác nhận.`} confirmLabel={`Xóa ${sel.count} mục`} danger requirePassword onCancel={() => setBulkDel(false)} onConfirm={(pwd) => doBulkDelete(pwd)} />}
     </div>
   );
 }
@@ -178,12 +194,15 @@ function CardTypeTab({ canManage }: { canManage: boolean }): JSX.Element {
   const [bankId, setBankId] = useState('');
   const [form, setForm] = useState<{ mode: 'create' | 'edit'; row?: CardTypeDto } | null>(null);
   const [del, setDel] = useState<CardTypeDto | null>(null);
+  const [bulkDel, setBulkDel] = useState(false);
+  const sel = useRowSelection();
 
   async function reload(): Promise<void> {
     setLoading(true);
     const res = await window.api.cardTypeList({ search: search || undefined, bankId: bankId ? Number(bankId) : undefined });
     if (res.ok && res.data) setRows(res.data);
     else if (res.message) toast.alert(res.message);
+    sel.clear();
     setLoading(false);
   }
   useEffect(() => { window.api.bankLite().then((r) => r.ok && r.data && setBanks(r.data)); }, []);
@@ -197,6 +216,14 @@ function CardTypeTab({ canManage }: { canManage: boolean }): JSX.Element {
     await reload();
   }
 
+  async function doBulkDelete(password?: string): Promise<void> {
+    const res = await window.api.cardTypeDelete([...sel.selected], password ?? '');
+    if (res.ok) toast.success(`Đã xóa ${res.deleted ?? sel.count} loại thẻ`);
+    else toast.alert(res.message ?? 'Xóa loại thẻ thất bại', 'Xóa thất bại');
+    setBulkDel(false);
+    await reload();
+  }
+
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
@@ -207,10 +234,12 @@ function CardTypeTab({ canManage }: { canManage: boolean }): JSX.Element {
         </div>
       </div>
       <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Tìm mã / tên loại thẻ…" selects={[{ key: 'bank', placeholder: 'Tất cả ngân hàng', value: bankId, options: banks.map((b) => ({ value: String(b.id), label: `${b.code} · ${b.name}` })), onChange: setBankId }]} onApply={reload} onReset={() => { setSearch(''); setBankId(''); setTimeout(reload, 0); }} />
+      {canManage && <SelectionBar count={sel.count} entityLabel="loại thẻ" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
       <div className="overflow-hidden rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>
+              {canManage && <SelectAllCell ids={rows.map((r) => r.id)} sel={sel} />}
               <th className="px-4 py-3">Mã</th>
               <th className="px-4 py-3">Tên loại thẻ</th>
               <th className="px-4 py-3">Ngân hàng</th>
@@ -221,10 +250,11 @@ function CardTypeTab({ canManage }: { canManage: boolean }): JSX.Element {
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {loading && <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
-            {!loading && rows.length === 0 && <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400"><CreditCard className="mx-auto mb-2 h-6 w-6" /> Chưa có loại thẻ.</td></tr>}
+            {loading && <tr><td colSpan={canManage ? 8 : 6} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+            {!loading && rows.length === 0 && <tr><td colSpan={canManage ? 8 : 6} className="px-4 py-10 text-center text-slate-400"><CreditCard className="mx-auto mb-2 h-6 w-6" /> Chưa có loại thẻ.</td></tr>}
             {!loading && rows.map((c) => (
-              <tr key={c.id} className="hover:bg-appbg/60">
+              <tr key={c.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(c.id) ? 'bg-brand-tint/40' : '')}>
+                {canManage && <SelectCell id={c.id} sel={sel} />}
                 <td className="px-4 py-3 font-mono text-xs font-semibold text-brand">{c.code}</td>
                 <td className="px-4 py-3 font-medium text-slate-800">{c.name}</td>
                 <td className="px-4 py-3 text-slate-600">{c.bankCode ? `${c.bankCode} · ${c.bankName}` : (c.bankName ?? '—')}</td>
@@ -244,6 +274,7 @@ function CardTypeTab({ canManage }: { canManage: boolean }): JSX.Element {
       </div>
       {form && <CardTypeForm mode={form.mode} row={form.row} banks={banks} onClose={() => setForm(null)} onSaved={() => { setForm(null); void reload(); }} />}
       {del && <ConfirmDialog title="Xóa loại thẻ" message={`Loại thẻ "${del.name}" sẽ vào Thùng rác (có thể phục hồi). Nhập lại mật khẩu để xác nhận.`} confirmLabel="Xóa" danger requirePassword onCancel={() => setDel(null)} onConfirm={(pwd) => doDelete(del, pwd)} />}
+      {bulkDel && <ConfirmDialog title="Xóa nhiều loại thẻ" message={`${sel.count} loại thẻ đã chọn sẽ vào Thùng rác (có thể phục hồi). Nhập lại mật khẩu để xác nhận.`} confirmLabel={`Xóa ${sel.count} mục`} danger requirePassword onCancel={() => setBulkDel(false)} onConfirm={(pwd) => doBulkDelete(pwd)} />}
     </div>
   );
 }
@@ -290,6 +321,8 @@ function PartnerTab({ canManage }: { canManage: boolean }): JSX.Element {
   const [del, setDel] = useState<PartnerDto | null>(null);
   const [matrix, setMatrix] = useState<PartnerBankMatrix | null>(null);
   const [linkOf, setLinkOf] = useState<PartnerDto | null>(null);
+  const [bulkDel, setBulkDel] = useState(false);
+  const sel = useRowSelection();
 
   async function reload(): Promise<void> {
     setLoading(true);
@@ -298,6 +331,7 @@ function PartnerTab({ canManage }: { canManage: boolean }): JSX.Element {
     else if (res.message) toast.alert(res.message);
     const m = await window.api.partnerBankMatrix();
     if (m.ok && m.data) setMatrix(m.data);
+    sel.clear();
     setLoading(false);
   }
   useEffect(() => { void reload(); /* eslint-disable-next-line */ }, []);
@@ -307,6 +341,14 @@ function PartnerTab({ canManage }: { canManage: boolean }): JSX.Element {
     if (res.ok) toast.success(`Đã xóa đối tác ${p.code}`);
     else toast.alert(res.message ?? 'Xóa đối tác thất bại', 'Xóa thất bại');
     setDel(null);
+    await reload();
+  }
+
+  async function doBulkDelete(password?: string): Promise<void> {
+    const res = await window.api.partnerDelete([...sel.selected], password ?? '');
+    if (res.ok) toast.success(`Đã xóa ${res.deleted ?? sel.count} đối tác`);
+    else toast.alert(res.message ?? 'Xóa đối tác thất bại', 'Xóa thất bại');
+    setBulkDel(false);
     await reload();
   }
 
@@ -322,10 +364,12 @@ function PartnerTab({ canManage }: { canManage: boolean }): JSX.Element {
         </div>
       </div>
       <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Tìm mã / tên / SĐT đối tác…" onApply={reload} onReset={() => { setSearch(''); setTimeout(reload, 0); }} />
+      {canManage && <SelectionBar count={sel.count} entityLabel="đối tác" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
       <div className="overflow-hidden rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>
+              {canManage && <SelectAllCell ids={rows.map((r) => r.id)} sel={sel} />}
               <th className="px-4 py-3">Mã</th>
               <th className="px-4 py-3">Tên đối tác</th>
               <th className="px-4 py-3">Người liên hệ</th>
@@ -335,10 +379,11 @@ function PartnerTab({ canManage }: { canManage: boolean }): JSX.Element {
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {loading && <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
-            {!loading && rows.length === 0 && <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400"><Building2 className="mx-auto mb-2 h-6 w-6" /> Chưa có đối tác.</td></tr>}
+            {loading && <tr><td colSpan={canManage ? 7 : 5} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+            {!loading && rows.length === 0 && <tr><td colSpan={canManage ? 7 : 5} className="px-4 py-10 text-center text-slate-400"><Building2 className="mx-auto mb-2 h-6 w-6" /> Chưa có đối tác.</td></tr>}
             {!loading && rows.map((p) => (
-              <tr key={p.id} className="hover:bg-appbg/60">
+              <tr key={p.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(p.id) ? 'bg-brand-tint/40' : '')}>
+                {canManage && <SelectCell id={p.id} sel={sel} />}
                 <td className="px-4 py-3 font-mono text-xs font-semibold text-brand">{p.code}</td>
                 <td className="px-4 py-3 font-medium text-slate-800">{p.name}</td>
                 <td className="px-4 py-3 text-slate-600">{p.contactPerson ?? '—'}</td>
@@ -364,6 +409,7 @@ function PartnerTab({ canManage }: { canManage: boolean }): JSX.Element {
       </div>
       {form && <PartnerForm mode={form.mode} row={form.row} onClose={() => setForm(null)} onSaved={() => { setForm(null); void reload(); }} />}
       {del && <ConfirmDialog title="Xóa đối tác" message={`Đối tác "${del.name}" (${del.code}) sẽ vào Thùng rác (có thể phục hồi). Nhập lại mật khẩu để xác nhận.`} confirmLabel="Xóa" danger requirePassword onCancel={() => setDel(null)} onConfirm={(pwd) => doDelete(del, pwd)} />}
+      {bulkDel && <ConfirmDialog title="Xóa nhiều đối tác" message={`${sel.count} đối tác đã chọn sẽ vào Thùng rác (có thể phục hồi). Nhập lại mật khẩu để xác nhận.`} confirmLabel={`Xóa ${sel.count} mục`} danger requirePassword onCancel={() => setBulkDel(false)} onConfirm={(pwd) => doBulkDelete(pwd)} />}
       {linkOf && matrix && <LinkBanksModal partner={linkOf} banks={matrix.banks} onClose={() => setLinkOf(null)} onSaved={() => { setLinkOf(null); void reload(); }} />}
     </div>
   );

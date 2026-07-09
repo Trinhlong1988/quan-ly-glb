@@ -9,6 +9,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
 import { Button } from '../components/Button.js';
+import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../components/Selection.js';
 import { exportCsv } from '../lib/exportCsv.js';
 
 type Tab = 'supplier' | 'model' | 'intake' | 'status';
@@ -77,12 +78,15 @@ function SupplierTab({ canManage }: { canManage: boolean }): JSX.Element {
   const [search, setSearch] = useState('');
   const [form, setForm] = useState<{ mode: 'create' | 'edit'; row?: SupplierDto } | null>(null);
   const [del, setDel] = useState<SupplierDto | null>(null);
+  const [bulkDel, setBulkDel] = useState(false);
+  const sel = useRowSelection();
 
   async function reload(): Promise<void> {
     setLoading(true);
     const res = await window.api.supplierList({ search: search || undefined });
     if (res.ok && res.data) setRows(res.data);
     else if (res.message) toast.alert(res.message);
+    sel.clear();
     setLoading(false);
   }
   useEffect(() => { void reload(); /* eslint-disable-next-line */ }, []);
@@ -92,6 +96,14 @@ function SupplierTab({ canManage }: { canManage: boolean }): JSX.Element {
     if (res.ok) toast.success(`Đã xóa nhà cung cấp ${s.code}`);
     else toast.alert(res.message ?? 'Xóa nhà cung cấp thất bại', 'Xóa thất bại');
     setDel(null);
+    await reload();
+  }
+
+  async function doBulkDelete(password?: string): Promise<void> {
+    const res = await window.api.supplierDelete([...sel.selected], password ?? '');
+    if (res.ok) toast.success(`Đã xóa ${res.deleted ?? sel.count} nhà cung cấp`);
+    else toast.alert(res.message ?? 'Xóa nhà cung cấp thất bại', 'Xóa thất bại');
+    setBulkDel(false);
     await reload();
   }
 
@@ -105,10 +117,12 @@ function SupplierTab({ canManage }: { canManage: boolean }): JSX.Element {
         </div>
       </div>
       <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Tìm mã / tên / SĐT NCC…" onApply={reload} onReset={() => { setSearch(''); setTimeout(reload, 0); }} />
+      {canManage && <SelectionBar count={sel.count} entityLabel="nhà cung cấp" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
       <div className="overflow-hidden rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>
+              {canManage && <SelectAllCell ids={rows.map((r) => r.id)} sel={sel} />}
               <th className="px-4 py-3">Mã</th>
               <th className="px-4 py-3">Tên nhà cung cấp</th>
               <th className="px-4 py-3">Người liên hệ</th>
@@ -120,10 +134,11 @@ function SupplierTab({ canManage }: { canManage: boolean }): JSX.Element {
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {loading && <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
-            {!loading && rows.length === 0 && <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400"><Building2 className="mx-auto mb-2 h-6 w-6" /> Chưa có nhà cung cấp.</td></tr>}
+            {loading && <tr><td colSpan={canManage ? 9 : 7} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+            {!loading && rows.length === 0 && <tr><td colSpan={canManage ? 9 : 7} className="px-4 py-10 text-center text-slate-400"><Building2 className="mx-auto mb-2 h-6 w-6" /> Chưa có nhà cung cấp.</td></tr>}
             {!loading && rows.map((s) => (
-              <tr key={s.id} className="hover:bg-appbg/60">
+              <tr key={s.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(s.id) ? 'bg-brand-tint/40' : '')}>
+                {canManage && <SelectCell id={s.id} sel={sel} />}
                 <td className="px-4 py-3 font-mono text-xs font-semibold text-brand">{s.code}</td>
                 <td className="px-4 py-3 font-medium text-slate-800">{s.name}</td>
                 <td className="px-4 py-3 text-slate-600">{s.contactPerson ?? '—'}</td>
@@ -144,6 +159,7 @@ function SupplierTab({ canManage }: { canManage: boolean }): JSX.Element {
       </div>
       {form && <SupplierForm mode={form.mode} row={form.row} onClose={() => setForm(null)} onSaved={() => { setForm(null); void reload(); }} />}
       {del && <ConfirmDialog title="Xóa nhà cung cấp" message={`Nhà cung cấp "${del.name}" (${del.code}) sẽ vào Thùng rác (có thể phục hồi). Nhập lại mật khẩu để xác nhận.`} confirmLabel="Xóa" danger requirePassword onCancel={() => setDel(null)} onConfirm={(pwd) => doDelete(del, pwd)} />}
+      {bulkDel && <ConfirmDialog title="Xóa nhiều nhà cung cấp" message={`${sel.count} nhà cung cấp đã chọn sẽ vào Thùng rác (có thể phục hồi). Nhập lại mật khẩu để xác nhận.`} confirmLabel={`Xóa ${sel.count} mục`} danger requirePassword onCancel={() => setBulkDel(false)} onConfirm={(pwd) => doBulkDelete(pwd)} />}
     </div>
   );
 }
@@ -191,12 +207,15 @@ function ModelTab({ canManage }: { canManage: boolean }): JSX.Element {
   const [search, setSearch] = useState('');
   const [form, setForm] = useState<{ mode: 'create' | 'edit'; row?: PosModelDto } | null>(null);
   const [del, setDel] = useState<PosModelDto | null>(null);
+  const [bulkDel, setBulkDel] = useState(false);
+  const sel = useRowSelection();
 
   async function reload(): Promise<void> {
     setLoading(true);
     const res = await window.api.posModelList({ search: search || undefined });
     if (res.ok && res.data) setRows(res.data);
     else if (res.message) toast.alert(res.message);
+    sel.clear();
     setLoading(false);
   }
   useEffect(() => { void reload(); /* eslint-disable-next-line */ }, []);
@@ -206,6 +225,14 @@ function ModelTab({ canManage }: { canManage: boolean }): JSX.Element {
     if (res.ok) toast.success(`Đã xóa chủng loại ${m.code}`);
     else toast.alert(res.message ?? 'Xóa chủng loại thất bại', 'Xóa thất bại');
     setDel(null);
+    await reload();
+  }
+
+  async function doBulkDelete(password?: string): Promise<void> {
+    const res = await window.api.posModelDelete([...sel.selected], password ?? '');
+    if (res.ok) toast.success(`Đã xóa ${res.deleted ?? sel.count} chủng loại`);
+    else toast.alert(res.message ?? 'Xóa chủng loại thất bại', 'Xóa thất bại');
+    setBulkDel(false);
     await reload();
   }
 
@@ -219,10 +246,12 @@ function ModelTab({ canManage }: { canManage: boolean }): JSX.Element {
         </div>
       </div>
       <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Tìm mã / tên máy…" onApply={reload} onReset={() => { setSearch(''); setTimeout(reload, 0); }} />
+      {canManage && <SelectionBar count={sel.count} entityLabel="chủng loại" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
       <div className="overflow-hidden rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>
+              {canManage && <SelectAllCell ids={rows.map((r) => r.id)} sel={sel} />}
               <th className="px-4 py-3">Mã máy POS</th>
               <th className="px-4 py-3">Tên máy POS</th>
               <th className="px-4 py-3">Người sửa gần nhất</th>
@@ -232,10 +261,11 @@ function ModelTab({ canManage }: { canManage: boolean }): JSX.Element {
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {loading && <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
-            {!loading && rows.length === 0 && <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400"><Cpu className="mx-auto mb-2 h-6 w-6" /> Chưa có chủng loại máy.</td></tr>}
+            {loading && <tr><td colSpan={canManage ? 7 : 5} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+            {!loading && rows.length === 0 && <tr><td colSpan={canManage ? 7 : 5} className="px-4 py-10 text-center text-slate-400"><Cpu className="mx-auto mb-2 h-6 w-6" /> Chưa có chủng loại máy.</td></tr>}
             {!loading && rows.map((m) => (
-              <tr key={m.id} className="hover:bg-appbg/60">
+              <tr key={m.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(m.id) ? 'bg-brand-tint/40' : '')}>
+                {canManage && <SelectCell id={m.id} sel={sel} />}
                 <td className="px-4 py-3 font-mono text-xs font-semibold text-brand">{m.code}</td>
                 <td className="px-4 py-3 font-medium text-slate-800">{m.name}</td>
                 {trailCells(m)}
@@ -254,6 +284,7 @@ function ModelTab({ canManage }: { canManage: boolean }): JSX.Element {
       </div>
       {form && <ModelForm mode={form.mode} row={form.row} onClose={() => setForm(null)} onSaved={() => { setForm(null); void reload(); }} />}
       {del && <ConfirmDialog title="Xóa chủng loại máy POS" message={`Chủng loại "${del.name}" (${del.code}) sẽ vào Thùng rác (có thể phục hồi). Nhập lại mật khẩu để xác nhận.`} confirmLabel="Xóa" danger requirePassword onCancel={() => setDel(null)} onConfirm={(pwd) => doDelete(del, pwd)} />}
+      {bulkDel && <ConfirmDialog title="Xóa nhiều chủng loại" message={`${sel.count} chủng loại đã chọn sẽ vào Thùng rác (có thể phục hồi). Nhập lại mật khẩu để xác nhận.`} confirmLabel={`Xóa ${sel.count} mục`} danger requirePassword onCancel={() => setBulkDel(false)} onConfirm={(pwd) => doBulkDelete(pwd)} />}
     </div>
   );
 }
@@ -293,12 +324,15 @@ function StatusTab({ canManage }: { canManage: boolean }): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<{ mode: 'create' | 'edit'; row?: IntakeStatusDto } | null>(null);
   const [del, setDel] = useState<IntakeStatusDto | null>(null);
+  const [bulkDel, setBulkDel] = useState(false);
+  const sel = useRowSelection();
 
   async function reload(): Promise<void> {
     setLoading(true);
     const res = await window.api.intakeStatusList();
     if (res.ok && res.data) setRows(res.data);
     else if (res.message) toast.alert(res.message);
+    sel.clear();
     setLoading(false);
   }
   useEffect(() => { void reload(); /* eslint-disable-next-line */ }, []);
@@ -311,16 +345,26 @@ function StatusTab({ canManage }: { canManage: boolean }): JSX.Element {
     await reload();
   }
 
+  async function doBulkDelete(password?: string): Promise<void> {
+    const res = await window.api.intakeStatusDelete([...sel.selected], password ?? '');
+    if (res.ok) toast.success(`Đã xóa ${res.deleted ?? sel.count} trạng thái`);
+    else toast.alert(res.message ?? 'Xóa trạng thái thất bại', 'Xóa thất bại');
+    setBulkDel(false);
+    await reload();
+  }
+
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} trạng thái nhập máy · <span className="text-slate-400">ví dụ: Máy mới, Máy cũ, Máy đổi, Máy thuê</span></div>
         {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm trạng thái</Button>}
       </div>
+      {canManage && <SelectionBar count={sel.count} entityLabel="trạng thái" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
       <div className="overflow-hidden rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>
+              {canManage && <SelectAllCell ids={rows.map((r) => r.id)} sel={sel} />}
               <th className="px-4 py-3">Tên trạng thái</th>
               <th className="px-4 py-3">Người sửa gần nhất</th>
               <th className="px-4 py-3">Ngày</th>
@@ -329,10 +373,11 @@ function StatusTab({ canManage }: { canManage: boolean }): JSX.Element {
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {loading && <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
-            {!loading && rows.length === 0 && <tr><td colSpan={5} className="px-4 py-10 text-center text-slate-400"><Tag className="mx-auto mb-2 h-6 w-6" /> Chưa có trạng thái nhập máy.</td></tr>}
+            {loading && <tr><td colSpan={canManage ? 6 : 4} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+            {!loading && rows.length === 0 && <tr><td colSpan={canManage ? 6 : 4} className="px-4 py-10 text-center text-slate-400"><Tag className="mx-auto mb-2 h-6 w-6" /> Chưa có trạng thái nhập máy.</td></tr>}
             {!loading && rows.map((s) => (
-              <tr key={s.id} className="hover:bg-appbg/60">
+              <tr key={s.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(s.id) ? 'bg-brand-tint/40' : '')}>
+                {canManage && <SelectCell id={s.id} sel={sel} />}
                 <td className="px-4 py-3 font-medium text-slate-800">{s.name}</td>
                 {trailCells(s)}
                 {canManage && (
@@ -350,6 +395,7 @@ function StatusTab({ canManage }: { canManage: boolean }): JSX.Element {
       </div>
       {form && <StatusForm mode={form.mode} row={form.row} onClose={() => setForm(null)} onSaved={() => { setForm(null); void reload(); }} />}
       {del && <ConfirmDialog title="Xóa trạng thái nhập máy" message={`Trạng thái "${del.name}" sẽ vào Thùng rác (có thể phục hồi). Nhập lại mật khẩu để xác nhận.`} confirmLabel="Xóa" danger requirePassword onCancel={() => setDel(null)} onConfirm={(pwd) => doDelete(del, pwd)} />}
+      {bulkDel && <ConfirmDialog title="Xóa nhiều trạng thái" message={`${sel.count} trạng thái đã chọn sẽ vào Thùng rác (có thể phục hồi). Nhập lại mật khẩu để xác nhận.`} confirmLabel={`Xóa ${sel.count} mục`} danger requirePassword onCancel={() => setBulkDel(false)} onConfirm={(pwd) => doBulkDelete(pwd)} />}
     </div>
   );
 }
@@ -390,6 +436,8 @@ function IntakeTab({ canManage }: { canManage: boolean }): JSX.Element {
   const [modelId, setModelId] = useState('');
   const [form, setForm] = useState<{ mode: 'create' | 'edit'; row?: PosIntakeDto } | null>(null);
   const [del, setDel] = useState<PosIntakeDto | null>(null);
+  const [bulkDel, setBulkDel] = useState(false);
+  const sel = useRowSelection();
 
   async function loadRefs(): Promise<void> {
     const [m, s, st] = await Promise.all([window.api.posModelLite(), window.api.supplierLite(), window.api.intakeStatusList()]);
@@ -402,6 +450,7 @@ function IntakeTab({ canManage }: { canManage: boolean }): JSX.Element {
     const res = await window.api.posIntakeList({ search: search || undefined, supplierId: supplierId ? Number(supplierId) : undefined, posModelId: modelId ? Number(modelId) : undefined });
     if (res.ok && res.data) setRows(res.data);
     else if (res.message) toast.alert(res.message);
+    sel.clear();
     setLoading(false);
   }
   useEffect(() => { void loadRefs(); }, []);
@@ -412,6 +461,14 @@ function IntakeTab({ canManage }: { canManage: boolean }): JSX.Element {
     if (res.ok) toast.success(`Đã xóa máy POS ${pi.serial}`);
     else toast.alert(res.message ?? 'Xóa máy POS thất bại', 'Xóa thất bại');
     setDel(null);
+    await reload();
+  }
+
+  async function doBulkDelete(password?: string): Promise<void> {
+    const res = await window.api.posIntakeDelete([...sel.selected], password ?? '');
+    if (res.ok) toast.success(`Đã xóa ${res.deleted ?? sel.count} máy POS`);
+    else toast.alert(res.message ?? 'Xóa máy POS thất bại', 'Xóa thất bại');
+    setBulkDel(false);
     await reload();
   }
 
@@ -434,10 +491,12 @@ function IntakeTab({ canManage }: { canManage: boolean }): JSX.Element {
         ]}
         onApply={reload} onReset={() => { setSearch(''); setSupplierId(''); setModelId(''); setTimeout(reload, 0); }}
       />
+      {canManage && <SelectionBar count={sel.count} entityLabel="máy POS" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>
+              {canManage && <SelectAllCell ids={rows.map((r) => r.id)} sel={sel} />}
               <th className="px-4 py-3">STT</th>
               <th className="px-4 py-3">Chủng loại</th>
               <th className="px-4 py-3">Seri number</th>
@@ -449,10 +508,11 @@ function IntakeTab({ canManage }: { canManage: boolean }): JSX.Element {
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {loading && <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
-            {!loading && rows.length === 0 && <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400"><PackagePlus className="mx-auto mb-2 h-6 w-6" /> Chưa có máy POS nào nhập kho.</td></tr>}
+            {loading && <tr><td colSpan={canManage ? 9 : 7} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+            {!loading && rows.length === 0 && <tr><td colSpan={canManage ? 9 : 7} className="px-4 py-10 text-center text-slate-400"><PackagePlus className="mx-auto mb-2 h-6 w-6" /> Chưa có máy POS nào nhập kho.</td></tr>}
             {!loading && rows.map((pi, i) => (
-              <tr key={pi.id} className="hover:bg-appbg/60">
+              <tr key={pi.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(pi.id) ? 'bg-brand-tint/40' : '')}>
+                {canManage && <SelectCell id={pi.id} sel={sel} />}
                 <td className="px-4 py-3 text-slate-500">{i + 1}</td>
                 <td className="px-4 py-3"><span className="font-mono text-xs font-semibold text-brand">{pi.posModelCode}</span> <span className="text-slate-700">{pi.posModelName}</span></td>
                 <td className="px-4 py-3 font-mono text-xs font-medium text-slate-800">{pi.serial}</td>
@@ -475,6 +535,7 @@ function IntakeTab({ canManage }: { canManage: boolean }): JSX.Element {
       </div>
       {form && <IntakeForm mode={form.mode} row={form.row} models={models} suppliers={suppliers} statuses={statuses} onClose={() => setForm(null)} onSaved={() => { setForm(null); void reload(); }} />}
       {del && <ConfirmDialog title="Xóa máy POS nhập kho" message={`Máy POS seri "${del.serial}" sẽ vào Thùng rác (có thể phục hồi). Nhập lại mật khẩu để xác nhận.`} confirmLabel="Xóa" danger requirePassword onCancel={() => setDel(null)} onConfirm={(pwd) => doDelete(del, pwd)} />}
+      {bulkDel && <ConfirmDialog title="Xóa nhiều máy POS" message={`${sel.count} máy POS đã chọn sẽ vào Thùng rác (có thể phục hồi). Nhập lại mật khẩu để xác nhận.`} confirmLabel={`Xóa ${sel.count} mục`} danger requirePassword onCancel={() => setBulkDel(false)} onConfirm={(pwd) => doBulkDelete(pwd)} />}
     </div>
   );
 }
