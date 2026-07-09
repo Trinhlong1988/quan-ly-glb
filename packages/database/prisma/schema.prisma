@@ -261,3 +261,75 @@ model CodeCounter {
 
   @@map("code_counters")
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// G-CFG.1 — Cấu hình ngân hàng (§C1–C4). Ngân hàng · Loại thẻ (POS) · Đối tác ·
+// liên kết Đối tác↔Ngân hàng (many-to-many). Mọi bảng có yếu tố truy vết
+// (createdBy/updatedBy + timestamps) + soft-delete (deletedAt). Không hard FK để
+// event log/audit bền với soft-delete/rename; join ở service layer.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Ngân hàng (§C1/C2). Mã ngân hàng unique.
+model Bank {
+  id        Int       @id @default(autoincrement())
+  name      String
+  code      String    @unique // VCB, TCB... (unique, không phân biệt hoa/thường ở service)
+  createdBy Int?      @map("created_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedBy Int?      @map("updated_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("banks")
+}
+
+// Loại thẻ dùng trên máy POS (§C3) — thuộc 1 ngân hàng. Mã loại thẻ unique trong 1 ngân hàng (enforce ở service).
+model CardType {
+  id        Int       @id @default(autoincrement())
+  bankId    Int       @map("bank_id")
+  name      String
+  code      String
+  createdBy Int?      @map("created_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedBy Int?      @map("updated_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([bankId])
+  @@map("card_types")
+}
+
+// Đối tác (§C4). Mã đối tác unique.
+model Partner {
+  id            Int       @id @default(autoincrement())
+  name          String
+  code          String    @unique
+  address       String?
+  phone         String?
+  contactPerson String?   @map("contact_person")
+  createdBy     Int?      @map("created_by")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedBy     Int?      @map("updated_by")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+
+  @@map("partners")
+}
+
+// Liên kết Đối tác ↔ Ngân hàng (§C4c, many-to-many). 1 đối tác liên kết nhiều ngân hàng.
+// Soft-delete: hủy liên kết = set deletedAt (re-link = clear deletedAt) — không xóa vật lý (R_AUDIT_TRAIL).
+model PartnerBank {
+  id        Int       @id @default(autoincrement())
+  partnerId Int       @map("partner_id")
+  bankId    Int       @map("bank_id")
+  createdBy Int?      @map("created_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedBy Int?      @map("updated_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@unique([partnerId, bankId])
+  @@index([partnerId])
+  @@index([bankId])
+  @@map("partner_banks")
+}

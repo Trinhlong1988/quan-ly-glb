@@ -11,6 +11,7 @@ import * as customerSvc from './customer-service.js';
 import * as posSvc from './pos-service.js';
 import * as tidSvc from './tid-service.js';
 import * as notifySvc from './notification-service.js';
+import * as bankCfgSvc from './bank-config-service.js';
 import { getRemembered, saveRemembered, clearRemembered } from './remember.js';
 
 export function registerIpc(): void {
@@ -120,4 +121,23 @@ export function registerIpc(): void {
   // ---- Notifications (undelivered TID — badge REAL, push STUB) -----------
   ipcMain.handle('notify:undeliveredSummary', async () => notifySvc.getUndeliveredSummary());
   ipcMain.handle('notify:pushUndelivered', async () => notifySvc.pushUndeliveredZalo());
+
+  // ---- Cấu hình ngân hàng (G-CFG.1 §C1–C4) ------------------------------
+  ipcMain.handle('bank:list', async (_e, filter: bankCfgSvc.BankFilter) => bankCfgSvc.listBanks(filter));
+  ipcMain.handle('bank:lite', async () => bankCfgSvc.listBanksLite());
+  ipcMain.handle('bank:create', async (_e, input: bankCfgSvc.CreateBankInput) => bankCfgSvc.createBank(input));
+  ipcMain.handle('bank:update', async (_e, args: { id: number; input: bankCfgSvc.UpdateBankInput }) => bankCfgSvc.updateBank(args.id, args.input));
+  ipcMain.handle('bank:delete', async (_e, args: { ids: number[]; password: string }) => bankCfgSvc.deleteBanks(args.ids, args.password));
+
+  ipcMain.handle('cardType:list', async (_e, filter: bankCfgSvc.CardTypeFilter) => bankCfgSvc.listCardTypes(filter));
+  ipcMain.handle('cardType:create', async (_e, input: bankCfgSvc.CreateCardTypeInput) => bankCfgSvc.createCardType(input));
+  ipcMain.handle('cardType:update', async (_e, args: { id: number; input: bankCfgSvc.UpdateCardTypeInput }) => bankCfgSvc.updateCardType(args.id, args.input));
+  ipcMain.handle('cardType:delete', async (_e, args: { ids: number[]; password: string }) => bankCfgSvc.deleteCardTypes(args.ids, args.password));
+
+  ipcMain.handle('partner:list', async (_e, filter: bankCfgSvc.PartnerFilter) => bankCfgSvc.listPartners(filter));
+  ipcMain.handle('partner:create', async (_e, input: bankCfgSvc.CreatePartnerInput) => bankCfgSvc.createPartner(input));
+  ipcMain.handle('partner:update', async (_e, args: { id: number; input: bankCfgSvc.UpdatePartnerInput }) => bankCfgSvc.updatePartner(args.id, args.input));
+  ipcMain.handle('partner:delete', async (_e, args: { ids: number[]; password: string }) => bankCfgSvc.deletePartners(args.ids, args.password));
+  ipcMain.handle('partnerBank:matrix', async () => bankCfgSvc.getPartnerBankMatrix());
+  ipcMain.handle('partnerBank:set', async (_e, args: { partnerId: number; bankIds: number[] }) => bankCfgSvc.setPartnerBanks(args.partnerId, args.bankIds));
 }

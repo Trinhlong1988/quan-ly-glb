@@ -80,6 +80,18 @@ export type AuditAction =
   | 'TID_RECALLED'
   | 'TID_DELIVERED'
   | 'ASSET_EXPORTED'
+  // ── G-CFG.1 (§C1–C4) — Cấu hình ngân hàng ──
+  | 'BANK_CREATED'
+  | 'BANK_UPDATED'
+  | 'BANK_DELETED'
+  | 'CARD_TYPE_CREATED'
+  | 'CARD_TYPE_UPDATED'
+  | 'CARD_TYPE_DELETED'
+  | 'PARTNER_CREATED'
+  | 'PARTNER_UPDATED'
+  | 'PARTNER_DELETED'
+  | 'PARTNER_BANK_LINKED'
+  | 'PARTNER_BANK_UNLINKED'
   // Extra (superset of §16 minimum): a mutation refused because the actor lacked the
   // required permission MUST still be logged (R_AUDIT_003).
   | 'PERMISSION_DENIED';

@@ -234,6 +234,108 @@ export interface ListResult<T> {
   message?: string;
 }
 
+// ── G-CFG.1 DTOs (Cấu hình ngân hàng §C1–C4) ──
+export interface AuditTrail {
+  createdBy: number | null;
+  createdByName: string | null;
+  createdAt: string;
+  updatedBy: number | null;
+  updatedByName: string | null;
+  updatedAt: string;
+}
+export interface BankDto extends AuditTrail {
+  id: number;
+  name: string;
+  code: string;
+}
+export interface BankLite {
+  id: number;
+  code: string;
+  name: string;
+}
+export interface BankFilter {
+  search?: string;
+  fromDate?: string;
+  toDate?: string;
+}
+export interface CreateBankInput {
+  name: string;
+  code: string;
+}
+export interface UpdateBankInput {
+  name?: string;
+  code?: string;
+}
+export interface CardTypeDto extends AuditTrail {
+  id: number;
+  bankId: number;
+  bankName: string | null;
+  bankCode: string | null;
+  name: string;
+  code: string;
+}
+export interface CardTypeFilter {
+  search?: string;
+  bankId?: number;
+  fromDate?: string;
+  toDate?: string;
+}
+export interface CreateCardTypeInput {
+  bankId: number;
+  name: string;
+  code: string;
+}
+export interface UpdateCardTypeInput {
+  bankId?: number;
+  name?: string;
+  code?: string;
+}
+export interface PartnerDto extends AuditTrail {
+  id: number;
+  name: string;
+  code: string;
+  address: string | null;
+  phone: string | null;
+  contactPerson: string | null;
+  bankIds: number[];
+}
+export interface PartnerFilter {
+  search?: string;
+  fromDate?: string;
+  toDate?: string;
+}
+export interface CreatePartnerInput {
+  name: string;
+  code: string;
+  address?: string | null;
+  phone?: string | null;
+  contactPerson?: string | null;
+}
+export interface UpdatePartnerInput {
+  name?: string;
+  code?: string;
+  address?: string | null;
+  phone?: string | null;
+  contactPerson?: string | null;
+}
+export interface PartnerBankMatrixRow {
+  partnerId: number;
+  partnerCode: string;
+  partnerName: string;
+  bankIds: number[];
+}
+export interface PartnerBankMatrix {
+  banks: BankLite[];
+  rows: PartnerBankMatrixRow[];
+}
+export interface BulkDeleteOutcome extends MutationOutcome {
+  deleted?: number;
+}
+export interface LinkOutcome extends MutationOutcome {
+  linked?: number;
+  unlinked?: number;
+}
+
 export interface RoleInput {
   name: string;
   code: string;

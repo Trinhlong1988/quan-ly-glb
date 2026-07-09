@@ -37,7 +37,10 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: 'POS_MANAGE', name: 'Quản lý máy POS (tạo/luân chuyển/sửa chữa)', group: 'POS' },
   { code: 'TID_VIEW', name: 'Xem TID', group: 'TID' },
   { code: 'TID_MANAGE', name: 'Quản lý TID (gán/đổi/thu hồi/giao)', group: 'TID' },
-  { code: 'ASSET_EXPORT', name: 'Xuất dữ liệu tài sản POS/TID', group: 'POS' }
+  { code: 'ASSET_EXPORT', name: 'Xuất dữ liệu tài sản POS/TID', group: 'POS' },
+  // ── G-CFG.1 (§C1–C4) — Cấu hình ngân hàng ──
+  { code: 'CONFIG_BANK_VIEW', name: 'Xem cấu hình ngân hàng', group: 'Cấu hình ngân hàng' },
+  { code: 'CONFIG_BANK_MANAGE', name: 'Quản lý cấu hình ngân hàng (ngân hàng/loại thẻ/đối tác)', group: 'Cấu hình ngân hàng' }
 ];
 
 export const PERMISSION_CODES = PERMISSIONS.map((p) => p.code);
@@ -63,10 +66,13 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'CUSTOMER_UPDATE',
     'CUSTOMER_DELETE',
     'POS_VIEW',
-    'TID_VIEW'
+    'TID_VIEW',
+    // G-CFG.1: managers cấu hình ngân hàng/loại thẻ/đối tác.
+    'CONFIG_BANK_VIEW',
+    'CONFIG_BANK_MANAGE'
   ],
-  D_MANAGER: ['DASHBOARD_VIEW', 'USER_READ', 'ROLE_READ', 'CUSTOMER_VIEW', 'POS_VIEW', 'TID_VIEW'],
-  ACCOUNTANT: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW'],
+  D_MANAGER: ['DASHBOARD_VIEW', 'USER_READ', 'ROLE_READ', 'CUSTOMER_VIEW', 'POS_VIEW', 'TID_VIEW', 'CONFIG_BANK_VIEW'],
+  ACCOUNTANT: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW', 'CONFIG_BANK_VIEW'],
   TECHNICIAN: ['DASHBOARD_VIEW', 'POS_VIEW'],
   SUPPORT: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW'],
   WAREHOUSE: ['DASHBOARD_VIEW', 'POS_VIEW', 'TID_VIEW'],

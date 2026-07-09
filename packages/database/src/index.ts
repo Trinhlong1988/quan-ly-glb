@@ -17,4 +17,8 @@ export type {
   AssetEvent,
   PosTidBinding,
   CodeCounter,
+  Bank,
+  CardType,
+  Partner,
+  PartnerBank,
 } from "../generated/prisma/client.js";

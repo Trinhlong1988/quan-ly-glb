@@ -75,7 +75,26 @@ const api = {
 
   // Notifications (undelivered TID)
   notifyUndeliveredSummary: () => ipcRenderer.invoke('notify:undeliveredSummary'),
-  notifyPushUndelivered: () => ipcRenderer.invoke('notify:pushUndelivered')
+  notifyPushUndelivered: () => ipcRenderer.invoke('notify:pushUndelivered'),
+
+  // Cấu hình ngân hàng (G-CFG.1)
+  bankList: (filter: unknown) => ipcRenderer.invoke('bank:list', filter),
+  bankLite: () => ipcRenderer.invoke('bank:lite'),
+  bankCreate: (input: unknown) => ipcRenderer.invoke('bank:create', input),
+  bankUpdate: (id: number, input: unknown) => ipcRenderer.invoke('bank:update', { id, input }),
+  bankDelete: (ids: number[], password: string) => ipcRenderer.invoke('bank:delete', { ids, password }),
+
+  cardTypeList: (filter: unknown) => ipcRenderer.invoke('cardType:list', filter),
+  cardTypeCreate: (input: unknown) => ipcRenderer.invoke('cardType:create', input),
+  cardTypeUpdate: (id: number, input: unknown) => ipcRenderer.invoke('cardType:update', { id, input }),
+  cardTypeDelete: (ids: number[], password: string) => ipcRenderer.invoke('cardType:delete', { ids, password }),
+
+  partnerList: (filter: unknown) => ipcRenderer.invoke('partner:list', filter),
+  partnerCreate: (input: unknown) => ipcRenderer.invoke('partner:create', input),
+  partnerUpdate: (id: number, input: unknown) => ipcRenderer.invoke('partner:update', { id, input }),
+  partnerDelete: (ids: number[], password: string) => ipcRenderer.invoke('partner:delete', { ids, password }),
+  partnerBankMatrix: () => ipcRenderer.invoke('partnerBank:matrix'),
+  partnerBankSet: (partnerId: number, bankIds: number[]) => ipcRenderer.invoke('partnerBank:set', { partnerId, bankIds })
 };
 
 export type GlbApi = typeof api;
