@@ -1,0 +1,41 @@
+# deps
+node_modules/
+**/node_modules/
+
+# build
+dist/
+out/
+build/
+release/
+*.exe
+apps/desktop/dist/
+apps/desktop/out/
+apps/desktop/release/
+
+# db & secrets (KHÔNG commit)
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+dev.db
+**/prisma/*.db
+.env
+.env.*
+!.env.example
+
+# backups & runtime data
+backups/
+*.zip
+
+# prisma generated client
+**/generated/
+**/@prisma/client/
+
+# logs / os
+*.log
+.DS_Store
+Thumbs.db
+
+# test/coverage
+coverage/
+.vitest/
