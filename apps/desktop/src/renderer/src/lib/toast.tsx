@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
-import { CheckCircle2, XCircle, Info } from 'lucide-react';
+import { CheckCircle2, XCircle, Info, AlertTriangle } from 'lucide-react';
 
 type ToastKind = 'success' | 'error' | 'info';
 interface Toast {
@@ -12,6 +12,8 @@ interface ToastCtx {
   success: (m: string) => void;
   error: (m: string) => void;
   info: (m: string) => void;
+  /** Dialog báo lỗi TO, RÕ RÀNG cho thao tác sai/nguy hiểm (R_BUTTON_SEMANTICS, LEAD 9/7). */
+  alert: (message: string, title?: string) => void;
 }
 
 const Ctx = createContext<ToastCtx | null>(null);
@@ -26,6 +28,7 @@ let seq = 1;
 
 export function ToastProvider({ children }: { children: ReactNode }): JSX.Element {
   const [items, setItems] = useState<Toast[]>([]);
+  const [alertBox, setAlertBox] = useState<{ title: string; message: string } | null>(null);
 
   const push = useCallback((kind: ToastKind, message: string) => {
     const id = seq++;
@@ -37,7 +40,8 @@ export function ToastProvider({ children }: { children: ReactNode }): JSX.Elemen
     () => ({
       success: (m) => push('success', m),
       error: (m) => push('error', m),
-      info: (m) => push('info', m)
+      info: (m) => push('info', m),
+      alert: (message, title = 'Thao tác không hợp lệ') => setAlertBox({ title, message })
     }),
     [push]
   );
@@ -45,11 +49,20 @@ export function ToastProvider({ children }: { children: ReactNode }): JSX.Elemen
   return (
     <Ctx.Provider value={api}>
       {children}
+
+      {/* Toast góc phải (thông báo nhẹ) */}
       <div className="fixed right-4 top-4 z-50 flex w-80 flex-col gap-2">
         {items.map((t) => (
           <div
             key={t.id}
-            className="flex items-start gap-2 rounded-lg border border-line bg-white px-3.5 py-3 shadow-lg"
+            className={
+              'flex items-start gap-2 rounded-lg border px-3.5 py-3 shadow-lg ' +
+              (t.kind === 'error'
+                ? 'border-danger/30 bg-danger/5'
+                : t.kind === 'success'
+                  ? 'border-success/30 bg-success/5'
+                  : 'border-line bg-white')
+            }
           >
             {t.kind === 'success' && <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success" />}
             {t.kind === 'error' && <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-danger" />}
@@ -58,6 +71,32 @@ export function ToastProvider({ children }: { children: ReactNode }): JSX.Elemen
           </div>
         ))}
       </div>
+
+      {/* Dialog báo lỗi TO, RÕ RÀNG — thao tác sai/nguy hiểm */}
+      {alertBox && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={() => setAlertBox(null)}>
+          <div
+            className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 bg-danger px-6 py-4 text-white">
+              <AlertTriangle className="h-7 w-7 shrink-0" />
+              <h3 className="text-lg font-bold">{alertBox.title}</h3>
+            </div>
+            <div className="px-6 py-6">
+              <p className="text-[15px] leading-relaxed text-slate-700">{alertBox.message}</p>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-line px-6 py-4">
+              <button
+                onClick={() => setAlertBox(null)}
+                className="rounded-lg bg-brand px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-hover"
+              >
+                Đã hiểu
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Ctx.Provider>
   );
 }

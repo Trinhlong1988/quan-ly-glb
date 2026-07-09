@@ -8,6 +8,7 @@ import { Modal } from '../components/Modal.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
+import { Button } from '../components/Button.js';
 
 /** Khách hàng (§D): hiển thị `KH## · biệt danh (tên thật)` + SĐT. Mã tự sinh, nickname bắt buộc. */
 export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
@@ -56,7 +57,7 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
   async function doDelete(c: CustomerDto, password?: string): Promise<void> {
     const res = await window.api.customerDelete(c.id, password ?? '');
     if (res.ok) toast.success(`Đã xóa khách hàng ${c.display}`);
-    else toast.error(res.message ?? 'Không thể xóa khách hàng');
+    else toast.alert(res.message ?? 'Không thể xóa khách hàng', 'Xóa thất bại');
     setConfirmDel(null);
     await reload();
   }
@@ -69,12 +70,9 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
           <p className="text-sm text-slate-500">Mã KH tự sinh · biệt danh dễ gọi · tên thật · SĐT.</p>
         </div>
         {canCreate && (
-          <button
-            onClick={() => setCreating(true)}
-            className="flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover"
-          >
-            <Plus className="h-4 w-4" /> Thêm khách hàng
-          </button>
+          <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)}>
+            Thêm khách hàng
+          </Button>
         )}
       </div>
 
@@ -139,12 +137,12 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">
                       {canUpdate && (
-                        <IconBtn title="Sửa" onClick={() => setEditing(c)}>
+                        <IconBtn title="Sửa" variant="edit" onClick={() => setEditing(c)}>
                           <Pencil className="h-4 w-4" />
                         </IconBtn>
                       )}
                       {canDelete && (
-                        <IconBtn title="Xóa" danger onClick={() => setConfirmDel(c)}>
+                        <IconBtn title="Xóa" variant="danger" onClick={() => setConfirmDel(c)}>
                           <Trash2 className="h-4 w-4" />
                         </IconBtn>
                       )}
@@ -186,13 +184,16 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
   );
 }
 
-function IconBtn({ children, title, danger, onClick }: { children: JSX.Element; title: string; danger?: boolean; onClick: () => void }): JSX.Element {
+// Nút icon theo quy ước màu (R_BUTTON_SEMANTICS): sửa=vàng, xóa=đỏ.
+function IconBtn({ children, title, variant, onClick }: { children: JSX.Element; title: string; variant?: 'edit' | 'danger'; onClick: () => void }): JSX.Element {
+  const tone =
+    variant === 'danger'
+      ? 'text-danger hover:bg-danger/10'
+      : variant === 'edit'
+        ? 'text-warning hover:bg-warning/10'
+        : 'text-slate-400 hover:bg-brand-tint hover:text-brand';
   return (
-    <button
-      title={title}
-      onClick={onClick}
-      className={'rounded-md p-1.5 transition ' + (danger ? 'text-slate-400 hover:bg-danger/10 hover:text-danger' : 'text-slate-400 hover:bg-brand-tint hover:text-brand')}
-    >
+    <button title={title} onClick={onClick} className={'rounded-md p-1.5 transition ' + tone}>
       {children}
     </button>
   );
@@ -210,8 +211,8 @@ function CustomerForm({ target, onClose, onSaved }: { target: CustomerDto | null
   const [busy, setBusy] = useState(false);
 
   async function save(): Promise<void> {
-    if (!fullName.trim()) return toast.error('Tên thật khách hàng bắt buộc.');
-    if (!nickname.trim()) return toast.error('Biệt danh (tên dễ gọi) là bắt buộc.');
+    if (!fullName.trim()) return toast.alert('Tên thật khách hàng bắt buộc.', 'Thiếu thông tin');
+    if (!nickname.trim()) return toast.alert('Biệt danh (tên dễ gọi) là bắt buộc.', 'Thiếu thông tin');
     setBusy(true);
     const payload = {
       fullName: fullName.trim(),
@@ -227,7 +228,8 @@ function CustomerForm({ target, onClose, onSaved }: { target: CustomerDto | null
       toast.success(editing ? `Đã cập nhật ${nickname}` : `Đã tạo khách hàng ${nickname}`);
       onSaved();
     } else {
-      toast.error(res.message ?? 'Lưu khách hàng thất bại');
+      // Thao tác sai (trùng mã/SĐT, dữ liệu đã tồn tại…) → dialog TO, RÕ.
+      toast.alert(res.message ?? 'Lưu khách hàng thất bại', 'Không lưu được');
     }
   }
 
@@ -259,17 +261,15 @@ function CustomerForm({ target, onClose, onSaved }: { target: CustomerDto | null
         </Field>
       </div>
       <div className="mt-6 flex justify-end gap-2">
-        <button onClick={onClose} className="rounded-md border border-line px-4 py-2 text-sm font-medium text-slate-600 hover:bg-appbg">
-          Hủy
-        </button>
-        <button
+        <Button variant="neutral" onClick={onClose}>Hủy</Button>
+        <Button
+          variant="confirm"
           onClick={save}
           disabled={busy}
-          className="flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-60"
+          icon={busy ? <Loader2 className="h-4 w-4 animate-spin" /> : undefined}
         >
-          {busy && <Loader2 className="h-4 w-4 animate-spin" />}
           {editing ? 'Lưu thay đổi' : 'Tạo khách hàng'}
-        </button>
+        </Button>
       </div>
     </Modal>
   );
