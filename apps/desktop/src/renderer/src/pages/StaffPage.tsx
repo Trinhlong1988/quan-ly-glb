@@ -86,7 +86,7 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && reload()}
-            placeholder="Tìm tên, tên đăng nhập, email, SĐT…"
+            placeholder="Tìm tên, tên đăng nhập, email, Số điện thoại…"
             className={inputCls + ' w-72 pl-8'}
           />
         </div>

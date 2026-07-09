@@ -112,11 +112,11 @@ function SupplierTab({ canManage }: { canManage: boolean }): JSX.Element {
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} nhà cung cấp</div>
         <div className="flex gap-2">
-          <Button variant="neutral" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('nha_cung_cap', ['Mã', 'Tên NCC', 'Người liên hệ', 'SĐT', 'Địa chỉ', 'Cập nhật'], rows.map((r) => [r.code, r.name, r.contactPerson, r.phone, r.address, `${fmtDate(r.updatedAt)} ${fmtTime(r.updatedAt)}`]))}>Xuất Excel</Button>
+          <Button variant="neutral" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('nha_cung_cap', ['Mã', 'Tên nhà cung cấp', 'Người liên hệ', 'Số điện thoại', 'Địa chỉ', 'Cập nhật'], rows.map((r) => [r.code, r.name, r.contactPerson, r.phone, r.address, `${fmtDate(r.updatedAt)} ${fmtTime(r.updatedAt)}`]))}>Xuất Excel</Button>
           {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm nhà cung cấp</Button>}
         </div>
       </div>
-      <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Tìm mã / tên / SĐT NCC…" onApply={reload} onReset={() => { setSearch(''); setTimeout(reload, 0); }} />
+      <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Tìm mã / tên / số điện thoại nhà cung cấp…" onApply={reload} onReset={() => { setSearch(''); setTimeout(reload, 0); }} />
       {canManage && <SelectionBar count={sel.count} entityLabel="nhà cung cấp" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
       <div className="overflow-hidden rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">
@@ -126,7 +126,7 @@ function SupplierTab({ canManage }: { canManage: boolean }): JSX.Element {
               <th className="px-4 py-3">Mã</th>
               <th className="px-4 py-3">Tên nhà cung cấp</th>
               <th className="px-4 py-3">Người liên hệ</th>
-              <th className="px-4 py-3">SĐT</th>
+              <th className="px-4 py-3">Số điện thoại</th>
               <th className="px-4 py-3">Người sửa gần nhất</th>
               <th className="px-4 py-3">Ngày</th>
               <th className="px-4 py-3">Giờ</th>
@@ -479,7 +479,7 @@ function IntakeTab({ canManage }: { canManage: boolean }): JSX.Element {
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} máy POS trong kho</div>
         <div className="flex gap-2">
-          <Button variant="neutral" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('nhap_kho_pos', ['STT', 'Chủng loại', 'Seri', 'NCC', 'Giá nhập', 'Ngày nhập', 'Trạng thái'], rows.map((r, i) => [i + 1, `${r.posModelCode} · ${r.posModelName}`, r.serial, r.supplierName, r.importPrice, fmtDate(r.importedAt), r.intakeStatusName]))}>Xuất Excel</Button>
+          <Button variant="neutral" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('nhap_kho_pos', ['Số thứ tự', 'Chủng loại', 'Số seri', 'Nhà cung cấp', 'Giá nhập', 'Ngày nhập', 'Trạng thái'], rows.map((r, i) => [i + 1, `${r.posModelCode} · ${r.posModelName}`, r.serial, r.supplierName, r.importPrice, fmtDate(r.importedAt), r.intakeStatusName]))}>Xuất Excel</Button>
           {canManage && <Button variant="confirm" icon={<PackagePlus className="h-4 w-4" />} onClick={() => canAdd ? setForm({ mode: 'create' }) : toast.alert('Cần có ít nhất 1 chủng loại máy, 1 nhà cung cấp và 1 trạng thái nhập trước khi nhập kho.', 'Thiếu dữ liệu nền')}>Nhập kho máy POS</Button>}
         </div>
       </div>
@@ -497,7 +497,7 @@ function IntakeTab({ canManage }: { canManage: boolean }): JSX.Element {
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>
               {canManage && <SelectAllCell ids={rows.map((r) => r.id)} sel={sel} />}
-              <th className="px-4 py-3">STT</th>
+              <th className="px-4 py-3">Số thứ tự</th>
               <th className="px-4 py-3">Chủng loại</th>
               <th className="px-4 py-3">Seri number</th>
               <th className="px-4 py-3">Nhà cung cấp</th>
@@ -591,7 +591,7 @@ function IntakeForm({ mode, row, models, suppliers, statuses, onClose, onSaved }
       <div className="grid grid-cols-2 gap-4">
         <Field label="Chủng loại máy" required><select className={inputCls} value={posModelId} onChange={(e) => setPosModelId(e.target.value)} autoFocus><option value="">— Chọn chủng loại —</option>{models.map((m) => <option key={m.id} value={m.id}>{m.code} · {m.name}</option>)}</select></Field>
         <Field label="Seri number" required hint="Chữ + số, không giới hạn"><input className={inputCls} value={serial} onChange={(e) => setSerial(e.target.value)} /></Field>
-        <Field label="Nhà cung cấp" required><select className={inputCls} value={supplierId} onChange={(e) => setSupplierId(e.target.value)}><option value="">— Chọn NCC —</option>{suppliers.map((s) => <option key={s.id} value={s.id}>{s.code} · {s.name}</option>)}</select></Field>
+        <Field label="Nhà cung cấp" required><select className={inputCls} value={supplierId} onChange={(e) => setSupplierId(e.target.value)}><option value="">— Chọn nhà cung cấp —</option>{suppliers.map((s) => <option key={s.id} value={s.id}>{s.code} · {s.name}</option>)}</select></Field>
         <Field label="Trạng thái nhập" required><select className={inputCls} value={intakeStatusId} onChange={(e) => setIntakeStatusId(e.target.value)}><option value="">— Chọn trạng thái —</option>{statuses.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
         <Field label="Giá nhập (VND)" required hint={price ? fmtVnd(priceNum) : 'Số nguyên đồng'}><input className={inputCls} inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value.replace(/\D/g, ''))} placeholder="5000000" /></Field>
         <Field label="Ngày nhập" required><DateParts value={importedAt} onChange={setImportedAt} /></Field>

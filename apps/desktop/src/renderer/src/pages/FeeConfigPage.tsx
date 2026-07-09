@@ -206,7 +206,7 @@ function RateTab({ canManage }: { canManage: boolean }): JSX.Element {
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} biểu phí</div>
         <div className="flex gap-2">
-          <Button variant="neutral" icon={<Percent className="h-4 w-4" />} onClick={() => exportCsv('bieu_phi', ['Đối tác', 'Ngân hàng', 'Loại thẻ', 'Phí mua %', 'Phí cài %', 'Phí bán %', 'CL NCC %', 'CL KH %'], rows.map((r) => [r.partnerName, r.bankCode, r.cardTypeName, r.phiMua, r.phiCaiMay, r.phiBan, r.clNcc, r.clKh]))}>Xuất Excel</Button>
+          <Button variant="neutral" icon={<Percent className="h-4 w-4" />} onClick={() => exportCsv('bieu_phi', ['Đối tác', 'Ngân hàng', 'Loại thẻ', 'Phí mua %', 'Phí cài máy %', 'Phí bán %', 'Chênh lệch với Nhà cung cấp %', 'Chênh lệch với Khách hàng %'], rows.map((r) => [r.partnerName, r.bankCode, r.cardTypeName, r.phiMua, r.phiCaiMay, r.phiBan, r.clNcc, r.clKh]))}>Xuất Excel</Button>
           {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => partners.length ? setSetOpen('new') : toast.alert('Cần có đối tác + loại thẻ + liên kết ngân hàng trước khi đặt phí.', 'Thiếu dữ liệu nền')}>Đặt biểu phí</Button>}
         </div>
       </div>
@@ -230,8 +230,8 @@ function RateTab({ canManage }: { canManage: boolean }): JSX.Element {
               <th className="px-4 py-3 text-right">Phí mua</th>
               <th className="px-4 py-3 text-right">Phí cài máy</th>
               <th className="px-4 py-3 text-right">Phí bán</th>
-              <th className="px-4 py-3 text-right">CL với NCC</th>
-              <th className="px-4 py-3 text-right">CL với KH</th>
+              <th className="px-4 py-3 text-right">Chênh lệch với Nhà cung cấp</th>
+              <th className="px-4 py-3 text-right">Chênh lệch với Khách hàng</th>
               {canManage && <th className="px-4 py-3 text-right">Thao tác</th>}
             </tr>
           </thead>
@@ -327,8 +327,8 @@ function RateForm({ existing, partners, banks, onClose, onSaved }: { existing: F
         <Field label="Phí bán (%)" required><input className={inputCls} inputMode="decimal" value={phiBan} onChange={(e) => setPhiBan(e.target.value)} placeholder="1.05" /></Field>
       </div>
       <div className="mt-4 flex gap-6 rounded-lg bg-appbg px-4 py-3 text-sm">
-        <div>Chênh lệch với NCC: {clNcc === null ? <span className="text-slate-400">—</span> : <CL v={clNcc} />} <span className="text-xs text-slate-400">(mua − cài)</span></div>
-        <div>Chênh lệch với KH: {clKh === null ? <span className="text-slate-400">—</span> : <CL v={clKh} />} <span className="text-xs text-slate-400">(bán − cài)</span></div>
+        <div>Chênh lệch với Nhà cung cấp: {clNcc === null ? <span className="text-slate-400">—</span> : <CL v={clNcc} />} <span className="text-xs text-slate-400">(phí mua − phí cài máy)</span></div>
+        <div>Chênh lệch với Khách hàng: {clKh === null ? <span className="text-slate-400">—</span> : <CL v={clKh} />} <span className="text-xs text-slate-400">(phí bán − phí cài máy)</span></div>
       </div>
       <div className="mt-6 flex justify-end gap-2">
         <Button variant="neutral" onClick={onClose}>Hủy</Button>

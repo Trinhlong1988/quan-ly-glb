@@ -90,7 +90,7 @@ function SourceTab({ canManage }: { canManage: boolean }): JSX.Element {
             <tr>
               {canManage && <SelectAllCell ids={rows.map((r) => r.id)} sel={sel} />}
               <th className="px-4 py-3">Mã nguồn hồ sơ</th>
-              <th className="px-4 py-3">Chiết khấu</th>
+              <th className="px-4 py-3 text-right">Chiết khấu</th>
               <th className="px-4 py-3">Người sửa gần nhất</th>
               <th className="px-4 py-3">Ngày</th>
               <th className="px-4 py-3">Giờ</th>
@@ -104,7 +104,7 @@ function SourceTab({ canManage }: { canManage: boolean }): JSX.Element {
               <tr key={s.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(s.id) ? 'bg-brand-tint/40' : '')}>
                 {canManage && <SelectCell id={s.id} sel={sel} />}
                 <td className="px-4 py-3 font-medium text-slate-800">{s.code}</td>
-                <td className="px-4 py-3 font-mono text-brand">{fmtPct(s.discountRate)}</td>
+                <td className="px-4 py-3 text-right font-mono text-brand">{fmtPct(s.discountRate)}</td>
                 <td className="px-4 py-3 text-slate-600">{s.updatedByName ?? s.createdByName ?? '—'}</td>
                 <td className="px-4 py-3 text-xs text-slate-500">{fmtDate(s.updatedAt)}</td>
                 <td className="px-4 py-3 text-xs text-slate-500">{fmtTime(s.updatedAt)}</td>

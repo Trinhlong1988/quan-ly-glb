@@ -359,11 +359,11 @@ function PartnerTab({ canManage }: { canManage: boolean }): JSX.Element {
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} đối tác</div>
         <div className="flex gap-2">
-          <Button variant="neutral" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('doi_tac', ['Mã', 'Tên đối tác', 'Người liên hệ', 'SĐT', 'Ngân hàng liên kết', 'Cập nhật'], rows.map((r) => [r.code, r.name, r.contactPerson, r.phone, r.bankIds.map(bankName).join(' | '), `${fmtDate(r.updatedAt)} ${fmtTime(r.updatedAt)}`]))}>Xuất Excel</Button>
+          <Button variant="neutral" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('doi_tac', ['Mã', 'Tên đối tác', 'Người liên hệ', 'Số điện thoại', 'Ngân hàng liên kết', 'Cập nhật'], rows.map((r) => [r.code, r.name, r.contactPerson, r.phone, r.bankIds.map(bankName).join(' | '), `${fmtDate(r.updatedAt)} ${fmtTime(r.updatedAt)}`]))}>Xuất Excel</Button>
           {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm đối tác</Button>}
         </div>
       </div>
-      <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Tìm mã / tên / SĐT đối tác…" onApply={reload} onReset={() => { setSearch(''); setTimeout(reload, 0); }} />
+      <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Tìm mã / tên / Số điện thoại đối tác…" onApply={reload} onReset={() => { setSearch(''); setTimeout(reload, 0); }} />
       {canManage && <SelectionBar count={sel.count} entityLabel="đối tác" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
       <div className="overflow-hidden rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">
@@ -373,7 +373,7 @@ function PartnerTab({ canManage }: { canManage: boolean }): JSX.Element {
               <th className="px-4 py-3">Mã</th>
               <th className="px-4 py-3">Tên đối tác</th>
               <th className="px-4 py-3">Người liên hệ</th>
-              <th className="px-4 py-3">SĐT</th>
+              <th className="px-4 py-3">Số điện thoại</th>
               <th className="px-4 py-3">Ngân hàng liên kết</th>
               {canManage && <th className="px-4 py-3 text-right">Thao tác</th>}
             </tr>

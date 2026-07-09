@@ -10,7 +10,7 @@ import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
 import { Button } from '../components/Button.js';
 
-/** Khách hàng (§D): hiển thị `KH## · biệt danh (tên thật)` + SĐT. Mã tự sinh, nickname bắt buộc. */
+/** Khách hàng (§D): hiển thị `KH## · biệt danh (tên thật)` + Số điện thoại. Mã tự sinh, nickname bắt buộc. */
 export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
   const toast = useToast();
   const [rows, setRows] = useState<CustomerDto[]>([]);
@@ -68,7 +68,7 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold text-slate-800">Khách hàng</h2>
-          <p className="text-sm text-slate-500">Mã KH tự sinh · biệt danh dễ gọi · tên thật · SĐT.</p>
+          <p className="text-sm text-slate-500">Mã khách hàng tự sinh · biệt danh dễ gọi · tên thật · Số điện thoại.</p>
         </div>
         {canCreate && (
           <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)}>
@@ -80,7 +80,7 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
       <FilterBar
         search={search}
         onSearch={setSearch}
-        searchPlaceholder="Tìm mã KH, biệt danh, tên thật, SĐT…"
+        searchPlaceholder="Tìm mã khách hàng, biệt danh, tên thật, Số điện thoại…"
         fromDate={fromDate}
         toDate={toDate}
         onFromDate={setFromDate}
@@ -102,9 +102,9 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
-              <th className="px-4 py-3">Mã KH</th>
+              <th className="px-4 py-3">Mã khách hàng</th>
               <th className="px-4 py-3">Khách hàng</th>
-              <th className="px-4 py-3">SĐT</th>
+              <th className="px-4 py-3">Số điện thoại</th>
               <th className="px-4 py-3">Địa chỉ</th>
               <th className="px-4 py-3 text-right">Thao tác</th>
             </tr>
@@ -247,7 +247,7 @@ function CustomerForm({ target, onClose, onSaved }: { target: CustomerDto | null
       toast.success(editing ? `Đã cập nhật ${nickname}` : `Đã tạo khách hàng ${nickname}`);
       onSaved();
     } else {
-      // Thao tác sai (trùng mã/SĐT, dữ liệu đã tồn tại…) → dialog TO, RÕ.
+      // Thao tác sai (trùng mã/Số điện thoại, dữ liệu đã tồn tại…) → dialog TO, RÕ.
       toast.alert(res.message ?? 'Lưu khách hàng thất bại', 'Không lưu được');
     }
   }
