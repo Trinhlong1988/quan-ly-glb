@@ -31,15 +31,19 @@ interface MenuItem {
   perms?: string[];
   /** Show a live badge (e.g. undelivered TID count). */
   badge?: 'undeliveredTid';
+  /** Visually a sub-item of the group above (indented). */
+  indent?: boolean;
 }
 
+// Thứ tự menu theo IMS_SPEC (LEAD 9/7): Trang chủ → Nhân sự (Vai trò & Quyền là mục con) →
+// Khách hàng → Máy POS → TID → Nhật ký → Cài đặt → Backup.
 const MENU: MenuItem[] = [
   { key: 'dashboard', label: 'Trang chủ', icon: <LayoutDashboard className="h-[18px] w-[18px]" />, perms: ['DASHBOARD_VIEW'] },
+  { key: 'staff', label: 'Quản lý Nhân sự', icon: <Users className="h-[18px] w-[18px]" />, perms: ['USER_READ'] },
+  { key: 'roles', label: 'Vai trò & Quyền', icon: <ShieldCheck className="h-[18px] w-[18px]" />, perms: ['ROLE_READ'], indent: true },
   { key: 'customers', label: 'Khách hàng', icon: <UserRound className="h-[18px] w-[18px]" />, perms: ['CUSTOMER_VIEW'] },
   { key: 'pos', label: 'Máy POS', icon: <HardDrive className="h-[18px] w-[18px]" />, perms: ['POS_VIEW'] },
   { key: 'tid', label: 'TID', icon: <CreditCard className="h-[18px] w-[18px]" />, perms: ['TID_VIEW'], badge: 'undeliveredTid' },
-  { key: 'staff', label: 'Quản lý Nhân sự', icon: <Users className="h-[18px] w-[18px]" />, perms: ['USER_READ'] },
-  { key: 'roles', label: 'Vai trò & Quyền', icon: <ShieldCheck className="h-[18px] w-[18px]" />, perms: ['ROLE_READ'] },
   { key: 'audit', label: 'Nhật ký hệ thống', icon: <ScrollText className="h-[18px] w-[18px]" />, perms: ['AUDIT_LOG_VIEW'] },
   { key: 'settings', label: 'Cài đặt', icon: <Settings className="h-[18px] w-[18px]" />, perms: ['SYSTEM_SETTING_VIEW'] },
   { key: 'backup', label: 'Backup / Restore', icon: <DatabaseBackup className="h-[18px] w-[18px]" />, perms: ['BACKUP_CREATE', 'BACKUP_RESTORE'] }
@@ -76,7 +80,8 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
               key={m.key}
               onClick={() => setActive(m.key)}
               className={
-                'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition ' +
+                'flex items-center gap-3 rounded-lg py-2.5 text-sm transition ' +
+                (m.indent ? 'pl-9 pr-3 ' : 'px-3 ') +
                 (m.key === activeItem?.key
                   ? 'bg-brand font-medium text-white shadow'
                   : 'text-sidebar-text hover:bg-white/5 hover:text-white')
