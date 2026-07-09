@@ -38,7 +38,7 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
       toDate: toDate || undefined
     });
     if (res.ok && res.data) setRows(res.data);
-    else if (res.message) toast.error(res.message);
+    else if (res.message) toast.alert(res.message);
     setLoading(false);
   }
   useEffect(() => {

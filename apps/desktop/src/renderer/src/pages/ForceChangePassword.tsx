@@ -40,7 +40,7 @@ export function ForceChangePassword({
       } else {
         const msg = res.message ?? 'Đổi mật khẩu thất bại.';
         setError(msg);
-        toast.error(msg);
+        toast.alert(msg);
       }
     } finally {
       setBusy(false);

@@ -28,7 +28,7 @@ export function RolesPage({ user }: { user: AuthUser }): JSX.Element {
     setLoading(true);
     const [r, p] = await Promise.all([window.api.roleList(), window.api.rolePermissions()]);
     if (r.ok && r.data) setRoles(r.data);
-    else if (r.message) toast.error(r.message);
+    else if (r.message) toast.alert(r.message);
     if (p.ok && p.data) setPerms(p.data);
     setLoading(false);
   }
@@ -40,14 +40,14 @@ export function RolesPage({ user }: { user: AuthUser }): JSX.Element {
   async function doLock(role: RoleDto, lock: boolean): Promise<void> {
     const res = lock ? await window.api.roleLock(role.id) : await window.api.roleUnlock(role.id);
     if (res.ok) toast.success(lock ? `Đã khóa vai trò ${role.name}` : `Đã mở khóa vai trò ${role.name}`);
-    else toast.error(res.message ?? 'Thao tác thất bại');
+    else toast.alert(res.message ?? 'Thao tác thất bại');
     setConfirm(null);
     await reload();
   }
   async function doDelete(role: RoleDto, password?: string): Promise<void> {
     const res = await window.api.roleDelete(role.id, password ?? '');
     if (res.ok) toast.success(`Đã xóa vai trò ${role.name}`);
-    else toast.error(res.message ?? 'Không thể xóa vai trò');
+    else toast.alert(res.message ?? 'Không thể xóa vai trò');
     setConfirm(null);
     await reload();
   }
@@ -256,7 +256,7 @@ function RoleForm({
 
   async function save(): Promise<void> {
     if (!name.trim()) {
-      toast.error('Tên vai trò bắt buộc.');
+      toast.alert('Tên vai trò bắt buộc.');
       return;
     }
     setBusy(true);
@@ -274,7 +274,7 @@ function RoleForm({
       toast.success(editing ? `Đã cập nhật vai trò ${name}` : `Đã tạo vai trò ${name}`);
       onSaved();
     } else {
-      toast.error(res.message ?? 'Lưu vai trò thất bại');
+      toast.alert(res.message ?? 'Lưu vai trò thất bại');
     }
   }
 

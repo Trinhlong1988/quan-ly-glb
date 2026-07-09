@@ -62,7 +62,7 @@ export function PosPage({ user }: { user: AuthUser }): JSX.Element {
       toDate: toDate || undefined
     });
     if (res.ok && res.data) setRows(res.data);
-    else if (res.message) toast.error(res.message);
+    else if (res.message) toast.alert(res.message);
     setLoading(false);
   }
   useEffect(() => {
@@ -212,7 +212,7 @@ function PosForm({ onClose, onSaved }: { onClose: () => void; onSaved: () => voi
   const [busy, setBusy] = useState(false);
 
   async function save(): Promise<void> {
-    if (!serial.trim()) return toast.error('Serial máy POS bắt buộc.');
+    if (!serial.trim()) return toast.alert('Serial máy POS bắt buộc.');
     setBusy(true);
     const res = await window.api.posCreate({ serial: serial.trim(), model: model || null, bank: bank || null, warehouseLoc: warehouseLoc || null, note: note || null });
     setBusy(false);
@@ -220,7 +220,7 @@ function PosForm({ onClose, onSaved }: { onClose: () => void; onSaved: () => voi
       toast.success(`Đã thêm máy POS ${serial} (Trong kho)`);
       onSaved();
     } else {
-      toast.error(res.message ?? 'Thêm máy POS thất bại');
+      toast.alert(res.message ?? 'Thêm máy POS thất bại');
     }
   }
 
@@ -319,8 +319,8 @@ function TransitionModal({ device, event, onClose, onDone }: { device: PosDto; e
   }, [needCustomer, needAgent]);
 
   async function run(password?: string): Promise<void> {
-    if (needCustomer && !customerId) return toast.error('Phải chọn khách hàng nhận máy.');
-    if (needAgent && !agentId) return toast.error('Phải chọn đại lý đích.');
+    if (needCustomer && !customerId) return toast.alert('Phải chọn khách hàng nhận máy.');
+    if (needAgent && !agentId) return toast.alert('Phải chọn đại lý đích.');
     setBusy(true);
     const input = {
       occurredAt: occurredAt ? new Date(occurredAt).toISOString() : null,
@@ -344,7 +344,7 @@ function TransitionModal({ device, event, onClose, onDone }: { device: PosDto; e
       toast.success(`${EVENT_LABELS[event]} — thành công cho máy ${device.serial}`);
       onDone();
     } else {
-      toast.error(res.message ?? 'Thao tác thất bại');
+      toast.alert(res.message ?? 'Thao tác thất bại');
     }
   }
 

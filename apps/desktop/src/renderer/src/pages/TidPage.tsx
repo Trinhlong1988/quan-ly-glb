@@ -37,11 +37,11 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
         toDate: toDate || undefined
       });
       if (res.ok && res.data) setRows(res.data);
-      else if (res.message) toast.error(res.message);
+      else if (res.message) toast.alert(res.message);
     } else {
       const res = await window.api.tidUndelivered();
       if (res.ok && res.data) setUndelivered(res.data);
-      else if (res.message) toast.error(res.message);
+      else if (res.message) toast.alert(res.message);
     }
     setLoading(false);
   }
@@ -234,7 +234,7 @@ function TidForm({ onClose, onSaved }: { onClose: () => void; onSaved: () => voi
   const [busy, setBusy] = useState(false);
 
   async function save(): Promise<void> {
-    if (!tid.trim()) return toast.error('Số TID bắt buộc.');
+    if (!tid.trim()) return toast.alert('Số TID bắt buộc.');
     setBusy(true);
     const res = await window.api.tidCreate({ tid: tid.trim(), mid: mid || null, bank: bank || null });
     setBusy(false);
@@ -242,7 +242,7 @@ function TidForm({ onClose, onSaved }: { onClose: () => void; onSaved: () => voi
       toast.success(`Đã thêm TID ${tid} (Chưa gán)`);
       onSaved();
     } else {
-      toast.error(res.message ?? 'Thêm TID thất bại');
+      toast.alert(res.message ?? 'Thêm TID thất bại');
     }
   }
 
@@ -302,11 +302,11 @@ function TidActionModal({ tid, kind, onClose, onDone }: { tid: TidDto; kind: 'as
     const when = occurredAt ? new Date(occurredAt).toISOString() : null;
     let res;
     if (kind === 'assign') {
-      if (!posSerial) { setBusy(false); return toast.error('Phải chọn máy POS.'); }
-      if (!customerId) { setBusy(false); return toast.error('Phải chọn khách hàng.'); }
+      if (!posSerial) { setBusy(false); return toast.alert('Phải chọn máy POS.'); }
+      if (!customerId) { setBusy(false); return toast.alert('Phải chọn khách hàng.'); }
       res = await window.api.tidAssign(tid.tid, { posSerial, customerId: Number(customerId), occurredAt: when, note: note || null });
     } else if (kind === 'replace') {
-      if (!newTid.trim()) { setBusy(false); return toast.error('Phải nhập TID mới (đã tạo sẵn, trạng thái Chưa gán).'); }
+      if (!newTid.trim()) { setBusy(false); return toast.alert('Phải nhập TID mới (đã tạo sẵn, trạng thái Chưa gán).'); }
       res = await window.api.tidReplace(tid.tid, { newTid: newTid.trim(), occurredAt: when, note: note || null });
     } else if (kind === 'recall') {
       res = await window.api.tidRecall(tid.tid, { occurredAt: when, note: note || null });
@@ -318,7 +318,7 @@ function TidActionModal({ tid, kind, onClose, onDone }: { tid: TidDto; kind: 'as
       toast.success(`${KIND_TITLE[kind]} — thành công cho TID ${tid.tid}`);
       onDone();
     } else {
-      toast.error(res.message ?? 'Thao tác thất bại');
+      toast.alert(res.message ?? 'Thao tác thất bại');
     }
   }
 

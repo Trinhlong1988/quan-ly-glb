@@ -20,7 +20,7 @@ export function BackupPage({ user }: { user: AuthUser }): JSX.Element {
     setLoading(true);
     const res = await window.api.backupList();
     if (res.ok && res.data) setRows(res.data);
-    else if (res.message) toast.error(res.message);
+    else if (res.message) toast.alert(res.message);
     setLoading(false);
   }
   useEffect(() => {
@@ -33,14 +33,14 @@ export function BackupPage({ user }: { user: AuthUser }): JSX.Element {
     const res = await window.api.backupCreate('Manual backup');
     setCreating(false);
     if (res.ok) toast.success('Đã tạo backup thành công');
-    else toast.error(res.message ?? 'Tạo backup thất bại');
+    else toast.alert(res.message ?? 'Tạo backup thất bại');
     await reload();
   }
 
   async function doRestore(b: BackupDto, password?: string): Promise<void> {
     const res = await window.api.backupRestore(b.filePath, password ?? '');
     if (res.ok) toast.success(res.message ?? 'Đã khôi phục');
-    else toast.error(res.message ?? 'Khôi phục thất bại');
+    else toast.alert(res.message ?? 'Khôi phục thất bại');
     setRestoreTarget(null);
     await reload();
   }

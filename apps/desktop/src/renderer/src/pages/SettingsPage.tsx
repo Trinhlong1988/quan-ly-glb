@@ -26,7 +26,7 @@ export function SettingsPage({ user }: { user: AuthUser }): JSX.Element {
         (res.data as SettingDto[]).forEach((s) => (map[s.key] = s.value ?? ''));
         setValues(map);
       } else if (res.message) {
-        toast.error(res.message);
+        toast.alert(res.message);
       }
       setLoading(false);
     });
@@ -38,7 +38,7 @@ export function SettingsPage({ user }: { user: AuthUser }): JSX.Element {
     const res = await window.api.settingUpdate(key, values[key] ?? '');
     setSavingKey(null);
     if (res.ok) toast.success('Đã lưu cấu hình');
-    else toast.error(res.message ?? 'Lưu cấu hình thất bại');
+    else toast.alert(res.message ?? 'Lưu cấu hình thất bại');
   }
 
   return (

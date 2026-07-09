@@ -50,7 +50,7 @@ export function AuditPage(): JSX.Element {
     setLoading(true);
     const res = await window.api.auditList({ action: action || undefined, search: search || undefined, limit: 300 });
     if (res.ok && res.data) setRows(res.data);
-    else if (res.message) toast.error(res.message);
+    else if (res.message) toast.alert(res.message);
     setLoading(false);
   }
   useEffect(() => {

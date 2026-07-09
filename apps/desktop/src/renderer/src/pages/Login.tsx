@@ -43,12 +43,12 @@ export function Login({ onLoggedIn }: { onLoggedIn: (u: AuthUser, mustChange: bo
       } else {
         const msg = res.message ?? 'Đăng nhập không hợp lệ.';
         setError(msg);
-        toast.error(msg);
+        toast.alert(msg);
       }
     } catch {
       const msg = 'Lỗi hệ thống khi đăng nhập.';
       setError(msg);
-      toast.error(msg);
+      toast.alert(msg);
     } finally {
       setBusy(false);
     }

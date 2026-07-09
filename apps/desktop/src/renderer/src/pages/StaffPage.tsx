@@ -8,6 +8,7 @@ import { Modal } from '../components/Modal.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { StatusPill, statusLabel } from '../components/StatusPill.js';
 import { Field, inputCls } from '../components/Field.js';
+import { Button } from '../components/Button.js';
 
 const STATUSES = ['ACTIVE', 'PENDING', 'LOCKED', 'DISABLED', 'DELETED'];
 
@@ -33,7 +34,7 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
     setLoading(true);
     const res = await window.api.userList({ roleCode: roleFilter || undefined, status: statusFilter || undefined, search: search || undefined });
     if (res.ok && res.data) setRows(res.data);
-    else if (res.message) toast.error(res.message);
+    else if (res.message) toast.alert(res.message);
     setLoading(false);
   }
   useEffect(() => {
@@ -49,14 +50,14 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
   async function doLock(u: UserDto, lock: boolean): Promise<void> {
     const res = lock ? await window.api.userLock(u.id) : await window.api.userUnlock(u.id);
     if (res.ok) toast.success(lock ? `Đã khóa tài khoản ${u.username}` : `Đã mở khóa ${u.username}`);
-    else toast.error(res.message ?? 'Thao tác thất bại');
+    else toast.alert(res.message ?? 'Thao tác thất bại', 'Thao tác thất bại');
     setConfirm(null);
     await reload();
   }
   async function doDelete(u: UserDto, password?: string): Promise<void> {
     const res = await window.api.userDelete(u.id, password ?? '');
     if (res.ok) toast.success(`Đã xóa nhân sự ${u.fullName}`);
-    else toast.error(res.message ?? 'Không thể xóa nhân sự');
+    else toast.alert(res.message ?? 'Không thể xóa nhân sự', 'Xóa thất bại');
     setConfirm(null);
     await reload();
   }
@@ -71,12 +72,9 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
           <p className="text-sm text-slate-500">Sổ nhân sự theo từng vai trò, trạng thái — có tìm kiếm & lọc.</p>
         </div>
         {canCreate && (
-          <button
-            onClick={() => setCreating(true)}
-            className="flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover"
-          >
-            <Plus className="h-4 w-4" /> Thêm nhân sự
-          </button>
+          <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)}>
+            Thêm nhân sự
+          </Button>
         )}
       </div>
 
@@ -174,7 +172,7 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">
                       {canUpdate && u.status !== 'DELETED' && (
-                        <IconBtn title="Sửa" onClick={() => setEditing(u)}>
+                        <IconBtn title="Sửa" variant="edit" onClick={() => setEditing(u)}>
                           <Pencil className="h-4 w-4" />
                         </IconBtn>
                       )}
@@ -189,7 +187,7 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
                         </IconBtn>
                       )}
                       {canDelete && u.status !== 'DELETED' && (
-                        <IconBtn title="Xóa" danger onClick={() => setConfirm({ kind: 'delete', u })}>
+                        <IconBtn title="Xóa" variant="danger" onClick={() => setConfirm({ kind: 'delete', u })}>
                           <Trash2 className="h-4 w-4" />
                         </IconBtn>
                       )}
@@ -252,26 +250,26 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
   );
 }
 
+// Nút icon theo quy ước màu (R_BUTTON_SEMANTICS): sửa=vàng, xóa=đỏ.
 function IconBtn({
   children,
   title,
-  danger,
+  variant,
   onClick
 }: {
   children: JSX.Element;
   title: string;
-  danger?: boolean;
+  variant?: 'edit' | 'danger';
   onClick: () => void;
 }): JSX.Element {
+  const tone =
+    variant === 'danger'
+      ? 'text-danger hover:bg-danger/10'
+      : variant === 'edit'
+        ? 'text-warning hover:bg-warning/10'
+        : 'text-slate-400 hover:bg-brand-tint hover:text-brand';
   return (
-    <button
-      title={title}
-      onClick={onClick}
-      className={
-        'rounded-md p-1.5 transition ' +
-        (danger ? 'text-slate-400 hover:bg-danger/10 hover:text-danger' : 'text-slate-400 hover:bg-brand-tint hover:text-brand')
-      }
-    >
+    <button title={title} onClick={onClick} className={'rounded-md p-1.5 transition ' + tone}>
       {children}
     </button>
   );
@@ -328,8 +326,8 @@ function StaffForm({
   }
 
   async function save(): Promise<void> {
-    if (!fullName.trim()) return toast.error('Họ và tên bắt buộc.');
-    if (selectedRoles.size === 0) return toast.error('Phải chọn ít nhất 1 vai trò.');
+    if (!fullName.trim()) return toast.alert('Họ và tên bắt buộc.');
+    if (selectedRoles.size === 0) return toast.alert('Phải chọn ít nhất 1 vai trò.');
     setBusy(true);
     let res;
     if (editing) {
@@ -365,7 +363,7 @@ function StaffForm({
       toast.success(editing ? `Đã cập nhật ${fullName}` : `Đã tạo nhân sự ${fullName}`);
       onSaved();
     } else {
-      toast.error(res.message ?? 'Lưu nhân sự thất bại');
+      toast.alert(res.message ?? 'Lưu nhân sự thất bại');
     }
   }
 
