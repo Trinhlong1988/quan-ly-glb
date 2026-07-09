@@ -23,7 +23,9 @@ const ACTIONS = [
   'FEE_TYPE_CREATED', 'FEE_TYPE_UPDATED', 'FEE_TYPE_DELETED',
   'FEE_RATE_SET', 'FEE_RATE_DELETED',
   'RCV_ACCT_SOURCE_CREATED', 'RCV_ACCT_SOURCE_UPDATED', 'RCV_ACCT_SOURCE_DELETED',
-  'RCV_ACCT_CREATED', 'RCV_ACCT_UPDATED', 'RCV_ACCT_DELETED'
+  'RCV_ACCT_CREATED', 'RCV_ACCT_UPDATED', 'RCV_ACCT_DELETED',
+  'DOSSIER_SOURCE_CREATED', 'DOSSIER_SOURCE_UPDATED', 'DOSSIER_SOURCE_DELETED',
+  'DOSSIER_CREATED', 'DOSSIER_UPDATED', 'DOSSIER_DELETED'
 ];
 
 /** Nhãn tiếng Việt cho mã hành động (nhật ký 100% tiếng Việt). */
@@ -44,7 +46,9 @@ const ACTION_LABEL: Record<string, string> = {
   FEE_TYPE_CREATED: 'Tạo loại phí', FEE_TYPE_UPDATED: 'Sửa loại phí', FEE_TYPE_DELETED: 'Xóa loại phí',
   FEE_RATE_SET: 'Đặt biểu phí', FEE_RATE_DELETED: 'Xóa biểu phí',
   RCV_ACCT_SOURCE_CREATED: 'Tạo nguồn TK nhận tiền', RCV_ACCT_SOURCE_UPDATED: 'Sửa nguồn TK nhận tiền', RCV_ACCT_SOURCE_DELETED: 'Xóa nguồn TK nhận tiền',
-  RCV_ACCT_CREATED: 'Tạo TK nhận tiền', RCV_ACCT_UPDATED: 'Sửa TK nhận tiền', RCV_ACCT_DELETED: 'Xóa TK nhận tiền'
+  RCV_ACCT_CREATED: 'Tạo TK nhận tiền', RCV_ACCT_UPDATED: 'Sửa TK nhận tiền', RCV_ACCT_DELETED: 'Xóa TK nhận tiền',
+  DOSSIER_SOURCE_CREATED: 'Tạo nguồn hồ sơ', DOSSIER_SOURCE_UPDATED: 'Sửa nguồn hồ sơ', DOSSIER_SOURCE_DELETED: 'Xóa nguồn hồ sơ',
+  DOSSIER_CREATED: 'Tạo hồ sơ HKD', DOSSIER_UPDATED: 'Sửa hồ sơ HKD', DOSSIER_DELETED: 'Xóa hồ sơ HKD'
 };
 const actionLabel = (a: string): string => ACTION_LABEL[a] ?? a;
 
@@ -53,7 +57,8 @@ const TARGET_LABEL: Record<string, string> = {
   User: 'Nhân sự', Role: 'Vai trò', Customer: 'Khách hàng', PosDevice: 'Máy POS', Tid: 'TID',
   Backup: 'Sao lưu', AppSetting: 'Cấu hình', Bank: 'Ngân hàng', CardType: 'Loại thẻ', Partner: 'Đối tác',
   Supplier: 'Nhà cung cấp', PosModel: 'Chủng loại máy POS', PosIntakeStatus: 'Trạng thái nhập máy', PosIntake: 'Máy POS nhập kho',
-  FeeType: 'Loại phí', FeeRate: 'Biểu phí', ReceiveAccountSource: 'Nguồn TK nhận tiền', ReceiveAccount: 'TK nhận tiền'
+  FeeType: 'Loại phí', FeeRate: 'Biểu phí', ReceiveAccountSource: 'Nguồn TK nhận tiền', ReceiveAccount: 'TK nhận tiền',
+  DossierSource: 'Nguồn hồ sơ', Dossier: 'Hồ sơ HKD'
 };
 const targetLabel = (t: string): string => TARGET_LABEL[t] ?? t;
 

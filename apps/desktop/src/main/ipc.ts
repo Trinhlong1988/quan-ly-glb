@@ -15,6 +15,7 @@ import * as bankCfgSvc from './bank-config-service.js';
 import * as posSupplySvc from './pos-supply-service.js';
 import * as feeCfgSvc from './fee-config-service.js';
 import * as rcvAcctSvc from './receive-account-service.js';
+import * as dossierSvc from './dossier-service.js';
 import { readAttachmentDataUrl } from './file-store.js';
 import * as trashSvc from './trash-service.js';
 import { getRemembered, saveRemembered, clearRemembered } from './remember.js';
@@ -200,6 +201,17 @@ export function registerIpc(): void {
     return { ok: true, path: res.filePaths[0] };
   });
   ipcMain.handle('file:read', async (_e, relPath: string) => readAttachmentDataUrl(relPath));
+
+  // ── G-CFG.5 (§10) Quản lý Hồ sơ HKD ──
+  ipcMain.handle('dossierSource:list', async () => dossierSvc.listSources());
+  ipcMain.handle('dossierSource:create', async (_e, input: dossierSvc.CreateDossierSourceInput) => dossierSvc.createSource(input));
+  ipcMain.handle('dossierSource:update', async (_e, args: { id: number; input: dossierSvc.UpdateDossierSourceInput }) => dossierSvc.updateSource(args.id, args.input));
+  ipcMain.handle('dossierSource:delete', async (_e, args: { ids: number[]; password: string }) => dossierSvc.deleteSources(args.ids, args.password));
+
+  ipcMain.handle('dossier:list', async (_e, filter: dossierSvc.DossierFilter) => dossierSvc.listDossiers(filter));
+  ipcMain.handle('dossier:create', async (_e, input: dossierSvc.DossierInput) => dossierSvc.createDossier(input));
+  ipcMain.handle('dossier:update', async (_e, args: { id: number; input: dossierSvc.DossierInput }) => dossierSvc.updateDossier(args.id, args.input));
+  ipcMain.handle('dossier:delete', async (_e, args: { ids: number[]; password: string }) => dossierSvc.deleteDossiers(args.ids, args.password));
 
   // ── E4 Thùng rác ──
   ipcMain.handle('trash:list', async () => trashSvc.listTrash());

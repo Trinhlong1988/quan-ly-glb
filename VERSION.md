@@ -1,12 +1,12 @@
 ---
 project: Quản Lý GLB (IMS)
-phase: G-CFG.4
-current_version: 0.7.0-gcfg4
+phase: G-CFG.5
+current_version: 0.8.0-gcfg5
 status: BUILDING (Engineering, chưa Production Validated)
 last_update_ts: 2026-07-09
 last_update_by: CMD_BUILD (Claude)
 rule_break_count: 0
-schema_version: 7
+schema_version: 8
 ---
 
 # VERSION — Quản Lý GLB
@@ -18,6 +18,17 @@ schema_version: 7
 4. Đọc `bible/00_constitution.md`.
 
 ## Nhật ký phiên bản
+### 0.8.0-gcfg5 — 2026-07-09 (CMD_BUILD)
+- **G-CFG.5 Quản lý Hồ sơ HKD (§C mục 10)**: Nguồn hồ sơ (§10a/b: mã @unique + chính sách chiết khấu %) + Hồ sơ HKD (§10c/d: đủ trường HKD/chủ hộ/CCCD) kèm **đính kèm ảnh ĐKKD 2 mặt + CCCD 2 mặt** (PNG/JPG/PDF, mặt sau KHÔNG bắt buộc).
+- **Làm TRƯỚC §9** (Cấu hình TID) theo thứ tự phụ thuộc: §9 "Thêm TID" lấy "nguồn hồ sơ" từ §10a → build §9 trước sẽ nợ tham chiếu. Topological order: §8 (done) → §10 → §9.
+- **Schema v8**: migration `20260709180000_gcfg5_dossier` (`dossier_sources` mã @unique + chiết khấu Int %×1000 ≤3 thập phân; `dossiers` đủ trường + 8 cột path/tên cho ĐKKD/CCCD 2 mặt; truy vết created_by/updated_by/deleted_at). Áp B05 (mã nguồn @unique → DUPLICATE_TRASH + lưới P2002).
+- **Tái dùng** `file-store.ts` (kind='dossier'): **ĐKKD đặt tên theo Tên HKD** (`1. ĐKKD MT - <tên HKD>`), **CCCD đặt tên theo Tên chủ hộ** (`1. CCCD MT - <tên chủ hộ>`) — đúng docs/FILE_UPLOAD_CONVENTION.md. Thay/gỡ ảnh → `_trash` (R_AUDIT_TRAIL).
+- **2 permission** CONFIG_DOSSIER_VIEW/MANAGE (gán ADMIN/MANAGER/ACCOUNTANT). 6 AuditAction mới (DOSSIER_SOURCE_*/DOSSIER_*).
+- **Backend** `dossier-service.ts`: CRUD nguồn (B05 + validate chiết khấu ≤3 thập phân) + CRUD hồ sơ + `applyAttachments` 4 mặt (ĐKKD dùng hkdName, CCCD dùng ownerName) + validate nguồn còn sống. Xóa mềm + mật khẩu.
+- **UI** `DossierPage.tsx` (2 tab) — form hồ sơ chia nhóm (Thông tin HKD / Thông tin chủ hộ / Ảnh đính kèm 4 ô) + ảnh thu nhỏ click phóng to. Multi-select + Xuất Excel + lọc theo nguồn. Trích `components/Attach.tsx` (Thumb + AttachField) DÙNG CHUNG với ReceiveAccountPage (R_UI_STANDARD — cùng vai trò cùng component). Menu "Hồ sơ HKD". AuditPage + Thùng rác mở rộng DossierSource/Dossier.
+- Bằng chứng: **Vitest 178/178** · typecheck node+web 0 · build 0 · **GLB_SELFTEST=9 115/115 PASS exit 0** (62 đúng + 53 sai, R_LINK_VERIFY — gồm kiểm tên file ĐKKD/CCCD chuẩn, đọc lại data URL PDF+PNG, thay/gỡ ảnh→_trash) · regression **=4 109/109 · =5 107/107 · =6 106/106 · =7 102/102 · =8 113/113**. File thật trên đĩa đúng chuẩn tên, ảnh gỡ nằm `_trash/`.
+- **CHƯA**: nghiệm thu UI thật (LEAD) · §9 Cấu hình TID (G-CFG.6 — cần quyết định kiến trúc bảng TID). Status L1 Engineering PASS (R196).
+
 ### 0.7.0-gcfg4 — 2026-07-09 (CMD_BUILD)
 - **G-CFG.4 Tài khoản nhận tiền – ủy quyền (§C mục 8)**: Nguồn tài khoản (§8a) + Tài khoản nhận tiền (§8b) kèm **đính kèm ảnh CCCD 2 mặt** (mặt sau KHÔNG bắt buộc — LEAD chốt "chỉ có mặt trước thì dùng mặt trước").
 - **Schema v7**: migration `20260709170000_gcfg4_receive_account` (`receive_account_sources`, `receive_accounts` — TK có sourceId/bankId/customerId liên kết scalar + trường CCCD + cột path/tên ảnh 2 mặt; truy vết created_by/updated_by/deleted_at). Áp B05 (nguồn tên @unique → DUPLICATE_TRASH + lưới P2002).

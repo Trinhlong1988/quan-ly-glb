@@ -496,3 +496,60 @@ model ReceiveAccount {
   @@index([customerId])
   @@map("receive_accounts")
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// G-CFG.5 — Quản lý Hồ sơ HKD (§10): nguồn hồ sơ (10a/b) + hồ sơ HKD (10c/d)
+// Ảnh ĐKKD + CCCD lưu ngoài DB (docs/FILE_UPLOAD_CONVENTION.md, kind='dossier').
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Nguồn hồ sơ (§10a) — mã + chính sách chiết khấu %.
+model DossierSource {
+  id           Int       @id @default(autoincrement())
+  code         String    @unique // Mã nguồn hồ sơ
+  discountRate Int       @default(0) @map("discount_rate") // chiết khấu % ×1000 (≤3 thập phân, Int chính xác)
+  createdBy    Int?      @map("created_by")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedBy    Int?      @map("updated_by")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  @@map("dossier_sources")
+}
+
+// Hồ sơ Hộ Kinh Doanh (§10c). Ảnh ĐKKD/CCCD 2 mặt lưu ngoài DB (path + tên gốc).
+model Dossier {
+  id               Int       @id @default(autoincrement())
+  sourceId         Int       @map("source_id") // nguồn hồ sơ (10a)
+  hkdName          String    @map("hkd_name") // Tên Hộ Kinh Doanh
+  hkdAddress       String?   @map("hkd_address") // Địa chỉ đăng ký HKD
+  taxCode          String?   @map("tax_code") // MST / Mã số ĐK HKD
+  dkkdIssueDate    DateTime? @map("dkkd_issue_date") // Ngày cấp ĐKKD
+  dkkdIssuePlace   String?   @map("dkkd_issue_place") // Nơi cấp ĐKKD
+  ownerName        String    @map("owner_name") // Tên chủ hộ kinh doanh
+  gender           String? // Giới tính
+  ethnicity        String? // Dân tộc
+  cccdNumber       String?   @map("cccd_number") // Số CCCD
+  cccdIssueDate    DateTime? @map("cccd_issue_date") // Ngày cấp
+  cccdIssuePlace   String?   @map("cccd_issue_place") // Nơi cấp
+  cccdExpiry       DateTime? @map("cccd_expiry") // Ngày hết hạn
+  permanentAddress String?   @map("permanent_address") // Địa chỉ thường trú
+  currentAddress   String?   @map("current_address") // Nơi ở hiện tại
+  // Ảnh ĐKKD (đặt tên theo Tên HKD) + CCCD (đặt tên theo Tên chủ hộ). Mặt sau không bắt buộc.
+  dkkdFrontPath    String?   @map("dkkd_front_path")
+  dkkdFrontName    String?   @map("dkkd_front_name")
+  dkkdBackPath     String?   @map("dkkd_back_path")
+  dkkdBackName     String?   @map("dkkd_back_name")
+  cccdFrontPath    String?   @map("cccd_front_path")
+  cccdFrontName    String?   @map("cccd_front_name")
+  cccdBackPath     String?   @map("cccd_back_path")
+  cccdBackName     String?   @map("cccd_back_name")
+  note             String?
+  createdBy        Int?      @map("created_by")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedBy        Int?      @map("updated_by")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  deletedAt        DateTime? @map("deleted_at")
+
+  @@index([sourceId])
+  @@map("dossiers")
+}

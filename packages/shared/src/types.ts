@@ -118,6 +118,12 @@ export type AuditAction =
   | 'RCV_ACCT_CREATED'
   | 'RCV_ACCT_UPDATED'
   | 'RCV_ACCT_DELETED'
+  | 'DOSSIER_SOURCE_CREATED'
+  | 'DOSSIER_SOURCE_UPDATED'
+  | 'DOSSIER_SOURCE_DELETED'
+  | 'DOSSIER_CREATED'
+  | 'DOSSIER_UPDATED'
+  | 'DOSSIER_DELETED'
   // Extra (superset of §16 minimum): a mutation refused because the actor lacked the
   // required permission MUST still be logged (R_AUDIT_003).
   | 'PERMISSION_DENIED';

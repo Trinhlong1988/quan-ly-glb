@@ -143,6 +143,17 @@ const api = {
   pickImage: () => ipcRenderer.invoke('file:pickImage'),
   readAttachment: (relPath: string) => ipcRenderer.invoke('file:read', relPath),
 
+  // Quản lý Hồ sơ HKD (G-CFG.5 §10)
+  dossierSourceList: () => ipcRenderer.invoke('dossierSource:list'),
+  dossierSourceCreate: (input: unknown) => ipcRenderer.invoke('dossierSource:create', input),
+  dossierSourceUpdate: (id: number, input: unknown) => ipcRenderer.invoke('dossierSource:update', { id, input }),
+  dossierSourceDelete: (ids: number[], password: string) => ipcRenderer.invoke('dossierSource:delete', { ids, password }),
+
+  dossierList: (filter: unknown) => ipcRenderer.invoke('dossier:list', filter),
+  dossierCreate: (input: unknown) => ipcRenderer.invoke('dossier:create', input),
+  dossierUpdate: (id: number, input: unknown) => ipcRenderer.invoke('dossier:update', { id, input }),
+  dossierDelete: (ids: number[], password: string) => ipcRenderer.invoke('dossier:delete', { ids, password }),
+
   // Thùng rác (E4)
   trashList: () => ipcRenderer.invoke('trash:list'),
   trashRestore: (entityType: string, id: number) => ipcRenderer.invoke('trash:restore', { entityType, id }),

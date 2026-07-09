@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2, Loader2, Wallet, Tag, Image as ImageIcon, Upload, X, Download } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, Wallet, Tag, Download } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate, fmtTime } from '@glb/shared';
 import type { RcvSourceDto, RcvAccountDto, LiteRef, CustomerDto, RcvAccountInput } from '../../../preload/index.d';
@@ -10,6 +10,7 @@ import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
 import { Button } from '../components/Button.js';
 import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../components/Selection.js';
+import { Thumb, AttachField } from '../components/Attach.js';
 import { exportCsv } from '../lib/exportCsv.js';
 
 type Tab = 'account' | 'source';
@@ -246,48 +247,6 @@ function AccountTab({ canManage }: { canManage: boolean }): JSX.Element {
       {form && <AccountForm mode={form.mode} row={form.row} sources={sources} banks={banks} customers={customers} onClose={() => setForm(null)} onSaved={() => { setForm(null); void reload(); }} />}
       {del && <ConfirmDialog title="Xóa tài khoản nhận tiền" message={`Tài khoản "${del.accountName}" (${del.accountNumber}) sẽ vào Thùng rác (có thể phục hồi). Nhập lại mật khẩu để xác nhận.`} confirmLabel="Xóa" danger requirePassword onCancel={() => setDel(null)} onConfirm={(pwd) => doDelete(del, pwd)} />}
       {bulkDel && <ConfirmDialog title="Xóa nhiều tài khoản" message={`${sel.count} tài khoản đã chọn sẽ vào Thùng rác (có thể phục hồi). Nhập lại mật khẩu để xác nhận.`} confirmLabel={`Xóa ${sel.count} mục`} danger requirePassword onCancel={() => setBulkDel(false)} onConfirm={(pwd) => doBulkDelete(pwd)} />}
-    </div>
-  );
-}
-
-/** Ảnh thu nhỏ — click phóng to. Đọc file qua IPC (data URL). */
-function Thumb({ relPath, label }: { relPath: string; label: string }): JSX.Element {
-  const [url, setUrl] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
-  useEffect(() => { window.api.readAttachment(relPath).then((r) => { if (r.ok && r.dataUrl) setUrl(r.dataUrl); }); }, [relPath]);
-  const isPdf = relPath.toLowerCase().endsWith('.pdf');
-  return (
-    <>
-      <button title={label} onClick={() => setOpen(true)} className="flex h-8 w-8 items-center justify-center overflow-hidden rounded border border-line bg-appbg hover:ring-2 hover:ring-brand/30">
-        {isPdf || !url ? <ImageIcon className="h-4 w-4 text-slate-400" /> : <img src={url} alt={label} className="h-full w-full object-cover" />}
-      </button>
-      {open && (
-        <Modal title={label} onClose={() => setOpen(false)} width="max-w-2xl">
-          {isPdf ? <a className="text-brand underline" href={url ?? '#'} target="_blank" rel="noreferrer">Mở PDF</a> : url ? <img src={url} alt={label} className="mx-auto max-h-[70vh] rounded-lg" /> : <Loader2 className="mx-auto h-6 w-6 animate-spin text-slate-400" />}
-        </Modal>
-      )}
-    </>
-  );
-}
-
-/** Ô đính kèm 1 mặt CCCD: chọn ảnh mới / xem ảnh hiện có / gỡ. */
-function AttachField({ label, current, srcPath, onPick, onClear }: { label: string; current: string | null; srcPath: string | null; onPick: (p: string) => void; onClear: () => void }): JSX.Element {
-  const toast = useToast();
-  async function pick(): Promise<void> {
-    const r = await window.api.pickImage();
-    if (r.ok && r.path) onPick(r.path);
-    else if (!r.canceled) toast.alert('Không chọn được ảnh.', 'Lỗi');
-  }
-  const has = srcPath || current;
-  return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-sm font-medium text-slate-700">{label}</span>
-      <div className="flex items-center gap-2">
-        <Button variant="neutral" icon={<Upload className="h-4 w-4" />} onClick={pick}>{has ? 'Đổi ảnh' : 'Chọn ảnh'}</Button>
-        {srcPath && <span className="truncate text-xs text-success">✓ ảnh mới đã chọn</span>}
-        {!srcPath && current && <Thumb relPath={current} label={label} />}
-        {has && <button title="Gỡ ảnh" onClick={onClear} className="rounded p-1 text-danger hover:bg-danger/10"><X className="h-4 w-4" /></button>}
-      </div>
     </div>
   );
 }

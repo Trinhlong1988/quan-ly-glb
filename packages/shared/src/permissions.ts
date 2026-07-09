@@ -50,6 +50,9 @@ export const PERMISSIONS: PermissionDef[] = [
   // ── G-CFG.4 (§8) — Tài khoản nhận tiền – ủy quyền ──
   { code: 'CONFIG_RCV_ACCT_VIEW', name: 'Xem tài khoản nhận tiền – ủy quyền', group: 'Tài khoản nhận tiền' },
   { code: 'CONFIG_RCV_ACCT_MANAGE', name: 'Quản lý tài khoản nhận tiền – ủy quyền', group: 'Tài khoản nhận tiền' },
+  // ── G-CFG.5 (§10) — Quản lý Hồ sơ HKD ──
+  { code: 'CONFIG_DOSSIER_VIEW', name: 'Xem hồ sơ HKD (nguồn hồ sơ + hồ sơ)', group: 'Hồ sơ HKD' },
+  { code: 'CONFIG_DOSSIER_MANAGE', name: 'Quản lý hồ sơ HKD (nguồn hồ sơ + hồ sơ)', group: 'Hồ sơ HKD' },
   // ── Thùng rác (R_TRASH_RESTORE) — chỉ ADMIN ──
   { code: 'TRASH_VIEW', name: 'Xem thùng rác', group: 'Thùng rác' },
   { code: 'TRASH_RESTORE', name: 'Phục hồi dữ liệu đã xóa', group: 'Thùng rác' }
@@ -90,10 +93,13 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'CONFIG_FEE_MANAGE',
     // G-CFG.4: managers quản lý TK nhận tiền.
     'CONFIG_RCV_ACCT_VIEW',
-    'CONFIG_RCV_ACCT_MANAGE'
+    'CONFIG_RCV_ACCT_MANAGE',
+    // G-CFG.5: managers quản lý hồ sơ HKD.
+    'CONFIG_DOSSIER_VIEW',
+    'CONFIG_DOSSIER_MANAGE'
   ],
   D_MANAGER: ['DASHBOARD_VIEW', 'USER_READ', 'ROLE_READ', 'CUSTOMER_VIEW', 'POS_VIEW', 'TID_VIEW', 'CONFIG_BANK_VIEW'],
-  ACCOUNTANT: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW', 'CONFIG_BANK_VIEW', 'CONFIG_FEE_VIEW', 'CONFIG_FEE_MANAGE', 'CONFIG_RCV_ACCT_VIEW', 'CONFIG_RCV_ACCT_MANAGE'],
+  ACCOUNTANT: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW', 'CONFIG_BANK_VIEW', 'CONFIG_FEE_VIEW', 'CONFIG_FEE_MANAGE', 'CONFIG_RCV_ACCT_VIEW', 'CONFIG_RCV_ACCT_MANAGE', 'CONFIG_DOSSIER_VIEW', 'CONFIG_DOSSIER_MANAGE'],
   TECHNICIAN: ['DASHBOARD_VIEW', 'POS_VIEW'],
   SUPPORT: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW'],
   WAREHOUSE: ['DASHBOARD_VIEW', 'POS_VIEW', 'TID_VIEW', 'CONFIG_POS_SUPPLY_VIEW', 'CONFIG_POS_SUPPLY_MANAGE'],

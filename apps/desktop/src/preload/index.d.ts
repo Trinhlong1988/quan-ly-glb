@@ -535,6 +535,76 @@ export interface RcvAccountInput {
   cccdFrontSrc?: string | null;
   cccdBackSrc?: string | null;
 }
+// ── G-CFG.5 DTOs (Quản lý Hồ sơ HKD §10) ──
+export interface DossierSourceDto extends AuditTrail {
+  id: number;
+  code: string;
+  discountRate: number; // phần trăm (đã /1000)
+}
+export interface CreateDossierSourceInput {
+  code: string;
+  discountRate: number;
+}
+export interface UpdateDossierSourceInput {
+  code?: string;
+  discountRate?: number;
+}
+export interface DossierDto extends AuditTrail {
+  id: number;
+  sourceId: number;
+  sourceCode: string | null;
+  hkdName: string;
+  hkdAddress: string | null;
+  taxCode: string | null;
+  dkkdIssueDate: string | null;
+  dkkdIssuePlace: string | null;
+  ownerName: string;
+  gender: string | null;
+  ethnicity: string | null;
+  cccdNumber: string | null;
+  cccdIssueDate: string | null;
+  cccdIssuePlace: string | null;
+  cccdExpiry: string | null;
+  permanentAddress: string | null;
+  currentAddress: string | null;
+  dkkdFrontPath: string | null;
+  dkkdFrontName: string | null;
+  dkkdBackPath: string | null;
+  dkkdBackName: string | null;
+  cccdFrontPath: string | null;
+  cccdFrontName: string | null;
+  cccdBackPath: string | null;
+  cccdBackName: string | null;
+  note: string | null;
+}
+export interface DossierFilter {
+  search?: string;
+  sourceId?: number;
+  fromDate?: string;
+  toDate?: string;
+}
+export interface DossierInput {
+  sourceId: number;
+  hkdName: string;
+  hkdAddress?: string | null;
+  taxCode?: string | null;
+  dkkdIssueDate?: string | null;
+  dkkdIssuePlace?: string | null;
+  ownerName: string;
+  gender?: string | null;
+  ethnicity?: string | null;
+  cccdNumber?: string | null;
+  cccdIssueDate?: string | null;
+  cccdIssuePlace?: string | null;
+  cccdExpiry?: string | null;
+  permanentAddress?: string | null;
+  currentAddress?: string | null;
+  note?: string | null;
+  dkkdFrontSrc?: string | null;
+  dkkdBackSrc?: string | null;
+  cccdFrontSrc?: string | null;
+  cccdBackSrc?: string | null;
+}
 export interface PickImageResult {
   ok: boolean;
   path?: string;
@@ -721,6 +791,17 @@ export interface GlbApi {
 
   pickImage(): Promise<PickImageResult>;
   readAttachment(relPath: string): Promise<ReadAttachmentResult>;
+
+  // ── Quản lý Hồ sơ HKD (G-CFG.5 §10) ──
+  dossierSourceList(): Promise<ListResult<DossierSourceDto>>;
+  dossierSourceCreate(input: CreateDossierSourceInput): Promise<MutationOutcome>;
+  dossierSourceUpdate(id: number, input: UpdateDossierSourceInput): Promise<MutationOutcome>;
+  dossierSourceDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
+
+  dossierList(filter: DossierFilter): Promise<ListResult<DossierDto>>;
+  dossierCreate(input: DossierInput): Promise<MutationOutcome>;
+  dossierUpdate(id: number, input: DossierInput): Promise<MutationOutcome>;
+  dossierDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
 
   // Thùng rác (E4)
   trashList(): Promise<{ ok: boolean; data?: TrashRow[]; error?: string; message?: string }>;
