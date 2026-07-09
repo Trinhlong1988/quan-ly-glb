@@ -1,0 +1,438 @@
+import { useEffect, useState } from 'react';
+import { Plus, Pencil, Trash2, Loader2, Landmark, CreditCard, Building2, Download, Link2 } from 'lucide-react';
+import type { AuthUser } from '@glb/shared';
+import { hasPermission, fmtDate, fmtTime } from '@glb/shared';
+import type { BankDto, CardTypeDto, PartnerDto, PartnerBankMatrix } from '../../../preload/index.d';
+import { useToast } from '../lib/toast.js';
+import { Modal } from '../components/Modal.js';
+import { ConfirmDialog } from '../components/ConfirmDialog.js';
+import { Field, inputCls } from '../components/Field.js';
+import { FilterBar } from '../components/FilterBar.js';
+import { Button } from '../components/Button.js';
+import { exportCsv } from '../lib/exportCsv.js';
+
+type Tab = 'bank' | 'cardtype' | 'partner';
+
+// Nút icon theo quy ước màu (R_BUTTON_SEMANTICS): sửa=vàng, xóa=đỏ.
+function IconBtn({ children, title, variant, onClick }: { children: JSX.Element; title: string; variant?: 'edit' | 'danger'; onClick: () => void }): JSX.Element {
+  const tone = variant === 'danger' ? 'text-danger hover:bg-danger/10' : variant === 'edit' ? 'text-warning hover:bg-warning/10' : 'text-slate-400 hover:bg-brand-tint hover:text-brand';
+  return (
+    <button title={title} onClick={onClick} className={'rounded-md p-1.5 transition ' + tone}>
+      {children}
+    </button>
+  );
+}
+
+/** Cột truy vết dùng chung: người sửa/tạo gần nhất + Ngày | Giờ. */
+function trailCells(row: { updatedByName: string | null; createdByName: string | null; updatedAt: string }): JSX.Element {
+  return (
+    <>
+      <td className="px-4 py-3 text-slate-600">{row.updatedByName ?? row.createdByName ?? '—'}</td>
+      <td className="px-4 py-3 text-xs text-slate-500">{fmtDate(row.updatedAt)}</td>
+      <td className="px-4 py-3 text-xs text-slate-500">{fmtTime(row.updatedAt)}</td>
+    </>
+  );
+}
+
+export function BankConfigPage({ user }: { user: AuthUser }): JSX.Element {
+  const [tab, setTab] = useState<Tab>('bank');
+  const canManage = hasPermission(user, 'CONFIG_BANK_MANAGE');
+  return (
+    <div>
+      <div className="mb-4">
+        <h2 className="text-lg font-semibold text-slate-800">Cấu hình ngân hàng</h2>
+        <p className="text-sm text-slate-500">Ngân hàng · Loại thẻ dùng trên máy POS · Đối tác và liên kết ngân hàng.</p>
+      </div>
+      <div className="mb-3 flex items-center gap-1 border-b border-line">
+        <TabBtn active={tab === 'bank'} onClick={() => setTab('bank')} icon={<Landmark className="h-4 w-4" />}>Ngân hàng</TabBtn>
+        <TabBtn active={tab === 'cardtype'} onClick={() => setTab('cardtype')} icon={<CreditCard className="h-4 w-4" />}>Loại thẻ</TabBtn>
+        <TabBtn active={tab === 'partner'} onClick={() => setTab('partner')} icon={<Building2 className="h-4 w-4" />}>Đối tác</TabBtn>
+      </div>
+      {tab === 'bank' && <BankTab canManage={canManage} />}
+      {tab === 'cardtype' && <CardTypeTab canManage={canManage} />}
+      {tab === 'partner' && <PartnerTab canManage={canManage} />}
+    </div>
+  );
+}
+
+function TabBtn({ active, onClick, icon, children }: { active: boolean; onClick: () => void; icon: JSX.Element; children: string }): JSX.Element {
+  return (
+    <button onClick={onClick} className={'flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition ' + (active ? 'border-brand text-brand' : 'border-transparent text-slate-500 hover:text-slate-700')}>
+      {icon} {children}
+    </button>
+  );
+}
+
+// ── C1/C2 NGÂN HÀNG ─────────────────────────────────────────────────────────
+function BankTab({ canManage }: { canManage: boolean }): JSX.Element {
+  const toast = useToast();
+  const [rows, setRows] = useState<BankDto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [form, setForm] = useState<{ mode: 'create' | 'edit'; row?: BankDto } | null>(null);
+  const [del, setDel] = useState<BankDto | null>(null);
+
+  async function reload(): Promise<void> {
+    setLoading(true);
+    const res = await window.api.bankList({ search: search || undefined, fromDate: fromDate || undefined, toDate: toDate || undefined });
+    if (res.ok && res.data) setRows(res.data);
+    else if (res.message) toast.alert(res.message);
+    setLoading(false);
+  }
+  useEffect(() => { void reload(); /* eslint-disable-next-line */ }, []);
+
+  async function doDelete(b: BankDto, password?: string): Promise<void> {
+    const res = await window.api.bankDelete([b.id], password ?? '');
+    if (res.ok) toast.success(`Đã xóa ngân hàng ${b.code}`);
+    else toast.alert(res.message ?? 'Xóa ngân hàng thất bại', 'Xóa thất bại');
+    setDel(null);
+    await reload();
+  }
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <div className="text-sm text-slate-500">{rows.length} ngân hàng</div>
+        <div className="flex gap-2">
+          <Button variant="neutral" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('ngan_hang', ['Mã', 'Tên ngân hàng', 'Người sửa gần nhất', 'Cập nhật'], rows.map((r) => [r.code, r.name, r.updatedByName ?? r.createdByName, `${fmtDate(r.updatedAt)} ${fmtTime(r.updatedAt)}`]))}>Xuất Excel</Button>
+          {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm ngân hàng</Button>}
+        </div>
+      </div>
+      <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Tìm mã / tên ngân hàng…" fromDate={fromDate} toDate={toDate} onFromDate={setFromDate} onToDate={setToDate} onApply={reload} onReset={() => { setSearch(''); setFromDate(''); setToDate(''); setTimeout(reload, 0); }} />
+      <div className="overflow-hidden rounded-xl border border-line bg-white shadow-sm">
+        <table className="w-full text-sm">
+          <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+            <tr>
+              <th className="px-4 py-3">Mã</th>
+              <th className="px-4 py-3">Tên ngân hàng</th>
+              <th className="px-4 py-3">Người sửa gần nhất</th>
+              <th className="px-4 py-3">Ngày</th>
+              <th className="px-4 py-3">Giờ</th>
+              {canManage && <th className="px-4 py-3 text-right">Thao tác</th>}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-line">
+            {loading && <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+            {!loading && rows.length === 0 && <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400"><Landmark className="mx-auto mb-2 h-6 w-6" /> Chưa có ngân hàng.</td></tr>}
+            {!loading && rows.map((b) => (
+              <tr key={b.id} className="hover:bg-appbg/60">
+                <td className="px-4 py-3 font-mono text-xs font-semibold text-brand">{b.code}</td>
+                <td className="px-4 py-3 font-medium text-slate-800">{b.name}</td>
+                {trailCells(b)}
+                {canManage && (
+                  <td className="px-4 py-3">
+                    <div className="flex justify-end gap-1">
+                      <IconBtn title="Sửa" variant="edit" onClick={() => setForm({ mode: 'edit', row: b })}><Pencil className="h-4 w-4" /></IconBtn>
+                      <IconBtn title="Xóa" variant="danger" onClick={() => setDel(b)}><Trash2 className="h-4 w-4" /></IconBtn>
+                    </div>
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {form && <BankForm mode={form.mode} row={form.row} onClose={() => setForm(null)} onSaved={() => { setForm(null); void reload(); }} />}
+      {del && <ConfirmDialog title="Xóa ngân hàng" message={`Ngân hàng "${del.name}" (${del.code}) sẽ vào Thùng rác (có thể phục hồi). Nhập lại mật khẩu để xác nhận.`} confirmLabel="Xóa" danger requirePassword onCancel={() => setDel(null)} onConfirm={(pwd) => doDelete(del, pwd)} />}
+    </div>
+  );
+}
+
+function BankForm({ mode, row, onClose, onSaved }: { mode: 'create' | 'edit'; row?: BankDto; onClose: () => void; onSaved: () => void }): JSX.Element {
+  const toast = useToast();
+  const [name, setName] = useState(row?.name ?? '');
+  const [code, setCode] = useState(row?.code ?? '');
+  const [busy, setBusy] = useState(false);
+  async function save(): Promise<void> {
+    if (!name.trim()) return toast.alert('Tên ngân hàng bắt buộc.', 'Thiếu thông tin');
+    if (!code.trim()) return toast.alert('Mã ngân hàng bắt buộc.', 'Thiếu thông tin');
+    setBusy(true);
+    const res = mode === 'edit' && row ? await window.api.bankUpdate(row.id, { name: name.trim(), code: code.trim() }) : await window.api.bankCreate({ name: name.trim(), code: code.trim() });
+    setBusy(false);
+    if (res.ok) { toast.success(mode === 'edit' ? 'Đã cập nhật ngân hàng' : `Đã thêm ngân hàng ${code}`); onSaved(); }
+    else toast.alert(res.message ?? 'Lưu ngân hàng thất bại', 'Không lưu được');
+  }
+  return (
+    <Modal title={mode === 'edit' ? `Sửa ngân hàng ${row?.code}` : 'Thêm ngân hàng mới'} onClose={onClose} width="max-w-md">
+      <div className="grid gap-4">
+        <Field label="Tên ngân hàng" required><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} autoFocus placeholder="Ngân hàng TMCP Ngoại thương" /></Field>
+        <Field label="Mã ngân hàng" required hint="Ví dụ: VCB, TCB (không trùng)"><input className={inputCls} value={code} onChange={(e) => setCode(e.target.value)} placeholder="VCB" /></Field>
+      </div>
+      <div className="mt-6 flex justify-end gap-2">
+        <Button variant="neutral" onClick={onClose}>Hủy</Button>
+        <Button variant="confirm" onClick={save} disabled={busy} icon={busy ? <Loader2 className="h-4 w-4 animate-spin" /> : undefined}>{mode === 'edit' ? 'Lưu thay đổi' : 'Thêm ngân hàng'}</Button>
+      </div>
+    </Modal>
+  );
+}
+
+// ── C3 LOẠI THẺ ─────────────────────────────────────────────────────────────
+function CardTypeTab({ canManage }: { canManage: boolean }): JSX.Element {
+  const toast = useToast();
+  const [rows, setRows] = useState<CardTypeDto[]>([]);
+  const [banks, setBanks] = useState<{ id: number; code: string; name: string }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [bankId, setBankId] = useState('');
+  const [form, setForm] = useState<{ mode: 'create' | 'edit'; row?: CardTypeDto } | null>(null);
+  const [del, setDel] = useState<CardTypeDto | null>(null);
+
+  async function reload(): Promise<void> {
+    setLoading(true);
+    const res = await window.api.cardTypeList({ search: search || undefined, bankId: bankId ? Number(bankId) : undefined });
+    if (res.ok && res.data) setRows(res.data);
+    else if (res.message) toast.alert(res.message);
+    setLoading(false);
+  }
+  useEffect(() => { window.api.bankLite().then((r) => r.ok && r.data && setBanks(r.data)); }, []);
+  useEffect(() => { void reload(); /* eslint-disable-next-line */ }, [bankId]);
+
+  async function doDelete(c: CardTypeDto, password?: string): Promise<void> {
+    const res = await window.api.cardTypeDelete([c.id], password ?? '');
+    if (res.ok) toast.success(`Đã xóa loại thẻ ${c.name}`);
+    else toast.alert(res.message ?? 'Xóa loại thẻ thất bại', 'Xóa thất bại');
+    setDel(null);
+    await reload();
+  }
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <div className="text-sm text-slate-500">{rows.length} loại thẻ</div>
+        <div className="flex gap-2">
+          <Button variant="neutral" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('loai_the', ['Mã', 'Tên loại thẻ', 'Ngân hàng', 'Người sửa gần nhất', 'Cập nhật'], rows.map((r) => [r.code, r.name, r.bankName, r.updatedByName ?? r.createdByName, `${fmtDate(r.updatedAt)} ${fmtTime(r.updatedAt)}`]))}>Xuất Excel</Button>
+          {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm loại thẻ</Button>}
+        </div>
+      </div>
+      <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Tìm mã / tên loại thẻ…" selects={[{ key: 'bank', placeholder: 'Tất cả ngân hàng', value: bankId, options: banks.map((b) => ({ value: String(b.id), label: `${b.code} · ${b.name}` })), onChange: setBankId }]} onApply={reload} onReset={() => { setSearch(''); setBankId(''); setTimeout(reload, 0); }} />
+      <div className="overflow-hidden rounded-xl border border-line bg-white shadow-sm">
+        <table className="w-full text-sm">
+          <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+            <tr>
+              <th className="px-4 py-3">Mã</th>
+              <th className="px-4 py-3">Tên loại thẻ</th>
+              <th className="px-4 py-3">Ngân hàng</th>
+              <th className="px-4 py-3">Người sửa gần nhất</th>
+              <th className="px-4 py-3">Ngày</th>
+              <th className="px-4 py-3">Giờ</th>
+              {canManage && <th className="px-4 py-3 text-right">Thao tác</th>}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-line">
+            {loading && <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+            {!loading && rows.length === 0 && <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400"><CreditCard className="mx-auto mb-2 h-6 w-6" /> Chưa có loại thẻ.</td></tr>}
+            {!loading && rows.map((c) => (
+              <tr key={c.id} className="hover:bg-appbg/60">
+                <td className="px-4 py-3 font-mono text-xs font-semibold text-brand">{c.code}</td>
+                <td className="px-4 py-3 font-medium text-slate-800">{c.name}</td>
+                <td className="px-4 py-3 text-slate-600">{c.bankCode ? `${c.bankCode} · ${c.bankName}` : (c.bankName ?? '—')}</td>
+                {trailCells(c)}
+                {canManage && (
+                  <td className="px-4 py-3">
+                    <div className="flex justify-end gap-1">
+                      <IconBtn title="Sửa" variant="edit" onClick={() => setForm({ mode: 'edit', row: c })}><Pencil className="h-4 w-4" /></IconBtn>
+                      <IconBtn title="Xóa" variant="danger" onClick={() => setDel(c)}><Trash2 className="h-4 w-4" /></IconBtn>
+                    </div>
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {form && <CardTypeForm mode={form.mode} row={form.row} banks={banks} onClose={() => setForm(null)} onSaved={() => { setForm(null); void reload(); }} />}
+      {del && <ConfirmDialog title="Xóa loại thẻ" message={`Loại thẻ "${del.name}" sẽ vào Thùng rác (có thể phục hồi). Nhập lại mật khẩu để xác nhận.`} confirmLabel="Xóa" danger requirePassword onCancel={() => setDel(null)} onConfirm={(pwd) => doDelete(del, pwd)} />}
+    </div>
+  );
+}
+
+function CardTypeForm({ mode, row, banks, onClose, onSaved }: { mode: 'create' | 'edit'; row?: CardTypeDto; banks: { id: number; code: string; name: string }[]; onClose: () => void; onSaved: () => void }): JSX.Element {
+  const toast = useToast();
+  const [bankId, setBankId] = useState(row?.bankId ? String(row.bankId) : '');
+  const [name, setName] = useState(row?.name ?? '');
+  const [code, setCode] = useState(row?.code ?? '');
+  const [busy, setBusy] = useState(false);
+  async function save(): Promise<void> {
+    if (!bankId) return toast.alert('Phải chọn ngân hàng.', 'Thiếu thông tin');
+    if (!name.trim()) return toast.alert('Tên loại thẻ bắt buộc.', 'Thiếu thông tin');
+    if (!code.trim()) return toast.alert('Mã loại thẻ bắt buộc.', 'Thiếu thông tin');
+    setBusy(true);
+    const payload = { bankId: Number(bankId), name: name.trim(), code: code.trim() };
+    const res = mode === 'edit' && row ? await window.api.cardTypeUpdate(row.id, payload) : await window.api.cardTypeCreate(payload);
+    setBusy(false);
+    if (res.ok) { toast.success(mode === 'edit' ? 'Đã cập nhật loại thẻ' : `Đã thêm loại thẻ ${code}`); onSaved(); }
+    else toast.alert(res.message ?? 'Lưu loại thẻ thất bại', 'Không lưu được');
+  }
+  return (
+    <Modal title={mode === 'edit' ? `Sửa loại thẻ ${row?.code}` : 'Thêm loại thẻ mới'} onClose={onClose} width="max-w-md">
+      <div className="grid gap-4">
+        <Field label="Ngân hàng" required><select className={inputCls} value={bankId} onChange={(e) => setBankId(e.target.value)} autoFocus><option value="">— Chọn ngân hàng —</option>{banks.map((b) => <option key={b.id} value={b.id}>{b.code} · {b.name}</option>)}</select></Field>
+        <Field label="Tên loại thẻ" required hint="Ví dụ: Visa nội địa, Napas"><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} /></Field>
+        <Field label="Mã loại thẻ" required><input className={inputCls} value={code} onChange={(e) => setCode(e.target.value)} placeholder="VISA" /></Field>
+      </div>
+      <div className="mt-6 flex justify-end gap-2">
+        <Button variant="neutral" onClick={onClose}>Hủy</Button>
+        <Button variant="confirm" onClick={save} disabled={busy} icon={busy ? <Loader2 className="h-4 w-4 animate-spin" /> : undefined}>{mode === 'edit' ? 'Lưu thay đổi' : 'Thêm loại thẻ'}</Button>
+      </div>
+    </Modal>
+  );
+}
+
+// ── C4 ĐỐI TÁC + ma trận liên kết ngân hàng ─────────────────────────────────
+function PartnerTab({ canManage }: { canManage: boolean }): JSX.Element {
+  const toast = useToast();
+  const [rows, setRows] = useState<PartnerDto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [form, setForm] = useState<{ mode: 'create' | 'edit'; row?: PartnerDto } | null>(null);
+  const [del, setDel] = useState<PartnerDto | null>(null);
+  const [matrix, setMatrix] = useState<PartnerBankMatrix | null>(null);
+  const [linkOf, setLinkOf] = useState<PartnerDto | null>(null);
+
+  async function reload(): Promise<void> {
+    setLoading(true);
+    const res = await window.api.partnerList({ search: search || undefined });
+    if (res.ok && res.data) setRows(res.data);
+    else if (res.message) toast.alert(res.message);
+    const m = await window.api.partnerBankMatrix();
+    if (m.ok && m.data) setMatrix(m.data);
+    setLoading(false);
+  }
+  useEffect(() => { void reload(); /* eslint-disable-next-line */ }, []);
+
+  async function doDelete(p: PartnerDto, password?: string): Promise<void> {
+    const res = await window.api.partnerDelete([p.id], password ?? '');
+    if (res.ok) toast.success(`Đã xóa đối tác ${p.code}`);
+    else toast.alert(res.message ?? 'Xóa đối tác thất bại', 'Xóa thất bại');
+    setDel(null);
+    await reload();
+  }
+
+  const bankName = (id: number): string => matrix?.banks.find((b) => b.id === id)?.code ?? String(id);
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <div className="text-sm text-slate-500">{rows.length} đối tác</div>
+        <div className="flex gap-2">
+          <Button variant="neutral" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('doi_tac', ['Mã', 'Tên đối tác', 'Người liên hệ', 'SĐT', 'Ngân hàng liên kết', 'Cập nhật'], rows.map((r) => [r.code, r.name, r.contactPerson, r.phone, r.bankIds.map(bankName).join(' | '), `${fmtDate(r.updatedAt)} ${fmtTime(r.updatedAt)}`]))}>Xuất Excel</Button>
+          {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm đối tác</Button>}
+        </div>
+      </div>
+      <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Tìm mã / tên / SĐT đối tác…" onApply={reload} onReset={() => { setSearch(''); setTimeout(reload, 0); }} />
+      <div className="overflow-hidden rounded-xl border border-line bg-white shadow-sm">
+        <table className="w-full text-sm">
+          <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+            <tr>
+              <th className="px-4 py-3">Mã</th>
+              <th className="px-4 py-3">Tên đối tác</th>
+              <th className="px-4 py-3">Người liên hệ</th>
+              <th className="px-4 py-3">SĐT</th>
+              <th className="px-4 py-3">Ngân hàng liên kết</th>
+              {canManage && <th className="px-4 py-3 text-right">Thao tác</th>}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-line">
+            {loading && <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+            {!loading && rows.length === 0 && <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400"><Building2 className="mx-auto mb-2 h-6 w-6" /> Chưa có đối tác.</td></tr>}
+            {!loading && rows.map((p) => (
+              <tr key={p.id} className="hover:bg-appbg/60">
+                <td className="px-4 py-3 font-mono text-xs font-semibold text-brand">{p.code}</td>
+                <td className="px-4 py-3 font-medium text-slate-800">{p.name}</td>
+                <td className="px-4 py-3 text-slate-600">{p.contactPerson ?? '—'}</td>
+                <td className="px-4 py-3 text-slate-600">{p.phone ?? '—'}</td>
+                <td className="px-4 py-3">
+                  <div className="flex flex-wrap gap-1">
+                    {p.bankIds.length === 0 ? <span className="text-slate-400">—</span> : p.bankIds.map((id) => <span key={id} className="rounded bg-brand-tint px-1.5 py-0.5 text-xs font-medium text-brand">{bankName(id)}</span>)}
+                  </div>
+                </td>
+                {canManage && (
+                  <td className="px-4 py-3">
+                    <div className="flex justify-end gap-1">
+                      <IconBtn title="Liên kết ngân hàng" onClick={() => setLinkOf(p)}><Link2 className="h-4 w-4" /></IconBtn>
+                      <IconBtn title="Sửa" variant="edit" onClick={() => setForm({ mode: 'edit', row: p })}><Pencil className="h-4 w-4" /></IconBtn>
+                      <IconBtn title="Xóa" variant="danger" onClick={() => setDel(p)}><Trash2 className="h-4 w-4" /></IconBtn>
+                    </div>
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {form && <PartnerForm mode={form.mode} row={form.row} onClose={() => setForm(null)} onSaved={() => { setForm(null); void reload(); }} />}
+      {del && <ConfirmDialog title="Xóa đối tác" message={`Đối tác "${del.name}" (${del.code}) sẽ vào Thùng rác (có thể phục hồi). Nhập lại mật khẩu để xác nhận.`} confirmLabel="Xóa" danger requirePassword onCancel={() => setDel(null)} onConfirm={(pwd) => doDelete(del, pwd)} />}
+      {linkOf && matrix && <LinkBanksModal partner={linkOf} banks={matrix.banks} onClose={() => setLinkOf(null)} onSaved={() => { setLinkOf(null); void reload(); }} />}
+    </div>
+  );
+}
+
+function PartnerForm({ mode, row, onClose, onSaved }: { mode: 'create' | 'edit'; row?: PartnerDto; onClose: () => void; onSaved: () => void }): JSX.Element {
+  const toast = useToast();
+  const [name, setName] = useState(row?.name ?? '');
+  const [code, setCode] = useState(row?.code ?? '');
+  const [address, setAddress] = useState(row?.address ?? '');
+  const [phone, setPhone] = useState(row?.phone ?? '');
+  const [contactPerson, setContactPerson] = useState(row?.contactPerson ?? '');
+  const [busy, setBusy] = useState(false);
+  async function save(): Promise<void> {
+    if (!name.trim()) return toast.alert('Tên đối tác bắt buộc.', 'Thiếu thông tin');
+    if (!code.trim()) return toast.alert('Mã đối tác bắt buộc.', 'Thiếu thông tin');
+    setBusy(true);
+    const payload = { name: name.trim(), code: code.trim(), address: address || null, phone: phone || null, contactPerson: contactPerson || null };
+    const res = mode === 'edit' && row ? await window.api.partnerUpdate(row.id, payload) : await window.api.partnerCreate(payload);
+    setBusy(false);
+    if (res.ok) { toast.success(mode === 'edit' ? 'Đã cập nhật đối tác' : `Đã thêm đối tác ${code}`); onSaved(); }
+    else toast.alert(res.message ?? 'Lưu đối tác thất bại', 'Không lưu được');
+  }
+  return (
+    <Modal title={mode === 'edit' ? `Sửa đối tác ${row?.code}` : 'Thêm đối tác mới'} onClose={onClose} width="max-w-xl">
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="Tên đối tác" required><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} autoFocus /></Field>
+        <Field label="Mã đối tác" required hint="Không trùng"><input className={inputCls} value={code} onChange={(e) => setCode(e.target.value)} /></Field>
+        <Field label="Người liên hệ"><input className={inputCls} value={contactPerson} onChange={(e) => setContactPerson(e.target.value)} /></Field>
+        <Field label="Số điện thoại"><input className={inputCls} value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
+        <Field label="Địa chỉ"><input className={inputCls} value={address} onChange={(e) => setAddress(e.target.value)} /></Field>
+      </div>
+      <div className="mt-6 flex justify-end gap-2">
+        <Button variant="neutral" onClick={onClose}>Hủy</Button>
+        <Button variant="confirm" onClick={save} disabled={busy} icon={busy ? <Loader2 className="h-4 w-4 animate-spin" /> : undefined}>{mode === 'edit' ? 'Lưu thay đổi' : 'Thêm đối tác'}</Button>
+      </div>
+    </Modal>
+  );
+}
+
+function LinkBanksModal({ partner, banks, onClose, onSaved }: { partner: PartnerDto; banks: { id: number; code: string; name: string }[]; onClose: () => void; onSaved: () => void }): JSX.Element {
+  const toast = useToast();
+  const [selected, setSelected] = useState<Set<number>>(new Set(partner.bankIds));
+  const [busy, setBusy] = useState(false);
+  function toggle(id: number): void { const s = new Set(selected); s.has(id) ? s.delete(id) : s.add(id); setSelected(s); }
+  async function save(): Promise<void> {
+    setBusy(true);
+    const res = await window.api.partnerBankSet(partner.id, [...selected]);
+    setBusy(false);
+    if (res.ok) { toast.success(`Đã cập nhật liên kết ngân hàng cho ${partner.code}`); onSaved(); }
+    else toast.alert(res.message ?? 'Lưu liên kết thất bại', 'Không lưu được');
+  }
+  return (
+    <Modal title={`Liên kết ngân hàng — ${partner.name}`} onClose={onClose} width="max-w-lg">
+      <p className="mb-3 text-sm text-slate-500">Tích chọn các ngân hàng mà đối tác này liên kết.</p>
+      <div className="grid max-h-72 grid-cols-2 gap-2 overflow-auto">
+        {banks.length === 0 && <div className="col-span-2 text-sm text-slate-400">Chưa có ngân hàng nào — thêm ở tab Ngân hàng trước.</div>}
+        {banks.map((b) => (
+          <label key={b.id} className={'flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition ' + (selected.has(b.id) ? 'border-brand bg-brand-tint text-brand' : 'border-line hover:bg-appbg')}>
+            <input type="checkbox" checked={selected.has(b.id)} onChange={() => toggle(b.id)} className="accent-brand" />
+            <span className="font-mono text-xs font-semibold">{b.code}</span>
+            <span className="truncate text-slate-600">{b.name}</span>
+          </label>
+        ))}
+      </div>
+      <div className="mt-6 flex justify-end gap-2">
+        <Button variant="neutral" onClick={onClose}>Hủy</Button>
+        <Button variant="confirm" onClick={save} disabled={busy} icon={busy ? <Loader2 className="h-4 w-4 animate-spin" /> : undefined}>Lưu liên kết</Button>
+      </div>
+    </Modal>
+  );
+}

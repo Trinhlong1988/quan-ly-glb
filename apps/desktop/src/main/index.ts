@@ -83,6 +83,13 @@ app.whenReady().then(async () => {
     app.exit(code);
     return;
   }
+  // G-CFG.1 Cấu hình ngân hàng self-test: 50 đúng + 50 sai (Ngân hàng/Loại thẻ/Đối tác + liên kết).
+  if (process.env['GLB_SELFTEST'] === '4') {
+    const { runBankConfigSelfTest } = await import('./selftest-gcfg.js');
+    const code = await runBankConfigSelfTest();
+    app.exit(code);
+    return;
+  }
   // E4 Thùng rác self-test: 50 đúng + 50 sai (soft-delete → trash → restore + link warning).
   if (process.env['GLB_SELFTEST'] === '6') {
     const { runTrashSelfTest } = await import('./selftest-trash.js');

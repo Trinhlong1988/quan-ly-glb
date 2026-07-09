@@ -14,6 +14,13 @@ export interface MutationResult {
   id?: number;
 }
 
+// BUG G-CFG-B01: mã ngân hàng/đối tác là @unique TOÀN CỤC (không lọc soft-delete). Nếu 1 bản ghi đã
+// xóa mềm (nằm Thùng rác) đang giữ mã đó, pre-check lọc deletedAt:null sẽ KHÔNG thấy → create() ném
+// P2002 (unhandled → treo IPC). Lưới an toàn: bắt P2002 map về DUPLICATE thay vì để văng.
+function isUniqueViolation(e: unknown): boolean {
+  return typeof e === 'object' && e !== null && (e as { code?: string }).code === 'P2002';
+}
+
 /** Yếu tố truy vết chung: ai tạo/sửa gần nhất + thời điểm (hiển thị trong danh sách). */
 export interface AuditTrail {
   createdBy: number | null;
@@ -95,10 +102,20 @@ export async function createBank(input: CreateBankInput): Promise<MutationResult
   if (!name) return { ok: false, error: 'VALIDATION', message: 'Tên ngân hàng bắt buộc.' };
   if (!code) return { ok: false, error: 'VALIDATION', message: 'Mã ngân hàng bắt buộc.' };
 
-  const dup = await db.bank.findFirst({ where: { code, deletedAt: null } });
-  if (dup) return { ok: false, error: 'DUPLICATE', message: `Mã ngân hàng "${code}" đã tồn tại.` };
+  const dup = await db.bank.findFirst({ where: { code } });
+  if (dup) {
+    return dup.deletedAt
+      ? { ok: false, error: 'DUPLICATE_TRASH', message: `Mã ngân hàng "${code}" đang nằm trong Thùng rác. Hãy phục hồi hoặc chọn mã khác.` }
+      : { ok: false, error: 'DUPLICATE', message: `Mã ngân hàng "${code}" đã tồn tại.` };
+  }
 
-  const created = await db.bank.create({ data: { name, code, createdBy: user.id } });
+  let created;
+  try {
+    created = await db.bank.create({ data: { name, code, createdBy: user.id } });
+  } catch (e) {
+    if (isUniqueViolation(e)) return { ok: false, error: 'DUPLICATE', message: `Mã ngân hàng "${code}" đã tồn tại.` };
+    throw e;
+  }
   await writeAudit(db, {
     actorUserId: user.id,
     action: 'BANK_CREATED',
@@ -122,12 +139,22 @@ export async function updateBank(id: number, input: UpdateBankInput): Promise<Mu
   if (!name) return { ok: false, error: 'VALIDATION', message: 'Tên ngân hàng không được để trống.' };
   if (!code) return { ok: false, error: 'VALIDATION', message: 'Mã ngân hàng không được để trống.' };
   if (code !== row.code) {
-    const dup = await db.bank.findFirst({ where: { code, deletedAt: null, NOT: { id } } });
-    if (dup) return { ok: false, error: 'DUPLICATE', message: `Mã ngân hàng "${code}" đã tồn tại.` };
+    const dup = await db.bank.findFirst({ where: { code, NOT: { id } } });
+    if (dup) {
+      return dup.deletedAt
+        ? { ok: false, error: 'DUPLICATE_TRASH', message: `Mã ngân hàng "${code}" đang nằm trong Thùng rác. Hãy phục hồi hoặc chọn mã khác.` }
+        : { ok: false, error: 'DUPLICATE', message: `Mã ngân hàng "${code}" đã tồn tại.` };
+    }
   }
 
   const before = auditSnapshot({ name: row.name, code: row.code });
-  const updated = await db.bank.update({ where: { id }, data: { name, code, updatedBy: user.id } });
+  let updated;
+  try {
+    updated = await db.bank.update({ where: { id }, data: { name, code, updatedBy: user.id } });
+  } catch (e) {
+    if (isUniqueViolation(e)) return { ok: false, error: 'DUPLICATE', message: `Mã ngân hàng "${code}" đã tồn tại.` };
+    throw e;
+  }
   await writeAudit(db, {
     actorUserId: user.id,
     action: 'BANK_UPDATED',
@@ -396,19 +423,29 @@ export async function createPartner(input: CreatePartnerInput): Promise<Mutation
   if (!name) return { ok: false, error: 'VALIDATION', message: 'Tên đối tác bắt buộc.' };
   if (!code) return { ok: false, error: 'VALIDATION', message: 'Mã đối tác bắt buộc.' };
 
-  const dup = await db.partner.findFirst({ where: { code, deletedAt: null } });
-  if (dup) return { ok: false, error: 'DUPLICATE', message: `Mã đối tác "${code}" đã tồn tại.` };
+  const dup = await db.partner.findFirst({ where: { code } });
+  if (dup) {
+    return dup.deletedAt
+      ? { ok: false, error: 'DUPLICATE_TRASH', message: `Mã đối tác "${code}" đang nằm trong Thùng rác. Hãy phục hồi hoặc chọn mã khác.` }
+      : { ok: false, error: 'DUPLICATE', message: `Mã đối tác "${code}" đã tồn tại.` };
+  }
 
-  const created = await db.partner.create({
-    data: {
-      name,
-      code,
-      address: input.address?.trim() || null,
-      phone: input.phone?.trim() || null,
-      contactPerson: input.contactPerson?.trim() || null,
-      createdBy: user.id
-    }
-  });
+  let created;
+  try {
+    created = await db.partner.create({
+      data: {
+        name,
+        code,
+        address: input.address?.trim() || null,
+        phone: input.phone?.trim() || null,
+        contactPerson: input.contactPerson?.trim() || null,
+        createdBy: user.id
+      }
+    });
+  } catch (e) {
+    if (isUniqueViolation(e)) return { ok: false, error: 'DUPLICATE', message: `Mã đối tác "${code}" đã tồn tại.` };
+    throw e;
+  }
   await writeAudit(db, {
     actorUserId: user.id,
     action: 'PARTNER_CREATED',
@@ -432,22 +469,32 @@ export async function updatePartner(id: number, input: UpdatePartnerInput): Prom
   if (!name) return { ok: false, error: 'VALIDATION', message: 'Tên đối tác không được để trống.' };
   if (!code) return { ok: false, error: 'VALIDATION', message: 'Mã đối tác không được để trống.' };
   if (code !== row.code) {
-    const dup = await db.partner.findFirst({ where: { code, deletedAt: null, NOT: { id } } });
-    if (dup) return { ok: false, error: 'DUPLICATE', message: `Mã đối tác "${code}" đã tồn tại.` };
+    const dup = await db.partner.findFirst({ where: { code, NOT: { id } } });
+    if (dup) {
+      return dup.deletedAt
+        ? { ok: false, error: 'DUPLICATE_TRASH', message: `Mã đối tác "${code}" đang nằm trong Thùng rác. Hãy phục hồi hoặc chọn mã khác.` }
+        : { ok: false, error: 'DUPLICATE', message: `Mã đối tác "${code}" đã tồn tại.` };
+    }
   }
 
   const before = auditSnapshot({ name: row.name, code: row.code, address: row.address, phone: row.phone, contactPerson: row.contactPerson });
-  const updated = await db.partner.update({
-    where: { id },
-    data: {
-      name,
-      code,
-      address: input.address !== undefined ? input.address?.trim() || null : row.address,
-      phone: input.phone !== undefined ? input.phone?.trim() || null : row.phone,
-      contactPerson: input.contactPerson !== undefined ? input.contactPerson?.trim() || null : row.contactPerson,
-      updatedBy: user.id
-    }
-  });
+  let updated;
+  try {
+    updated = await db.partner.update({
+      where: { id },
+      data: {
+        name,
+        code,
+        address: input.address !== undefined ? input.address?.trim() || null : row.address,
+        phone: input.phone !== undefined ? input.phone?.trim() || null : row.phone,
+        contactPerson: input.contactPerson !== undefined ? input.contactPerson?.trim() || null : row.contactPerson,
+        updatedBy: user.id
+      }
+    });
+  } catch (e) {
+    if (isUniqueViolation(e)) return { ok: false, error: 'DUPLICATE', message: `Mã đối tác "${code}" đã tồn tại.` };
+    throw e;
+  }
   await writeAudit(db, {
     actorUserId: user.id,
     action: 'PARTNER_UPDATED',

@@ -441,6 +441,25 @@ export interface GlbApi {
   notifyUndeliveredSummary(): Promise<{ ok: boolean; data?: UndeliveredSummary; error?: string; message?: string }>;
   notifyPushUndelivered(): Promise<{ ok: boolean; stub: true; message?: string; error?: string }>;
 
+  // ── Cấu hình ngân hàng (G-CFG.1 §C1–C4) ──
+  bankList(filter: BankFilter): Promise<ListResult<BankDto>>;
+  bankLite(): Promise<ListResult<BankLite>>;
+  bankCreate(input: CreateBankInput): Promise<MutationOutcome>;
+  bankUpdate(id: number, input: UpdateBankInput): Promise<MutationOutcome>;
+  bankDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
+
+  cardTypeList(filter: CardTypeFilter): Promise<ListResult<CardTypeDto>>;
+  cardTypeCreate(input: CreateCardTypeInput): Promise<MutationOutcome>;
+  cardTypeUpdate(id: number, input: UpdateCardTypeInput): Promise<MutationOutcome>;
+  cardTypeDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
+
+  partnerList(filter: PartnerFilter): Promise<ListResult<PartnerDto>>;
+  partnerCreate(input: CreatePartnerInput): Promise<MutationOutcome>;
+  partnerUpdate(id: number, input: UpdatePartnerInput): Promise<MutationOutcome>;
+  partnerDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
+  partnerBankMatrix(): Promise<{ ok: boolean; data?: PartnerBankMatrix; error?: string; message?: string }>;
+  partnerBankSet(partnerId: number, bankIds: number[]): Promise<LinkOutcome>;
+
   // Thùng rác (E4)
   trashList(): Promise<{ ok: boolean; data?: TrashRow[]; error?: string; message?: string }>;
   trashRestore(entityType: string, id: number): Promise<MutationOutcome>;

@@ -11,7 +11,11 @@ const ACTIONS = [
   'USER_CREATED', 'USER_UPDATED', 'USER_LOCKED', 'USER_UNLOCKED', 'USER_DELETED',
   'ROLE_CREATED', 'ROLE_UPDATED', 'ROLE_LOCKED', 'ROLE_UNLOCKED', 'ROLE_DELETED',
   'PASSWORD_CHANGED', 'BACKUP_CREATED', 'RESTORE_EXECUTED', 'SETTING_UPDATED',
-  'CUSTOMER_CREATED', 'CUSTOMER_UPDATED', 'CUSTOMER_DELETED'
+  'CUSTOMER_CREATED', 'CUSTOMER_UPDATED', 'CUSTOMER_DELETED',
+  'BANK_CREATED', 'BANK_UPDATED', 'BANK_DELETED',
+  'CARD_TYPE_CREATED', 'CARD_TYPE_UPDATED', 'CARD_TYPE_DELETED',
+  'PARTNER_CREATED', 'PARTNER_UPDATED', 'PARTNER_DELETED',
+  'PARTNER_BANK_LINKED', 'PARTNER_BANK_UNLINKED'
 ];
 
 /** Nhãn tiếng Việt cho mã hành động (nhật ký 100% tiếng Việt). */
@@ -20,7 +24,11 @@ const ACTION_LABEL: Record<string, string> = {
   USER_CREATED: 'Tạo nhân sự', USER_UPDATED: 'Sửa nhân sự', USER_LOCKED: 'Khóa nhân sự', USER_UNLOCKED: 'Mở khóa nhân sự', USER_DELETED: 'Xóa nhân sự',
   ROLE_CREATED: 'Tạo vai trò', ROLE_UPDATED: 'Sửa vai trò', ROLE_LOCKED: 'Khóa vai trò', ROLE_UNLOCKED: 'Mở khóa vai trò', ROLE_DELETED: 'Xóa vai trò',
   PASSWORD_CHANGED: 'Đổi mật khẩu', BACKUP_CREATED: 'Tạo bản sao lưu', RESTORE_EXECUTED: 'Phục hồi dữ liệu', SETTING_UPDATED: 'Cập nhật cấu hình',
-  CUSTOMER_CREATED: 'Tạo khách hàng', CUSTOMER_UPDATED: 'Sửa khách hàng', CUSTOMER_DELETED: 'Xóa khách hàng'
+  CUSTOMER_CREATED: 'Tạo khách hàng', CUSTOMER_UPDATED: 'Sửa khách hàng', CUSTOMER_DELETED: 'Xóa khách hàng',
+  BANK_CREATED: 'Tạo ngân hàng', BANK_UPDATED: 'Sửa ngân hàng', BANK_DELETED: 'Xóa ngân hàng',
+  CARD_TYPE_CREATED: 'Tạo loại thẻ', CARD_TYPE_UPDATED: 'Sửa loại thẻ', CARD_TYPE_DELETED: 'Xóa loại thẻ',
+  PARTNER_CREATED: 'Tạo đối tác', PARTNER_UPDATED: 'Sửa đối tác', PARTNER_DELETED: 'Xóa đối tác',
+  PARTNER_BANK_LINKED: 'Liên kết đối tác ↔ ngân hàng', PARTNER_BANK_UNLINKED: 'Hủy liên kết đối tác ↔ ngân hàng'
 };
 const actionLabel = (a: string): string => ACTION_LABEL[a] ?? a;
 
