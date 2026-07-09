@@ -118,7 +118,7 @@ export function Login({ onLoggedIn }: { onLoggedIn: (u: AuthUser, mustChange: bo
           <button
             type="submit"
             disabled={busy}
-            className="mt-1 flex items-center justify-center gap-2 rounded-md bg-brand px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-hover disabled:opacity-60"
+            className="mt-1 flex items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-hover disabled:opacity-60"
           >
             {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <LogIn className="h-5 w-5" />}
             Đăng nhập

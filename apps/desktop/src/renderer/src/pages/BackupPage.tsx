@@ -56,7 +56,7 @@ export function BackupPage({ user }: { user: AuthUser }): JSX.Element {
           <button
             onClick={createBackup}
             disabled={creating}
-            className="flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-60"
+            className="flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-60"
           >
             {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <HardDriveDownload className="h-4 w-4" />}
             Tạo bản sao lưu ngay

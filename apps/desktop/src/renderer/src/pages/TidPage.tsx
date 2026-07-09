@@ -264,7 +264,7 @@ function TidForm({ onClose, onSaved }: { onClose: () => void; onSaved: () => voi
         <button onClick={onClose} className="rounded-md border border-line px-4 py-2 text-sm font-medium text-slate-600 hover:bg-appbg">
           Hủy
         </button>
-        <button onClick={save} disabled={busy} className="flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-60">
+        <button onClick={save} disabled={busy} className="flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-60">
           {busy && <Loader2 className="h-4 w-4 animate-spin" />}
           Thêm TID
         </button>
@@ -366,7 +366,7 @@ function TidActionModal({ tid, kind, onClose, onDone }: { tid: TidDto; kind: 'as
         <button onClick={onClose} className="rounded-md border border-line px-4 py-2 text-sm font-medium text-slate-600 hover:bg-appbg">
           Hủy
         </button>
-        <button onClick={run} disabled={busy} className="flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-60">
+        <button onClick={run} disabled={busy} className="flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-60">
           {busy && <Loader2 className="h-4 w-4 animate-spin" />}
           {kind === 'assign' ? 'Gán TID' : kind === 'replace' ? 'Đổi TID' : kind === 'recall' ? 'Thu hồi' : 'Đã giao'}
           {kind !== 'assign' && kind !== 'replace' && <Send className="h-3.5 w-3.5" />}

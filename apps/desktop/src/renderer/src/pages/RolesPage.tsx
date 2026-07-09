@@ -95,7 +95,7 @@ export function RolesPage({ user }: { user: AuthUser }): JSX.Element {
                       <ShieldCheck className="h-4 w-4 text-brand" />
                       {r.name}
                       {r.isSystem && (
-                        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
+                        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-500">
                           hệ thống
                         </span>
                       )}
@@ -334,7 +334,7 @@ function RoleForm({
           <button
             onClick={() => (editing ? setPendingConfirm(true) : save())}
             disabled={busy}
-            className="flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-60"
+            className="flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-60"
           >
             {busy && <Loader2 className="h-4 w-4 animate-spin" />}
             {editing ? 'Lưu thay đổi' : 'Tạo vai trò'}

@@ -22,6 +22,8 @@
 
 **Quy tắc logic đậm/hoa:** CHỈ header bảng + nhãn section viết HOA. Tên riêng/mã in đậm nhẹ (`font-medium`/`font-semibold`). Nội dung thường không đậm không hoa.
 
+**Ngoại lệ DUY NHẤT được phép `text-[..px]`:** wordmark "Quản Lý GLB" ở sidebar = `text-[15px] font-semibold` (LEAD duyệt). Ngoài ra CẤM `text-[..px]`.
+
 ## 3. Màu (KiotViet palette — biến trong styles.css)
 brand `#1657D0` · brand-hover `#1247AE` · sidebar `#10233F` · appbg `#F4F6FA` · line `#E5E9F0` · success `#16A34A` · danger `#DC2626` · warning `#F59E0B`. Chữ: chính `slate-800`, phụ `slate-500/600`, mờ `slate-400`. **Cấm hardcode hex ngoài palette.**
 

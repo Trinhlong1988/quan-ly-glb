@@ -248,7 +248,7 @@ function PosForm({ onClose, onSaved }: { onClose: () => void; onSaved: () => voi
         <button onClick={onClose} className="rounded-md border border-line px-4 py-2 text-sm font-medium text-slate-600 hover:bg-appbg">
           Hủy
         </button>
-        <button onClick={save} disabled={busy} className="flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-60">
+        <button onClick={save} disabled={busy} className="flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-60">
           {busy && <Loader2 className="h-4 w-4 animate-spin" />}
           Thêm máy
         </button>
@@ -408,7 +408,7 @@ function TransitionModal({ device, event, onClose, onDone }: { device: PosDto; e
         <button
           onClick={() => (event === 'retire' ? setConfirmRetire(true) : run())}
           disabled={busy}
-          className="flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-60"
+          className="flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-60"
         >
           {busy && <Loader2 className="h-4 w-4 animate-spin" />}
           {EVENT_LABELS[event]}
