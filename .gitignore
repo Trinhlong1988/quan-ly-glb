@@ -39,3 +39,6 @@ Thumbs.db
 # test/coverage
 coverage/
 .vitest/
+
+# ts build info
+*.tsbuildinfo

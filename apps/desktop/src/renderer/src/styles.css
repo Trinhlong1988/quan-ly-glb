@@ -1,0 +1,37 @@
+@import 'tailwindcss';
+
+/* Be Vietnam Pro — offline via @fontsource (no Google CDN; app runs offline). */
+@import '@fontsource/be-vietnam-pro/400.css';
+@import '@fontsource/be-vietnam-pro/500.css';
+@import '@fontsource/be-vietnam-pro/600.css';
+@import '@fontsource/be-vietnam-pro/700.css';
+
+/* KiotViet-inspired palette (IMS_SPEC brief). Exposed as Tailwind theme tokens. */
+@theme {
+  --font-sans: 'Be Vietnam Pro', ui-sans-serif, system-ui, sans-serif;
+
+  --color-brand: #1657d0;
+  --color-brand-hover: #1247ae;
+  --color-brand-tint: #eaf1fc;
+  --color-sidebar: #10233f;
+  --color-sidebar-text: #c7d2e1;
+  --color-appbg: #f4f6fa;
+  --color-line: #e5e9f0;
+  --color-success: #16a34a;
+  --color-danger: #dc2626;
+  --color-warning: #f59e0b;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--color-appbg);
+  color: #0f172a;
+  -webkit-font-smoothing: antialiased;
+}
