@@ -118,7 +118,7 @@ function SupplierTab({ canManage }: { canManage: boolean }): JSX.Element {
       </div>
       <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Tìm mã / tên / số điện thoại nhà cung cấp…" onApply={reload} onReset={() => { setSearch(''); setTimeout(reload, 0); }} />
       {canManage && <SelectionBar count={sel.count} entityLabel="nhà cung cấp" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
-      <div className="overflow-hidden rounded-xl border border-line bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>
@@ -247,7 +247,7 @@ function ModelTab({ canManage }: { canManage: boolean }): JSX.Element {
       </div>
       <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Tìm mã / tên máy…" onApply={reload} onReset={() => { setSearch(''); setTimeout(reload, 0); }} />
       {canManage && <SelectionBar count={sel.count} entityLabel="chủng loại" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
-      <div className="overflow-hidden rounded-xl border border-line bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>
@@ -360,7 +360,7 @@ function StatusTab({ canManage }: { canManage: boolean }): JSX.Element {
         {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm trạng thái</Button>}
       </div>
       {canManage && <SelectionBar count={sel.count} entityLabel="trạng thái" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
-      <div className="overflow-hidden rounded-xl border border-line bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>

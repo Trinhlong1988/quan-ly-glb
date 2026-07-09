@@ -114,7 +114,7 @@ function BankTab({ canManage }: { canManage: boolean }): JSX.Element {
       </div>
       <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Tìm mã / tên ngân hàng…" fromDate={fromDate} toDate={toDate} onFromDate={setFromDate} onToDate={setToDate} onApply={reload} onReset={() => { setSearch(''); setFromDate(''); setToDate(''); setTimeout(reload, 0); }} />
       {canManage && <SelectionBar count={sel.count} entityLabel="ngân hàng" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
-      <div className="overflow-hidden rounded-xl border border-line bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>
@@ -235,7 +235,7 @@ function CardTypeTab({ canManage }: { canManage: boolean }): JSX.Element {
       </div>
       <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Tìm mã / tên loại thẻ…" selects={[{ key: 'bank', placeholder: 'Tất cả ngân hàng', value: bankId, options: banks.map((b) => ({ value: String(b.id), label: `${b.code} · ${b.name}` })), onChange: setBankId }]} onApply={reload} onReset={() => { setSearch(''); setBankId(''); setTimeout(reload, 0); }} />
       {canManage && <SelectionBar count={sel.count} entityLabel="loại thẻ" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
-      <div className="overflow-hidden rounded-xl border border-line bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>
@@ -365,7 +365,7 @@ function PartnerTab({ canManage }: { canManage: boolean }): JSX.Element {
       </div>
       <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Tìm mã / tên / Số điện thoại đối tác…" onApply={reload} onReset={() => { setSearch(''); setTimeout(reload, 0); }} />
       {canManage && <SelectionBar count={sel.count} entityLabel="đối tác" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
-      <div className="overflow-hidden rounded-xl border border-line bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>
