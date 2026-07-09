@@ -65,4 +65,7 @@ export type AuditAction =
   | 'PASSWORD_CHANGED'
   | 'BACKUP_CREATED'
   | 'RESTORE_EXECUTED'
-  | 'SETTING_UPDATED';
+  | 'SETTING_UPDATED'
+  // Extra (superset of §16 minimum): a mutation refused because the actor lacked the
+  // required permission MUST still be logged (R_AUDIT_003).
+  | 'PERMISSION_DENIED';

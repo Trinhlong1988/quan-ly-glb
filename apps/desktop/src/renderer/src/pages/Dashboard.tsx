@@ -10,30 +10,35 @@ import {
   ChevronDown
 } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
-import { hasPermission } from '@glb/shared';
+import { hasPermission, hasAnyPermission } from '@glb/shared';
+import { RolesPage } from './RolesPage.js';
+import { StaffPage } from './StaffPage.js';
+import { AuditPage } from './AuditPage.js';
+import { BackupPage } from './BackupPage.js';
+import { SettingsPage } from './SettingsPage.js';
 
 interface MenuItem {
   key: string;
   label: string;
   icon: JSX.Element;
-  /** Permission required to see the item; undefined = always visible. */
-  perm?: string;
+  /** Permission(s) required to see the item; undefined = always visible. Any-of semantics. */
+  perms?: string[];
 }
 
 const MENU: MenuItem[] = [
-  { key: 'dashboard', label: 'Trang chủ', icon: <LayoutDashboard className="h-[18px] w-[18px]" />, perm: 'DASHBOARD_VIEW' },
-  { key: 'staff', label: 'Quản lý Nhân sự', icon: <Users className="h-[18px] w-[18px]" />, perm: 'USER_READ' },
-  { key: 'roles', label: 'Vai trò & Quyền', icon: <ShieldCheck className="h-[18px] w-[18px]" />, perm: 'ROLE_READ' },
-  { key: 'audit', label: 'Nhật ký hệ thống', icon: <ScrollText className="h-[18px] w-[18px]" />, perm: 'AUDIT_LOG_VIEW' },
-  { key: 'settings', label: 'Cài đặt', icon: <Settings className="h-[18px] w-[18px]" />, perm: 'SYSTEM_SETTING_VIEW' },
-  { key: 'backup', label: 'Backup / Restore', icon: <DatabaseBackup className="h-[18px] w-[18px]" />, perm: 'BACKUP_CREATE' }
+  { key: 'dashboard', label: 'Trang chủ', icon: <LayoutDashboard className="h-[18px] w-[18px]" />, perms: ['DASHBOARD_VIEW'] },
+  { key: 'staff', label: 'Quản lý Nhân sự', icon: <Users className="h-[18px] w-[18px]" />, perms: ['USER_READ'] },
+  { key: 'roles', label: 'Vai trò & Quyền', icon: <ShieldCheck className="h-[18px] w-[18px]" />, perms: ['ROLE_READ'] },
+  { key: 'audit', label: 'Nhật ký hệ thống', icon: <ScrollText className="h-[18px] w-[18px]" />, perms: ['AUDIT_LOG_VIEW'] },
+  { key: 'settings', label: 'Cài đặt', icon: <Settings className="h-[18px] w-[18px]" />, perms: ['SYSTEM_SETTING_VIEW'] },
+  { key: 'backup', label: 'Backup / Restore', icon: <DatabaseBackup className="h-[18px] w-[18px]" />, perms: ['BACKUP_CREATE', 'BACKUP_RESTORE'] }
 ];
 
 export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => void }): JSX.Element {
-  const [active, setActive] = useState('dashboard');
+  const visible = MENU.filter((m) => !m.perms || hasAnyPermission(user, m.perms));
+  const [active, setActive] = useState(visible[0]?.key ?? 'dashboard');
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const visible = MENU.filter((m) => !m.perm || hasPermission(user, m.perm));
   const activeItem = visible.find((m) => m.key === active) ?? visible[0];
 
   return (
@@ -113,26 +118,37 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
 
         {/* Content */}
         <main className="flex-1 overflow-auto p-6">
-          <div className="rounded-xl border border-line bg-white p-8 shadow-sm">
-            <h2 className="text-2xl font-bold text-slate-800">Xin chào {user.fullName} 👋</h2>
-            <p className="mt-2 text-sm text-slate-500">
-              Bạn đã đăng nhập vào hệ thống Quản Lý GLB với vai trò{' '}
-              <span className="font-medium text-brand">{user.roles.join(', ') || 'chưa gán'}</span>.
-            </p>
-
-            <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <StatCard label="Vai trò" value={String(user.roles.length)} />
-              <StatCard label="Quyền hiệu lực" value={String(user.permissions.length)} />
-              <StatCard label="Menu hiển thị" value={String(visible.length)} />
-            </div>
-
-            <p className="mt-8 rounded-lg bg-brand-tint px-4 py-3 text-sm text-brand">
-              Giai đoạn G1 — Phase A: Đăng nhập · Đổi mật khẩu lần đầu · Dashboard shell. Các module
-              Nhân sự / Vai trò / Audit / Backup sẽ mở ở Phase B–C.
-            </p>
-          </div>
+          {activeItem?.key === 'dashboard' && <Home user={user} visibleCount={visible.length} />}
+          {activeItem?.key === 'staff' && <StaffPage user={user} />}
+          {activeItem?.key === 'roles' && <RolesPage user={user} />}
+          {activeItem?.key === 'audit' && <AuditPage />}
+          {activeItem?.key === 'settings' && <SettingsPage user={user} />}
+          {activeItem?.key === 'backup' && <BackupPage user={user} />}
         </main>
       </div>
+    </div>
+  );
+}
+
+function Home({ user, visibleCount }: { user: AuthUser; visibleCount: number }): JSX.Element {
+  return (
+    <div className="rounded-xl border border-line bg-white p-8 shadow-sm">
+      <h2 className="text-2xl font-bold text-slate-800">Xin chào {user.fullName} 👋</h2>
+      <p className="mt-2 text-sm text-slate-500">
+        Bạn đã đăng nhập vào hệ thống Quản Lý GLB với vai trò{' '}
+        <span className="font-medium text-brand">{user.roles.join(', ') || 'chưa gán'}</span>.
+      </p>
+
+      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatCard label="Vai trò" value={String(user.roles.length)} />
+        <StatCard label="Quyền hiệu lực" value={String(user.permissions.length)} />
+        <StatCard label="Menu hiển thị" value={String(visibleCount)} />
+      </div>
+
+      <p className="mt-8 rounded-lg bg-brand-tint px-4 py-3 text-sm text-brand">
+        Giai đoạn G1 — Phase B: Quản lý Vai trò · Nhân sự · Phân quyền · Nhật ký · Backup/Restore. Menu bên trái ẩn
+        theo quyền của bạn ({hasPermission(user, 'USER_READ') ? 'có' : 'không'} quyền quản lý nhân sự).
+      </p>
     </div>
   );
 }

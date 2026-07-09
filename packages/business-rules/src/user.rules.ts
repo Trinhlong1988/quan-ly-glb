@@ -35,3 +35,19 @@ export function canRemoveOrLockAdmin(targetIsAdmin: boolean, remainingActiveAdmi
 export function isSelfPrivilegeEscalation(actorId: number, targetId: number, changingRoles: boolean): boolean {
   return actorId === targetId && changingRoles;
 }
+
+/**
+ * R_MANAGER_004: an actor must not grant a role that carries permissions the actor does not
+ * themselves hold. Admin (who holds every permission) always passes.
+ * Returns the list of permission codes that would be escalated (empty ⇒ allowed).
+ */
+export function escalatedPermissions(actor: AuthUser, grantedRolePermissionCodes: string[]): string[] {
+  if (actor.roles.includes(ADMIN_ROLE_CODE)) return [];
+  const held = new Set(actor.permissions);
+  return [...new Set(grantedRolePermissionCodes)].filter((p) => !held.has(p));
+}
+
+/** Convenience predicate over {@link escalatedPermissions}. */
+export function grantsExceedActor(actor: AuthUser, grantedRolePermissionCodes: string[]): boolean {
+  return escalatedPermissions(actor, grantedRolePermissionCodes).length > 0;
+}

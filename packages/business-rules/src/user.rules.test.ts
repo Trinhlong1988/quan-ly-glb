@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { canCreateUserWithRoles, canRemoveOrLockAdmin, isSelfPrivilegeEscalation } from './user.rules.js';
+import {
+  canCreateUserWithRoles,
+  canRemoveOrLockAdmin,
+  isSelfPrivilegeEscalation,
+  escalatedPermissions,
+  grantsExceedActor
+} from './user.rules.js';
 import type { AuthUser } from '@glb/shared';
 import { DEFAULT_ROLE_PERMISSIONS } from '@glb/shared';
 
@@ -50,6 +56,21 @@ describe('last-admin protection (R004/R005)', () => {
   });
   it('always allows for non-admin targets', () => {
     expect(canRemoveOrLockAdmin(false, 1)).toBe(true);
+  });
+});
+
+describe('grant escalation (R_MANAGER_004)', () => {
+  it('Admin can grant anything (holds all permissions)', () => {
+    expect(grantsExceedActor(user(['ADMIN']), ['ROLE_DELETE', 'USER_DELETE'])).toBe(false);
+  });
+  it('Manager cannot grant a permission they do not hold', () => {
+    const mgr = user(['MANAGER']); // no USER_DELETE / ROLE_DELETE by default
+    expect(escalatedPermissions(mgr, ['USER_READ'])).toEqual([]);
+    expect(grantsExceedActor(mgr, ['USER_DELETE'])).toBe(true);
+    expect(escalatedPermissions(mgr, ['USER_DELETE', 'ROLE_DELETE']).sort()).toEqual([
+      'ROLE_DELETE',
+      'USER_DELETE'
+    ]);
   });
 });
 

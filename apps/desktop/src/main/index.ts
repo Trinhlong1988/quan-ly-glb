@@ -57,6 +57,13 @@ app.whenReady().then(async () => {
     app.exit(0);
     return;
   }
+  // Phase B integration self-test: drives role/user/audit/backup services through the real DB.
+  if (process.env['GLB_SELFTEST'] === '2') {
+    const { runServiceSelfTest } = await import('./selftest-phaseb.js');
+    const code = await runServiceSelfTest();
+    app.exit(code);
+    return;
+  }
 
   await createWindow();
 

@@ -164,3 +164,143 @@ Vertical slice **Login → Force Change Password → Dashboard shell** CHẠY TH
 Các mục Role/User CRUD, Backup, `.exe` là **roadmap Phase B/C** (đúng phạm vi được giao).
 
 `READY_FOR_AUDIT: YES` (cho slice Phase A. Toàn bộ G1 PASS §21 vẫn CHƯA — cần Phase B/C.)
+
+---
+---
+
+# G1 — Phase B — CMD_BUILD Report (Role/User CRUD · Audit UI · Backup/Restore)
+
+> Vai: **CMD_BUILD**. KHÔNG tự claim PASS. Bằng chứng chạy thật ở dưới để **CMD_AUDIT** verify lại.
+> Phạm vi Phase B (đúng brief): Role CRUD + permission assign · User CRUD (soft-delete) · Manager scope ·
+> Audit UI · Backup/Restore + FutureSyncService · UI KiotViet các trang · confirm/password modals · toast ·
+> audit before/after · Vitest + self-test tích hợp. **KHÔNG đóng `.exe`** (Phase C).
+> Ngày: 2026-07-09 · Node v24.14.1 · Electron 33.4.11 (ABI 130).
+
+## B0. Nguyên tắc bất di GIỮ NGUYÊN từ Phase A
+- Renderer KHÔNG chạm DB — mọi mutation qua `ipcMain.handle` (26 kênh mới ở `ipc.ts`).
+- Check quyền bằng `hasPermission(currentUser,'CODE')` từ session (`me()`), KHÔNG bằng role name.
+  Đối chiếu bằng `guard.ts::requirePermission`. Thiếu quyền → `FORBIDDEN` + **audit `PERMISSION_DENIED`** (R_AUDIT_003).
+- Audit MỌI mutation. Sửa ghi **before/after JSON** (`diffChanges`/`auditSnapshot`, redact password) — R_AUDIT_002.
+- Không phá code Phase A (login/force-change/dashboard-shell giữ nguyên; Dashboard.tsx mở rộng thành content-router).
+
+## B1. File mới / sửa
+```
+packages/shared/src/types.ts            (+ AuditAction 'PERMISSION_DENIED')
+packages/business-rules/src/
+  role.rules.ts      NEW  canDeleteRole/canLockRole/canUnlockRole/isProtectedAdminRole/isValidRoleCode
+  backup.rules.ts    NEW  sha256Hex/verifyChecksum/buildBackupManifest/backupFileName/FutureSyncService(interface)
+  audit.rules.ts     NEW  auditSnapshot(redact)/diffChanges(before/after)
+  user.rules.ts      +    escalatedPermissions/grantsExceedActor (R_MANAGER_004)
+  index.ts           +    re-export role/backup/audit rules
+  *.test.ts          NEW  role.rules.test / backup.rules.test / audit.rules.test ; user.rules.test mở rộng
+packages/database/prisma/
+  schema.prisma      +    users.joinDate (§9 "Ngày vào làm")
+  migrations/20260709120000_add_user_join_date/migration.sql  NEW
+apps/desktop/src/main/
+  guard.ts           NEW  requirePermission (audit-on-failure) + verifyActorPassword (server-side password)
+  role-service.ts    NEW  list/permissions/create/update/lock/unlock/delete
+  user-service.ts    NEW  list(filter)/create/update/lock/unlock/delete (soft) + manager scope
+  audit-service.ts   NEW  listAudit (read-only; KHÔNG có delete endpoint — R_AUDIT_001)
+  backup-service.ts  NEW  createBackup/listBackups/restoreBackup + futureSyncService (no-op)
+  settings-service.ts NEW list/update (SETTING_UPDATED audit)
+  zip.ts             NEW  store-method ZIP writer/reader (dependency-free — tránh npm install/ABI rebuild)
+  selftest-phaseb.ts NEW  integration self-test (GLB_SELFTEST=2)
+  ipc.ts             +    26 kênh role/user/audit/backup/setting
+  index.ts           +    GLB_SELFTEST=2 hook
+apps/desktop/src/preload/index.ts + index.d.ts   +  bridge + typings cho toàn bộ API mới
+apps/desktop/src/renderer/src/
+  components/ Modal.tsx · ConfirmDialog.tsx · StatusPill.tsx · Field.tsx   NEW
+  pages/ RolesPage.tsx · StaffPage.tsx · AuditPage.tsx · BackupPage.tsx · SettingsPage.tsx  NEW
+  pages/Dashboard.tsx   +  content-router (menu ẩn theo quyền, any-of)
+```
+
+## B2. Lệnh chạy THẬT + kết quả
+| # | Lệnh | Kết quả | Exit |
+|---|------|---------|------|
+| 1 | `npm test` (Vitest) | **61 passed / 6 files** (Phase A 41 + Phase B 20 mới) | 0 |
+| 2 | `tsc --noEmit -p tsconfig.node.json` (main) | **0 lỗi** | 0 |
+| 3 | `tsc --noEmit -p tsconfig.web.json` (renderer) | **0 lỗi** | 0 |
+| 4 | `npm run build -w @glb/desktop` | **build OK** (main+preload+renderer 312 KB); KHÔNG còn warning dynamic-import | 0 |
+| 5 | `GLB_SELFTEST=2` integration (DB copy) | **24/24 PASS** | 0 |
+| 6 | ZIP verify: PowerShell `Expand-Archive` | archive hợp lệ → `glb.db` (94208 B) + `backup_manifest.json` (275 B) | — |
+
+### Vitest Phase B mới (20 test)
+- `role.rules.test.ts` (10): R_ROLE_005 role-có-user · R_ROLE_006/007 ADMIN gốc bất khả xâm · lock/unlock state · role-code regex.
+- `backup.rules.test.ts` (4): sha256 vector "hello" · verifyChecksum phát hiện tamper · manifest shape · filename §17.
+- `audit.rules.test.ts` (4): redact password · diff chỉ field đổi.
+- `user.rules.test.ts` (+2): R_MANAGER_004 escalation (admin qua, manager grant quyền vượt → chặn).
+
+### Self-test tích hợp `GLB_SELFTEST=2` (chạy service THẬT trên bản copy DB)
+```
+admin login ok · admin creates MANAGER user · admin creates SALES user
+duplicate username blocked · invalid username blocked
+cannot delete last admin (R004) · cannot delete role-with-users (R_ROLE_005)
+cannot delete ADMIN system role (R_ROLE_006)
+admin creates custom role · role delete wrong password blocked (R_ROLE_009) · role delete correct password ok
+admin creates backup · backup has checksum + file exists
+restore wrong password blocked (R_BACKUP_002) · restore correct password ok
+restore auto-created pre-restore backup (R_BACKUP_003)   {before:1, after:2}
+manager login ok · manager cannot create ADMIN (R_MANAGER_002) · manager creates limited user (R_MANAGER_001)
+manager cannot create role → FORBIDDEN (§13)
+sales login ok · sales cannot list users → FORBIDDEN
+permission denials were audited (R_AUDIT_003)   {deniedBefore:0, deniedAfter:3}
+SELFTEST2 SUMMARY | failures=0   (exit 0)
+```
+
+## B3. Trạng thái hạng mục Phase B
+| Hạng mục | Rule | Trạng thái | Bằng chứng |
+|---|---|---|---|
+| Role CRUD + assign permission | R_ROLE_001..004/008/010 | enforced | selftest create/update/lock/unlock/delete + audit; RolesPage UI |
+| Chặn xóa role có user | R_ROLE_005 | enforced | vitest + selftest ROLE_HAS_USERS |
+| Chặn xóa/khóa ADMIN gốc | R_ROLE_006/007 | enforced | vitest + selftest ROLE_IS_SYSTEM_ADMIN |
+| Xóa role nhập lại mật khẩu (verify server) | R_ROLE_009 | enforced | selftest wrong-pw blocked; `verifyActorPassword` |
+| User CRUD + soft-delete | §9/§11 R_USER_STATUS_006 | enforced | selftest create/dup/invalid; deleteUser set status=DELETED+deletedAt |
+| Username `^[A-Za-z0-9]{8,}$` + email unique | §10 | enforced | vitest 17 + selftest DUPLICATE/VALIDATION |
+| Chặn xóa/khóa Admin cuối | R004/R005 | enforced | vitest + selftest LAST_ADMIN |
+| Không tự nâng quyền chính mình | R006 | enforced (code) | `isSelfPrivilegeEscalation` trong updateUser; vitest |
+| Manager scope (không tạo ADMIN/MANAGER, không cấp quyền vượt) | R_MANAGER_001..006 | enforced | selftest MANAGER_SCOPE + vitest escalation |
+| Permission check bằng CODE (không role name) | §13 | enforced | `guard.requirePermission`; selftest FORBIDDEN |
+| Audit mọi mutation + before/after | §16 R_AUDIT_002 | enforced | writeAudit ở mọi service; AuditPage hiển thị |
+| Audit thất bại-thiếu-quyền | R_AUDIT_003 | enforced | selftest deniedAfter=3; PERMISSION_DENIED |
+| Audit UI không xóa được | R_AUDIT_001/004 | enforced | audit-service chỉ có listAudit (không delete) |
+| Backup zip + manifest + checksum + backup_logs | R_BACKUP_001/004 | enforced | selftest + Expand-Archive verify |
+| Restore nhập mật khẩu + self-backup trước | R_BACKUP_002/003 | enforced | selftest restore path |
+| FutureSyncService interface | R_BACKUP_006 | enforced (interface, no-op) | `futureSyncService` throws NOT_IMPLEMENTED |
+| Popup xác nhận có nút Hủy; xóa nhập mật khẩu | §14 | enforced (UI) | ConfirmDialog (Hủy luôn có) + requirePassword |
+| Toast sau mọi thao tác | §15 | enforced (UI) | useToast ở mọi page |
+| Menu ẩn theo quyền | §6 | enforced (UI) | Dashboard visible=hasAnyPermission |
+| UI KiotViet các trang §19 | §19 | enforced (UI, build OK) | 5 page + palette Phase A |
+| Restore swap-on-restart (áp DB đã stage) | — | **roadmap (Phase C)** | restore ghi `glb.db.restored`; chưa wire swap lúc khởi động |
+| Đóng gói `.exe` | §21#2 | roadmap (Phase C) | ngoài scope |
+
+## B4. Rủi ro / giới hạn (khai báo trung thực)
+1. **Restore = staged, chưa swap.** `restoreBackup` verify checksum + tự backup hiện trạng + ghi `glb.db.restored`
+   cạnh DB sống (KHÔNG ghi đè DB đang mở để tránh hỏng handle SQLite). Việc **swap khi khởi động lại** chưa wire →
+   Phase C. UI báo đúng thông điệp "sẽ áp dụng khi khởi động lại". Không overclaim là restore hoàn tất.
+2. **`join_date` áp bằng ALTER TABLE thủ công qua Electron-runtime** (better-sqlite3 ABI 130), + file migration SQL
+   cho DB mới. Prisma client đã regenerate (nhưng `generated/` bị `.gitignore` → CMD_AUDIT phải chạy
+   `cd packages/database && npx prisma generate` để có type joinDate trước typecheck).
+3. **Prod first-run vẫn thiếu schema** (kế thừa finding Phase A #2) — `.exe` chưa chạy được trên DB rỗng. Phase C.
+4. **UI drive tự động chưa chụp screenshot** các trang mới (harness SendKeys lệch ký tự như Phase A). Bằng chứng
+   nghiệp vụ = self-test service-level + build OK + typecheck. LEAD nên `npm run dev` để nghiệm thu thị giác (R196).
+5. **Backup dir dev = `process.cwd()/backups`** (prod = userData/backups). Đã `.gitignore`.
+
+## B5. Evidence để CMD_AUDIT chạy lại
+```bash
+cd packages/database && npx prisma generate && cd ../..     # (generated/ bị gitignore)
+npm test                                                    # kỳ vọng 61 passed
+cd apps/desktop && npx tsc --noEmit -p tsconfig.node.json && npx tsc --noEmit -p tsconfig.web.json && cd ../..
+npm run build -w @glb/desktop                               # exit 0, không warning
+cp packages/database/dev.db "$TEMP/glb_phaseb.db"
+GLB_SELFTEST=2 GLB_DB_URL="file:$TEMP/glb_phaseb.db" ./node_modules/.bin/electron apps/desktop
+#   kỳ vọng 24 dòng SELFTEST2 PASS + SUMMARY failures=0 (exit 0)
+npm run dev -w @glb/desktop                                 # nghiệm thu thị giác các trang KiotViet
+```
+
+## B6. Verdict Phase B
+Role/User CRUD · Manager scope · Audit (ghi + UI đọc) · Backup/Restore · permission-by-code · confirm/password/toast
+**CHẠY THẬT + đúng luật** — chứng minh bằng 61 vitest + 24 self-test tích hợp service-level (exit 0) + build/typecheck sạch.
+Còn **roadmap Phase C**: restore swap-on-restart · prod DB provisioning · `.exe`. Theo R196 đây là **L1 Engineering
+Validation PASS** — chờ LEAD (Mr.Long) `npm run dev` nghiệm thu thật mới lên L2.
+
+`READY_FOR_AUDIT: YES` (Phase B. §21 toàn phần chưa PASS: #2 `.exe` = Phase C.)
