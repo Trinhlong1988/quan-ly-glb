@@ -9,8 +9,26 @@ const ACTIONS = [
   'LOGIN_SUCCESS', 'LOGIN_FAILED', 'PERMISSION_DENIED',
   'USER_CREATED', 'USER_UPDATED', 'USER_LOCKED', 'USER_UNLOCKED', 'USER_DELETED',
   'ROLE_CREATED', 'ROLE_UPDATED', 'ROLE_LOCKED', 'ROLE_UNLOCKED', 'ROLE_DELETED',
-  'PASSWORD_CHANGED', 'BACKUP_CREATED', 'RESTORE_EXECUTED', 'SETTING_UPDATED'
+  'PASSWORD_CHANGED', 'BACKUP_CREATED', 'RESTORE_EXECUTED', 'SETTING_UPDATED',
+  'CUSTOMER_CREATED', 'CUSTOMER_UPDATED', 'CUSTOMER_DELETED'
 ];
+
+/** Nhãn tiếng Việt cho mã hành động (nhật ký 100% tiếng Việt). */
+const ACTION_LABEL: Record<string, string> = {
+  LOGIN_SUCCESS: 'Đăng nhập thành công', LOGIN_FAILED: 'Đăng nhập thất bại', PERMISSION_DENIED: 'Từ chối quyền',
+  USER_CREATED: 'Tạo nhân sự', USER_UPDATED: 'Sửa nhân sự', USER_LOCKED: 'Khóa nhân sự', USER_UNLOCKED: 'Mở khóa nhân sự', USER_DELETED: 'Xóa nhân sự',
+  ROLE_CREATED: 'Tạo vai trò', ROLE_UPDATED: 'Sửa vai trò', ROLE_LOCKED: 'Khóa vai trò', ROLE_UNLOCKED: 'Mở khóa vai trò', ROLE_DELETED: 'Xóa vai trò',
+  PASSWORD_CHANGED: 'Đổi mật khẩu', BACKUP_CREATED: 'Tạo bản sao lưu', RESTORE_EXECUTED: 'Phục hồi dữ liệu', SETTING_UPDATED: 'Cập nhật cấu hình',
+  CUSTOMER_CREATED: 'Tạo khách hàng', CUSTOMER_UPDATED: 'Sửa khách hàng', CUSTOMER_DELETED: 'Xóa khách hàng'
+};
+const actionLabel = (a: string): string => ACTION_LABEL[a] ?? a;
+
+/** Nhãn tiếng Việt cho loại đối tượng bị tác động. */
+const TARGET_LABEL: Record<string, string> = {
+  User: 'Nhân sự', Role: 'Vai trò', Customer: 'Khách hàng', PosDevice: 'Máy POS', Tid: 'TID',
+  Backup: 'Sao lưu', AppSetting: 'Cấu hình', Bank: 'Ngân hàng', CardType: 'Loại thẻ', Partner: 'Đối tác'
+};
+const targetLabel = (t: string): string => TARGET_LABEL[t] ?? t;
 
 function badge(action: string): string {
   if (action.includes('FAILED') || action.includes('DENIED') || action.includes('DELETED')) return 'bg-danger/10 text-danger';
@@ -53,7 +71,7 @@ export function AuditPage(): JSX.Element {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && reload()}
-            placeholder="Tìm action, target…"
+            placeholder="Tìm hành động, đối tượng…"
             className={inputCls + ' w-72 pl-8'}
           />
         </div>
@@ -61,7 +79,7 @@ export function AuditPage(): JSX.Element {
           <option value="">Tất cả hành động</option>
           {ACTIONS.map((a) => (
             <option key={a} value={a}>
-              {a}
+              {actionLabel(a)}
             </option>
           ))}
         </select>
@@ -102,10 +120,10 @@ export function AuditPage(): JSX.Element {
                   <td className="px-4 py-3 text-xs text-slate-500">{new Date(r.createdAt).toLocaleString('vi-VN')}</td>
                   <td className="px-4 py-3 text-slate-600">{r.actorUsername ?? (r.actorUserId ? `#${r.actorUserId}` : '—')}</td>
                   <td className="px-4 py-3">
-                    <span className={`inline-flex rounded px-2 py-0.5 text-xs font-medium ${badge(r.action)}`}>{r.action}</span>
+                    <span className={`inline-flex rounded px-2 py-0.5 text-xs font-medium ${badge(r.action)}`}>{actionLabel(r.action)}</span>
                   </td>
                   <td className="px-4 py-3 text-slate-600">
-                    {r.targetType ?? '—'}
+                    {r.targetType ? targetLabel(r.targetType) : '—'}
                     {r.targetId ? ` #${r.targetId}` : ''}
                   </td>
                   <td className="px-4 py-3 text-right">
@@ -129,13 +147,13 @@ export function AuditPage(): JSX.Element {
             </div>
             {detail.beforeJson && (
               <div>
-                <div className="mb-1 font-medium text-slate-700">Trước (before)</div>
+                <div className="mb-1 font-medium text-slate-700">Trước khi thay đổi</div>
                 <pre className="overflow-auto rounded-lg bg-appbg p-3 text-xs text-slate-600">{pretty(detail.beforeJson)}</pre>
               </div>
             )}
             {detail.afterJson && (
               <div>
-                <div className="mb-1 font-medium text-slate-700">Sau (after)</div>
+                <div className="mb-1 font-medium text-slate-700">Sau khi thay đổi</div>
                 <pre className="overflow-auto rounded-lg bg-appbg p-3 text-xs text-slate-600">{pretty(detail.afterJson)}</pre>
               </div>
             )}

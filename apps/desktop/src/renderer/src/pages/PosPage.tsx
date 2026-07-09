@@ -6,7 +6,7 @@ import type { PosDto, TimelineEventDto, CustomerDto, AgentDto } from '../../../p
 import { useToast } from '../lib/toast.js';
 import { Modal } from '../components/Modal.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
-import { StatusPill } from '../components/StatusPill.js';
+import { StatusPill, statusLabel } from '../components/StatusPill.js';
 import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
 
@@ -103,7 +103,7 @@ export function PosPage({ user }: { user: AuthUser }): JSX.Element {
         onFromDate={setFromDate}
         onToDate={setToDate}
         selects={[
-          { key: 'status', placeholder: 'Tất cả trạng thái', value: statusFilter, options: POS_STATUSES.map((s) => ({ value: s, label: s })), onChange: setStatusFilter },
+          { key: 'status', placeholder: 'Tất cả trạng thái', value: statusFilter, options: POS_STATUSES.map((s) => ({ value: s, label: statusLabel(s) })), onChange: setStatusFilter },
           { key: 'agent', placeholder: 'Tất cả đại lý', value: agentId, options: agents.map((a) => ({ value: String(a.id), label: a.name })), onChange: setAgentId }
         ]}
         onApply={reload}

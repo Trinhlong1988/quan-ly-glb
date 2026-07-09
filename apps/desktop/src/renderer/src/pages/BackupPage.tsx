@@ -49,8 +49,8 @@ export function BackupPage({ user }: { user: AuthUser }): JSX.Element {
     <div>
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-slate-800">Backup / Restore</h2>
-          <p className="text-sm text-slate-500">Sao lưu & khôi phục cơ sở dữ liệu local. Restore yêu cầu mật khẩu Admin.</p>
+          <h2 className="text-lg font-semibold text-slate-800">Sao lưu & Phục hồi</h2>
+          <p className="text-sm text-slate-500">Sao lưu & phục hồi cơ sở dữ liệu tại máy. Phục hồi yêu cầu mật khẩu quản trị.</p>
         </div>
         {canCreate && (
           <button
@@ -59,7 +59,7 @@ export function BackupPage({ user }: { user: AuthUser }): JSX.Element {
             className="flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-60"
           >
             {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <HardDriveDownload className="h-4 w-4" />}
-            Tạo backup ngay
+            Tạo bản sao lưu ngay
           </button>
         )}
       </div>
@@ -86,7 +86,7 @@ export function BackupPage({ user }: { user: AuthUser }): JSX.Element {
             {!loading && rows.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-10 text-center text-slate-400">
-                  <DatabaseBackup className="mx-auto mb-2 h-6 w-6" /> Chưa có bản backup nào.
+                  <DatabaseBackup className="mx-auto mb-2 h-6 w-6" /> Chưa có bản sao lưu nào.
                 </td>
               </tr>
             )}

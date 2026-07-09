@@ -24,3 +24,8 @@ export function StatusPill({ status }: { status: string }): JSX.Element {
     <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${s.cls}`}>{s.label}</span>
   );
 }
+
+/** Nhãn tiếng Việt của một mã trạng thái (dùng cho dropdown lọc, tránh hiện enum trần). */
+export function statusLabel(status: string): string {
+  return MAP[status]?.label ?? status;
+}

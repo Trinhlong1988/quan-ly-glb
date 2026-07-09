@@ -5,7 +5,7 @@ import { hasPermission } from '@glb/shared';
 import type { TidDto, UndeliveredTidDto, PosDto, CustomerDto } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
 import { Modal } from '../components/Modal.js';
-import { StatusPill } from '../components/StatusPill.js';
+import { StatusPill, statusLabel } from '../components/StatusPill.js';
 import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
 
@@ -101,7 +101,7 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
           toDate={toDate}
           onFromDate={setFromDate}
           onToDate={setToDate}
-          selects={[{ key: 'status', placeholder: 'Tất cả trạng thái', value: statusFilter, options: TID_STATUSES.map((s) => ({ value: s, label: s })), onChange: setStatusFilter }]}
+          selects={[{ key: 'status', placeholder: 'Tất cả trạng thái', value: statusFilter, options: TID_STATUSES.map((s) => ({ value: s, label: statusLabel(s) })), onChange: setStatusFilter }]}
           onApply={reload}
           onReset={resetFilters}
         />

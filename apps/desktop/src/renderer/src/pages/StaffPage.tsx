@@ -6,7 +6,7 @@ import type { UserDto, RoleDto } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
 import { Modal } from '../components/Modal.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
-import { StatusPill } from '../components/StatusPill.js';
+import { StatusPill, statusLabel } from '../components/StatusPill.js';
 import { Field, inputCls } from '../components/Field.js';
 
 const STATUSES = ['ACTIVE', 'PENDING', 'LOCKED', 'DISABLED', 'DELETED'];
@@ -88,7 +88,7 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && reload()}
-            placeholder="Tìm tên, username, email, SĐT…"
+            placeholder="Tìm tên, tên đăng nhập, email, SĐT…"
             className={inputCls + ' w-72 pl-8'}
           />
         </div>
@@ -104,7 +104,7 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
           <option value="">Tất cả trạng thái</option>
           {STATUSES.map((s) => (
             <option key={s} value={s}>
-              {s}
+              {statusLabel(s)}
             </option>
           ))}
         </select>
@@ -119,7 +119,7 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
             <tr>
               <th className="px-4 py-3">Mã NV</th>
               <th className="px-4 py-3">Nhân sự</th>
-              <th className="px-4 py-3">Username</th>
+              <th className="px-4 py-3">Tên đăng nhập</th>
               <th className="px-4 py-3">Liên hệ</th>
               <th className="px-4 py-3">Vai trò</th>
               <th className="px-4 py-3">Trạng thái</th>
