@@ -5,6 +5,7 @@ import { hasPermission } from '@glb/shared';
 import type { TidDto, UndeliveredTidDto, PosDto, CustomerDto } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
 import { Modal } from '../components/Modal.js';
+import { Button } from '../components/Button.js';
 import { StatusPill, statusLabel } from '../components/StatusPill.js';
 import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
@@ -77,9 +78,9 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
           <p className="text-sm text-slate-500">Terminal ID · gán/đổi/thu hồi/giao · theo dõi TID chưa giao.</p>
         </div>
         {canManage && (
-          <button onClick={() => setCreating(true)} className="flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover">
-            <Plus className="h-4 w-4" /> Thêm TID
-          </button>
+          <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)}>
+            Thêm TID
+          </Button>
         )}
       </div>
 

@@ -5,6 +5,7 @@ import { hasPermission } from '@glb/shared';
 import type { RoleDto, PermissionDto } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
 import { Modal } from '../components/Modal.js';
+import { Button } from '../components/Button.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { StatusPill } from '../components/StatusPill.js';
 import { Field, inputCls } from '../components/Field.js';
@@ -60,12 +61,9 @@ export function RolesPage({ user }: { user: AuthUser }): JSX.Element {
           <p className="text-sm text-slate-500">Tạo, phân quyền, khóa/mở khóa và xóa vai trò hệ thống.</p>
         </div>
         {canCreate && (
-          <button
-            onClick={() => setCreating(true)}
-            className="flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover"
-          >
-            <Plus className="h-4 w-4" /> Thêm vai trò
-          </button>
+          <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)}>
+            Thêm vai trò
+          </Button>
         )}
       </div>
 
@@ -113,7 +111,7 @@ export function RolesPage({ user }: { user: AuthUser }): JSX.Element {
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">
                       {canUpdate && (
-                        <IconBtn title="Sửa" onClick={() => setEditing(r)}>
+                        <IconBtn title="Sửa" variant="edit" onClick={() => setEditing(r)}>
                           <Pencil className="h-4 w-4" />
                         </IconBtn>
                       )}
@@ -128,7 +126,7 @@ export function RolesPage({ user }: { user: AuthUser }): JSX.Element {
                         </IconBtn>
                       )}
                       {canDelete && (
-                        <IconBtn title="Xóa" danger onClick={() => setConfirm({ kind: 'delete', role: r })}>
+                        <IconBtn title="Xóa" variant="danger" onClick={() => setConfirm({ kind: 'delete', role: r })}>
                           <Trash2 className="h-4 w-4" />
                         </IconBtn>
                       )}
@@ -190,26 +188,26 @@ export function RolesPage({ user }: { user: AuthUser }): JSX.Element {
   );
 }
 
+// Nút icon theo quy ước màu (R_BUTTON_SEMANTICS): sửa=vàng, xóa=đỏ.
 function IconBtn({
   children,
   title,
-  danger,
+  variant,
   onClick
 }: {
   children: JSX.Element;
   title: string;
-  danger?: boolean;
+  variant?: 'edit' | 'danger';
   onClick: () => void;
 }): JSX.Element {
+  const tone =
+    variant === 'danger'
+      ? 'text-danger hover:bg-danger/10'
+      : variant === 'edit'
+        ? 'text-warning hover:bg-warning/10'
+        : 'text-slate-400 hover:bg-brand-tint hover:text-brand';
   return (
-    <button
-      title={title}
-      onClick={onClick}
-      className={
-        'rounded-md p-1.5 transition ' +
-        (danger ? 'text-slate-400 hover:bg-danger/10 hover:text-danger' : 'text-slate-400 hover:bg-brand-tint hover:text-brand')
-      }
-    >
+    <button title={title} onClick={onClick} className={'rounded-md p-1.5 transition ' + tone}>
       {children}
     </button>
   );
@@ -310,7 +308,7 @@ function RoleForm({
           <div className="space-y-3">
             {Object.entries(groups).map(([group, list]) => (
               <div key={group} className="rounded-lg border border-line p-3">
-                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">{group}</div>
+                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{group}</div>
                 <div className="grid grid-cols-2 gap-2">
                   {list.map((p) => (
                     <label key={p.code} className="flex cursor-pointer items-center gap-2 text-sm text-slate-600">

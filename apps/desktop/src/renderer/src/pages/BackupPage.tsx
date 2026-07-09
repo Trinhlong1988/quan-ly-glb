@@ -99,7 +99,7 @@ export function BackupPage({ user }: { user: AuthUser }): JSX.Element {
                   </td>
                   <td className="px-4 py-3 text-xs text-slate-500">{fmtDateTime(b.createdAt)}</td>
                   <td className="px-4 py-3 text-slate-600">{b.fileSize ? `${(b.fileSize / 1024).toFixed(1)} KB` : '—'}</td>
-                  <td className="px-4 py-3 font-mono text-[11px] text-slate-400">{b.checksum?.slice(0, 16) ?? '—'}…</td>
+                  <td className="px-4 py-3 font-mono text-xs text-slate-400">{b.checksum?.slice(0, 16) ?? '—'}…</td>
                   <td className="px-4 py-3 text-right">
                     {canRestore && b.exists && (
                       <button

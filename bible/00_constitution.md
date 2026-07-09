@@ -60,3 +60,6 @@ Soft-delete toàn hệ thống: xóa = đánh dấu trạng thái "đã xóa" + 
 
 ## R_PROCESS_FEATURE_GATE + R_UI_DESKTOP_CONSISTENT — LEAD lock 9/7
 Build **từng tính năng** → CMD_AUDIT review + chạy pass (build + screenshot/click thật, 0 lỗi console) → commit → mới sang tính năng kế. CẤM gộp nhiều tính năng chưa review. UI mọi màn dùng **1 design-system nhất quán như app .exe** (sidebar navy · brand `#1657D0` · card · table · FilterBar · Modal/ConfirmDialog · toast · Be Vietnam Pro).
+
+## R_UI_STANDARD — LEAD lock 9/7 (TỐI THƯỢNG, cấm làm lệch)
+**Nguồn chuẩn = `docs/UI_DESIGN_SYSTEM.md`.** Mọi thành phần cùng vai trò (tiêu đề/header bảng/ô dữ liệu/nhãn/nút/badge) PHẢI **giống hệt nhau ở mọi trang**: cùng font (Be Vietnam Pro), cùng cỡ chữ theo thang vai trò, cùng quy tắc đậm/hoa/thường logic, cùng màu palette, cùng component dùng chung. **CẤM tự ý làm lệch** — không `text-[..px]` tùy tiện, không hex ngoài palette, không tự chế button/dialog mới, không font khác. Mỗi lỗi lệch = **thất bại QA** (R_LINK_VERIFY tinh thần). QA gate UI (mục 8 design system) BẮT BUỘC trước khi PASS bất kỳ màn nào. Áp mọi feature G1..Gn.
