@@ -19,7 +19,9 @@ const ACTIONS = [
   'SUPPLIER_CREATED', 'SUPPLIER_UPDATED', 'SUPPLIER_DELETED',
   'POS_MODEL_CREATED', 'POS_MODEL_UPDATED', 'POS_MODEL_DELETED',
   'INTAKE_STATUS_CREATED', 'INTAKE_STATUS_UPDATED', 'INTAKE_STATUS_DELETED',
-  'POS_INTAKE_CREATED', 'POS_INTAKE_UPDATED', 'POS_INTAKE_DELETED'
+  'POS_INTAKE_CREATED', 'POS_INTAKE_UPDATED', 'POS_INTAKE_DELETED',
+  'FEE_TYPE_CREATED', 'FEE_TYPE_UPDATED', 'FEE_TYPE_DELETED',
+  'FEE_RATE_SET', 'FEE_RATE_DELETED'
 ];
 
 /** Nhãn tiếng Việt cho mã hành động (nhật ký 100% tiếng Việt). */
@@ -36,7 +38,9 @@ const ACTION_LABEL: Record<string, string> = {
   SUPPLIER_CREATED: 'Tạo nhà cung cấp', SUPPLIER_UPDATED: 'Sửa nhà cung cấp', SUPPLIER_DELETED: 'Xóa nhà cung cấp',
   POS_MODEL_CREATED: 'Tạo chủng loại POS', POS_MODEL_UPDATED: 'Sửa chủng loại POS', POS_MODEL_DELETED: 'Xóa chủng loại POS',
   INTAKE_STATUS_CREATED: 'Tạo trạng thái nhập máy', INTAKE_STATUS_UPDATED: 'Sửa trạng thái nhập máy', INTAKE_STATUS_DELETED: 'Xóa trạng thái nhập máy',
-  POS_INTAKE_CREATED: 'Nhập kho máy POS', POS_INTAKE_UPDATED: 'Sửa máy POS nhập kho', POS_INTAKE_DELETED: 'Xóa máy POS nhập kho'
+  POS_INTAKE_CREATED: 'Nhập kho máy POS', POS_INTAKE_UPDATED: 'Sửa máy POS nhập kho', POS_INTAKE_DELETED: 'Xóa máy POS nhập kho',
+  FEE_TYPE_CREATED: 'Tạo loại phí', FEE_TYPE_UPDATED: 'Sửa loại phí', FEE_TYPE_DELETED: 'Xóa loại phí',
+  FEE_RATE_SET: 'Đặt biểu phí', FEE_RATE_DELETED: 'Xóa biểu phí'
 };
 const actionLabel = (a: string): string => ACTION_LABEL[a] ?? a;
 

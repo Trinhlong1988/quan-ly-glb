@@ -434,6 +434,47 @@ export interface LiteRef {
   code: string;
   name: string;
 }
+
+// ── G-CFG.3 DTOs (Cấu hình phí §C5) ──
+export interface FeeTypeDto extends AuditTrail {
+  id: number;
+  name: string;
+}
+export interface CreateFeeTypeInput {
+  name: string;
+}
+export interface UpdateFeeTypeInput {
+  name?: string;
+}
+export interface FeeRateDto extends AuditTrail {
+  id: number;
+  partnerId: number;
+  partnerCode: string | null;
+  partnerName: string | null;
+  cardTypeId: number;
+  cardTypeCode: string | null;
+  cardTypeName: string | null;
+  bankId: number | null;
+  bankCode: string | null;
+  bankName: string | null;
+  phiMua: number;
+  phiCaiMay: number;
+  phiBan: number;
+  clNcc: number;
+  clKh: number;
+}
+export interface FeeRateFilter {
+  partnerId?: number;
+  bankId?: number;
+  cardTypeId?: number;
+}
+export interface SetFeeRateInput {
+  partnerId: number;
+  cardTypeId: number;
+  phiMua: number;
+  phiCaiMay: number;
+  phiBan: number;
+}
 export interface LinkOutcome extends MutationOutcome {
   linked?: number;
   unlinked?: number;
@@ -585,6 +626,16 @@ export interface GlbApi {
   posIntakeCreate(input: CreatePosIntakeInput): Promise<MutationOutcome>;
   posIntakeUpdate(id: number, input: UpdatePosIntakeInput): Promise<MutationOutcome>;
   posIntakeDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
+
+  // ── Cấu hình phí (G-CFG.3 §C5) ──
+  feeTypeList(): Promise<ListResult<FeeTypeDto>>;
+  feeTypeCreate(input: CreateFeeTypeInput): Promise<MutationOutcome>;
+  feeTypeUpdate(id: number, input: UpdateFeeTypeInput): Promise<MutationOutcome>;
+  feeTypeDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
+
+  feeRateList(filter: FeeRateFilter): Promise<ListResult<FeeRateDto>>;
+  feeRateSet(input: SetFeeRateInput): Promise<MutationOutcome>;
+  feeRateDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
 
   // Thùng rác (E4)
   trashList(): Promise<{ ok: boolean; data?: TrashRow[]; error?: string; message?: string }>;

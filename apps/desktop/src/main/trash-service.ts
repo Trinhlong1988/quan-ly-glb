@@ -16,7 +16,9 @@ export type TrashEntity =
   | 'Supplier'
   | 'PosModel'
   | 'PosIntakeStatus'
-  | 'PosIntake';
+  | 'PosIntake'
+  | 'FeeType'
+  | 'FeeRate';
 
 const LABEL: Record<TrashEntity, string> = {
   Customer: 'Khách hàng',
@@ -27,7 +29,9 @@ const LABEL: Record<TrashEntity, string> = {
   Supplier: 'Nhà cung cấp',
   PosModel: 'Chủng loại máy POS',
   PosIntakeStatus: 'Trạng thái nhập máy',
-  PosIntake: 'Máy POS nhập kho'
+  PosIntake: 'Máy POS nhập kho',
+  FeeType: 'Loại phí',
+  FeeRate: 'Biểu phí'
 };
 
 export function isTrashEntity(v: string): v is TrashEntity {
@@ -61,7 +65,7 @@ export async function listTrash(): Promise<{ ok: boolean; data?: TrashRow[]; err
   if (!g.ok) return g;
   const db = g.db;
   const del = { deletedAt: { not: null } } as const;
-  const [customers, agents, banks, cardTypes, partners, suppliers, posModels, intakeStatuses, posIntakes] = await Promise.all([
+  const [customers, agents, banks, cardTypes, partners, suppliers, posModels, intakeStatuses, posIntakes, feeTypes, feeRates] = await Promise.all([
     db.customer.findMany({ where: del }),
     db.agent.findMany({ where: del }),
     db.bank.findMany({ where: del }),
@@ -70,7 +74,9 @@ export async function listTrash(): Promise<{ ok: boolean; data?: TrashRow[]; err
     db.supplier.findMany({ where: del }),
     db.posModel.findMany({ where: del }),
     db.posIntakeStatus.findMany({ where: del }),
-    db.posIntake.findMany({ where: del })
+    db.posIntake.findMany({ where: del }),
+    db.feeType.findMany({ where: del }),
+    db.feeRate.findMany({ where: del })
   ]);
   const rows: TrashRow[] = [
     ...customers.map((c) => row('Customer', c.id, c.code, `${c.nickname} (${c.fullName})`, c.deletedAt)),
@@ -81,7 +87,9 @@ export async function listTrash(): Promise<{ ok: boolean; data?: TrashRow[]; err
     ...suppliers.map((s) => row('Supplier', s.id, s.code, s.name, s.deletedAt)),
     ...posModels.map((m) => row('PosModel', m.id, m.code, m.name, m.deletedAt)),
     ...intakeStatuses.map((st) => row('PosIntakeStatus', st.id, null, st.name, st.deletedAt)),
-    ...posIntakes.map((pi) => row('PosIntake', pi.id, pi.serial, pi.serial, pi.deletedAt))
+    ...posIntakes.map((pi) => row('PosIntake', pi.id, pi.serial, pi.serial, pi.deletedAt)),
+    ...feeTypes.map((ft) => row('FeeType', ft.id, null, ft.name, ft.deletedAt)),
+    ...feeRates.map((fr) => row('FeeRate', fr.id, null, `Biểu phí #${fr.id}`, fr.deletedAt))
   ].sort((x, y) => (x.deletedAt < y.deletedAt ? 1 : -1));
   return { ok: true, data: rows };
 }
@@ -165,6 +173,8 @@ async function findOne(entityType: TrashEntity, id: number): Promise<{ deletedAt
     case 'PosModel': return db.posModel.findUnique({ where: { id }, select: { deletedAt: true } });
     case 'PosIntakeStatus': return db.posIntakeStatus.findUnique({ where: { id }, select: { deletedAt: true } });
     case 'PosIntake': return db.posIntake.findUnique({ where: { id }, select: { deletedAt: true } });
+    case 'FeeType': return db.feeType.findUnique({ where: { id }, select: { deletedAt: true } });
+    case 'FeeRate': return db.feeRate.findUnique({ where: { id }, select: { deletedAt: true } });
   }
 }
 
@@ -181,5 +191,7 @@ async function clearDeleted(entityType: TrashEntity, id: number): Promise<void> 
     case 'PosModel': await db.posModel.update({ where: { id }, data }); return;
     case 'PosIntakeStatus': await db.posIntakeStatus.update({ where: { id }, data }); return;
     case 'PosIntake': await db.posIntake.update({ where: { id }, data }); return;
+    case 'FeeType': await db.feeType.update({ where: { id }, data }); return;
+    case 'FeeRate': await db.feeRate.update({ where: { id }, data }); return;
   }
 }

@@ -119,6 +119,16 @@ const api = {
   posIntakeUpdate: (id: number, input: unknown) => ipcRenderer.invoke('posIntake:update', { id, input }),
   posIntakeDelete: (ids: number[], password: string) => ipcRenderer.invoke('posIntake:delete', { ids, password }),
 
+  // Cấu hình phí (G-CFG.3 §C5)
+  feeTypeList: () => ipcRenderer.invoke('feeType:list'),
+  feeTypeCreate: (input: unknown) => ipcRenderer.invoke('feeType:create', input),
+  feeTypeUpdate: (id: number, input: unknown) => ipcRenderer.invoke('feeType:update', { id, input }),
+  feeTypeDelete: (ids: number[], password: string) => ipcRenderer.invoke('feeType:delete', { ids, password }),
+
+  feeRateList: (filter: unknown) => ipcRenderer.invoke('feeRate:list', filter),
+  feeRateSet: (input: unknown) => ipcRenderer.invoke('feeRate:set', input),
+  feeRateDelete: (ids: number[], password: string) => ipcRenderer.invoke('feeRate:delete', { ids, password }),
+
   // Thùng rác (E4)
   trashList: () => ipcRenderer.invoke('trash:list'),
   trashRestore: (entityType: string, id: number) => ipcRenderer.invoke('trash:restore', { entityType, id }),

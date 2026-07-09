@@ -13,6 +13,7 @@ import * as tidSvc from './tid-service.js';
 import * as notifySvc from './notification-service.js';
 import * as bankCfgSvc from './bank-config-service.js';
 import * as posSupplySvc from './pos-supply-service.js';
+import * as feeCfgSvc from './fee-config-service.js';
 import * as trashSvc from './trash-service.js';
 import { getRemembered, saveRemembered, clearRemembered } from './remember.js';
 
@@ -165,6 +166,16 @@ export function registerIpc(): void {
   ipcMain.handle('posIntake:create', async (_e, input: posSupplySvc.CreatePosIntakeInput) => posSupplySvc.createPosIntake(input));
   ipcMain.handle('posIntake:update', async (_e, args: { id: number; input: posSupplySvc.UpdatePosIntakeInput }) => posSupplySvc.updatePosIntake(args.id, args.input));
   ipcMain.handle('posIntake:delete', async (_e, args: { ids: number[]; password: string }) => posSupplySvc.deletePosIntakes(args.ids, args.password));
+
+  // ── G-CFG.3 Cấu hình phí (§C5) ──
+  ipcMain.handle('feeType:list', async () => feeCfgSvc.listFeeTypes());
+  ipcMain.handle('feeType:create', async (_e, input: feeCfgSvc.CreateFeeTypeInput) => feeCfgSvc.createFeeType(input));
+  ipcMain.handle('feeType:update', async (_e, args: { id: number; input: feeCfgSvc.UpdateFeeTypeInput }) => feeCfgSvc.updateFeeType(args.id, args.input));
+  ipcMain.handle('feeType:delete', async (_e, args: { ids: number[]; password: string }) => feeCfgSvc.deleteFeeTypes(args.ids, args.password));
+
+  ipcMain.handle('feeRate:list', async (_e, filter: feeCfgSvc.FeeRateFilter) => feeCfgSvc.listFeeRates(filter));
+  ipcMain.handle('feeRate:set', async (_e, input: feeCfgSvc.SetFeeRateInput) => feeCfgSvc.setFeeRate(input));
+  ipcMain.handle('feeRate:delete', async (_e, args: { ids: number[]; password: string }) => feeCfgSvc.deleteFeeRates(args.ids, args.password));
 
   // ── E4 Thùng rác ──
   ipcMain.handle('trash:list', async () => trashSvc.listTrash());

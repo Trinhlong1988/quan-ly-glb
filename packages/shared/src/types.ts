@@ -105,6 +105,12 @@ export type AuditAction =
   | 'POS_INTAKE_CREATED'
   | 'POS_INTAKE_UPDATED'
   | 'POS_INTAKE_DELETED'
+  // ── G-CFG.3 (§C5) — Cấu hình phí ──
+  | 'FEE_TYPE_CREATED'
+  | 'FEE_TYPE_UPDATED'
+  | 'FEE_TYPE_DELETED'
+  | 'FEE_RATE_SET'
+  | 'FEE_RATE_DELETED'
   // Extra (superset of §16 minimum): a mutation refused because the actor lacked the
   // required permission MUST still be logged (R_AUDIT_003).
   | 'PERMISSION_DENIED';

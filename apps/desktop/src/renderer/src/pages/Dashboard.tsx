@@ -13,6 +13,7 @@ import {
   CreditCard,
   Landmark,
   PackagePlus,
+  Percent,
   Trash2
 } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
@@ -28,6 +29,7 @@ import { TidPage } from './TidPage.js';
 import { TrashPage } from './TrashPage.js';
 import { BankConfigPage } from './BankConfigPage.js';
 import { PosSupplyPage } from './PosSupplyPage.js';
+import { FeeConfigPage } from './FeeConfigPage.js';
 
 interface MenuItem {
   key: string;
@@ -52,6 +54,7 @@ const MENU: MenuItem[] = [
   { key: 'tid', label: 'TID', icon: <CreditCard className="h-[18px] w-[18px]" />, perms: ['TID_VIEW'], badge: 'undeliveredTid' },
   { key: 'bankcfg', label: 'Cấu hình ngân hàng', icon: <Landmark className="h-[18px] w-[18px]" />, perms: ['CONFIG_BANK_VIEW'] },
   { key: 'possupply', label: 'Cấu hình máy POS', icon: <PackagePlus className="h-[18px] w-[18px]" />, perms: ['CONFIG_POS_SUPPLY_VIEW'] },
+  { key: 'feecfg', label: 'Cấu hình phí', icon: <Percent className="h-[18px] w-[18px]" />, perms: ['CONFIG_FEE_VIEW'] },
   { key: 'audit', label: 'Nhật ký hệ thống', icon: <ScrollText className="h-[18px] w-[18px]" />, perms: ['AUDIT_LOG_VIEW'] },
   { key: 'trash', label: 'Thùng rác', icon: <Trash2 className="h-[18px] w-[18px]" />, perms: ['TRASH_VIEW'] },
   { key: 'settings', label: 'Cài đặt', icon: <Settings className="h-[18px] w-[18px]" />, perms: ['SYSTEM_SETTING_VIEW'] },
@@ -163,6 +166,7 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
           {activeItem?.key === 'audit' && <AuditPage />}
           {activeItem?.key === 'bankcfg' && <BankConfigPage user={user} />}
           {activeItem?.key === 'possupply' && <PosSupplyPage user={user} />}
+          {activeItem?.key === 'feecfg' && <FeeConfigPage user={user} />}
           {activeItem?.key === 'trash' && <TrashPage user={user} />}
           {activeItem?.key === 'settings' && <SettingsPage user={user} />}
           {activeItem?.key === 'backup' && <BackupPage user={user} />}

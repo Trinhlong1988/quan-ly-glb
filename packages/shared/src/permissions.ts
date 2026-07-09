@@ -44,6 +44,9 @@ export const PERMISSIONS: PermissionDef[] = [
   // ── G-CFG.2 (§C6–C8) — Cấu hình chuỗi cung ứng máy POS ──
   { code: 'CONFIG_POS_SUPPLY_VIEW', name: 'Xem cấu hình cung ứng POS (NCC/chủng loại/nhập kho)', group: 'Cấu hình máy POS' },
   { code: 'CONFIG_POS_SUPPLY_MANAGE', name: 'Quản lý cung ứng POS (NCC/chủng loại/nhập kho)', group: 'Cấu hình máy POS' },
+  // ── G-CFG.3 (§C5) — Cấu hình phí ──
+  { code: 'CONFIG_FEE_VIEW', name: 'Xem cấu hình phí (loại phí/biểu phí)', group: 'Cấu hình phí' },
+  { code: 'CONFIG_FEE_MANAGE', name: 'Quản lý cấu hình phí (loại phí/biểu phí)', group: 'Cấu hình phí' },
   // ── Thùng rác (R_TRASH_RESTORE) — chỉ ADMIN ──
   { code: 'TRASH_VIEW', name: 'Xem thùng rác', group: 'Thùng rác' },
   { code: 'TRASH_RESTORE', name: 'Phục hồi dữ liệu đã xóa', group: 'Thùng rác' }
@@ -78,10 +81,13 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'CONFIG_BANK_MANAGE',
     // G-CFG.2: managers cấu hình cung ứng POS.
     'CONFIG_POS_SUPPLY_VIEW',
-    'CONFIG_POS_SUPPLY_MANAGE'
+    'CONFIG_POS_SUPPLY_MANAGE',
+    // G-CFG.3: managers cấu hình phí.
+    'CONFIG_FEE_VIEW',
+    'CONFIG_FEE_MANAGE'
   ],
   D_MANAGER: ['DASHBOARD_VIEW', 'USER_READ', 'ROLE_READ', 'CUSTOMER_VIEW', 'POS_VIEW', 'TID_VIEW', 'CONFIG_BANK_VIEW'],
-  ACCOUNTANT: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW', 'CONFIG_BANK_VIEW'],
+  ACCOUNTANT: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW', 'CONFIG_BANK_VIEW', 'CONFIG_FEE_VIEW', 'CONFIG_FEE_MANAGE'],
   TECHNICIAN: ['DASHBOARD_VIEW', 'POS_VIEW'],
   SUPPORT: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW'],
   WAREHOUSE: ['DASHBOARD_VIEW', 'POS_VIEW', 'TID_VIEW', 'CONFIG_POS_SUPPLY_VIEW', 'CONFIG_POS_SUPPLY_MANAGE'],

@@ -97,6 +97,13 @@ app.whenReady().then(async () => {
     app.exit(code);
     return;
   }
+  // G-CFG.3 Cấu hình phí self-test: 50 đúng + 50 sai (loại phí + biểu phí % + chênh lệch).
+  if (process.env['GLB_SELFTEST'] === '7') {
+    const { runFeeConfigSelfTest } = await import('./selftest-gcfg3.js');
+    const code = await runFeeConfigSelfTest();
+    app.exit(code);
+    return;
+  }
   // E4 Thùng rác self-test: 50 đúng + 50 sai (soft-delete → trash → restore + link warning).
   if (process.env['GLB_SELFTEST'] === '6') {
     const { runTrashSelfTest } = await import('./selftest-trash.js');

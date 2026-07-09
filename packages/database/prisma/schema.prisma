@@ -406,3 +406,42 @@ model PosIntake {
   @@index([intakeStatusId])
   @@map("pos_intakes")
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// G-CFG.3 — Cấu hình phí (§C5): Loại phí (C5a) + Biểu phí % theo Đối tác×Loại thẻ (C5b)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Loại phí bán (§C5a) — danh mục: Ủy quyền, Tiền chờ, Tiền Nhanh…
+model FeeType {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
+  createdBy Int?      @map("created_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedBy Int?      @map("updated_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("fee_types")
+}
+
+// Biểu phí % (§C5b) — 1 dòng = 1 tổ hợp Đối tác × Loại thẻ (loại thẻ đã gắn Ngân hàng ở C3).
+// Mỗi loại thẻ (Visa/Master/Napas…) của 1 đối tác có biểu phí riêng. Set lại = cập nhật (upsert).
+// Phí lưu Int = phần trăm × 1000 (tối đa 3 số thập phân, chính xác tuyệt đối — không dùng float).
+// Chênh lệch NCC/KH là cột TÍNH (không lưu): CL_NCC = phiMua−phiCaiMay, CL_KH = phiBan−phiCaiMay.
+model FeeRate {
+  id         Int       @id @default(autoincrement())
+  partnerId  Int       @map("partner_id")
+  cardTypeId Int       @map("card_type_id")
+  phiMua     Int       @map("phi_mua") // ×1000
+  phiCaiMay  Int       @map("phi_cai_may") // ×1000
+  phiBan     Int       @map("phi_ban") // ×1000
+  createdBy  Int?      @map("created_by")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedBy  Int?      @map("updated_by")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+  deletedAt  DateTime? @map("deleted_at")
+
+  @@index([partnerId])
+  @@index([cardTypeId])
+  @@map("fee_rates")
+}
