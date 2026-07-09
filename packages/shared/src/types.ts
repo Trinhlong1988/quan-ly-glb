@@ -92,6 +92,19 @@ export type AuditAction =
   | 'PARTNER_DELETED'
   | 'PARTNER_BANK_LINKED'
   | 'PARTNER_BANK_UNLINKED'
+  // ── G-CFG.2 (§C6–C8) — Cấu hình cung ứng POS ──
+  | 'SUPPLIER_CREATED'
+  | 'SUPPLIER_UPDATED'
+  | 'SUPPLIER_DELETED'
+  | 'POS_MODEL_CREATED'
+  | 'POS_MODEL_UPDATED'
+  | 'POS_MODEL_DELETED'
+  | 'INTAKE_STATUS_CREATED'
+  | 'INTAKE_STATUS_UPDATED'
+  | 'INTAKE_STATUS_DELETED'
+  | 'POS_INTAKE_CREATED'
+  | 'POS_INTAKE_UPDATED'
+  | 'POS_INTAKE_DELETED'
   // Extra (superset of §16 minimum): a mutation refused because the actor lacked the
   // required permission MUST still be logged (R_AUDIT_003).
   | 'PERMISSION_DENIED';

@@ -90,6 +90,13 @@ app.whenReady().then(async () => {
     app.exit(code);
     return;
   }
+  // G-CFG.2 Cấu hình cung ứng POS self-test: 50 đúng + 50 sai (NCC/chủng loại/nhập kho).
+  if (process.env['GLB_SELFTEST'] === '5') {
+    const { runPosSupplySelfTest } = await import('./selftest-gcfg2.js');
+    const code = await runPosSupplySelfTest();
+    app.exit(code);
+    return;
+  }
   // E4 Thùng rác self-test: 50 đúng + 50 sai (soft-delete → trash → restore + link warning).
   if (process.env['GLB_SELFTEST'] === '6') {
     const { runTrashSelfTest } = await import('./selftest-trash.js');

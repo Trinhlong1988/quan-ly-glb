@@ -7,18 +7,31 @@ import { requirePermission } from './guard.js';
 import { writeAudit } from './audit.js';
 
 /** Các thực thể có soft-delete → vào thùng rác. */
-export type TrashEntity = 'Customer' | 'Agent' | 'Bank' | 'CardType' | 'Partner';
+export type TrashEntity =
+  | 'Customer'
+  | 'Agent'
+  | 'Bank'
+  | 'CardType'
+  | 'Partner'
+  | 'Supplier'
+  | 'PosModel'
+  | 'PosIntakeStatus'
+  | 'PosIntake';
 
 const LABEL: Record<TrashEntity, string> = {
   Customer: 'Khách hàng',
   Agent: 'Đại lý',
   Bank: 'Ngân hàng',
   CardType: 'Loại thẻ',
-  Partner: 'Đối tác'
+  Partner: 'Đối tác',
+  Supplier: 'Nhà cung cấp',
+  PosModel: 'Chủng loại máy POS',
+  PosIntakeStatus: 'Trạng thái nhập máy',
+  PosIntake: 'Máy POS nhập kho'
 };
 
 export function isTrashEntity(v: string): v is TrashEntity {
-  return v === 'Customer' || v === 'Agent' || v === 'Bank' || v === 'CardType' || v === 'Partner';
+  return v in LABEL;
 }
 
 export interface TrashRow {
@@ -48,19 +61,27 @@ export async function listTrash(): Promise<{ ok: boolean; data?: TrashRow[]; err
   if (!g.ok) return g;
   const db = g.db;
   const del = { deletedAt: { not: null } } as const;
-  const [customers, agents, banks, cardTypes, partners] = await Promise.all([
+  const [customers, agents, banks, cardTypes, partners, suppliers, posModels, intakeStatuses, posIntakes] = await Promise.all([
     db.customer.findMany({ where: del }),
     db.agent.findMany({ where: del }),
     db.bank.findMany({ where: del }),
     db.cardType.findMany({ where: del }),
-    db.partner.findMany({ where: del })
+    db.partner.findMany({ where: del }),
+    db.supplier.findMany({ where: del }),
+    db.posModel.findMany({ where: del }),
+    db.posIntakeStatus.findMany({ where: del }),
+    db.posIntake.findMany({ where: del })
   ]);
   const rows: TrashRow[] = [
     ...customers.map((c) => row('Customer', c.id, c.code, `${c.nickname} (${c.fullName})`, c.deletedAt)),
     ...agents.map((a) => row('Agent', a.id, a.code, a.name, a.deletedAt)),
     ...banks.map((b) => row('Bank', b.id, b.code, b.name, b.deletedAt)),
     ...cardTypes.map((ct) => row('CardType', ct.id, ct.code, ct.name, ct.deletedAt)),
-    ...partners.map((p) => row('Partner', p.id, p.code, p.name, p.deletedAt))
+    ...partners.map((p) => row('Partner', p.id, p.code, p.name, p.deletedAt)),
+    ...suppliers.map((s) => row('Supplier', s.id, s.code, s.name, s.deletedAt)),
+    ...posModels.map((m) => row('PosModel', m.id, m.code, m.name, m.deletedAt)),
+    ...intakeStatuses.map((st) => row('PosIntakeStatus', st.id, null, st.name, st.deletedAt)),
+    ...posIntakes.map((pi) => row('PosIntake', pi.id, pi.serial, pi.serial, pi.deletedAt))
   ].sort((x, y) => (x.deletedAt < y.deletedAt ? 1 : -1));
   return { ok: true, data: rows };
 }
@@ -140,6 +161,10 @@ async function findOne(entityType: TrashEntity, id: number): Promise<{ deletedAt
     case 'Bank': return db.bank.findUnique({ where: { id }, select: { deletedAt: true } });
     case 'CardType': return db.cardType.findUnique({ where: { id }, select: { deletedAt: true } });
     case 'Partner': return db.partner.findUnique({ where: { id }, select: { deletedAt: true } });
+    case 'Supplier': return db.supplier.findUnique({ where: { id }, select: { deletedAt: true } });
+    case 'PosModel': return db.posModel.findUnique({ where: { id }, select: { deletedAt: true } });
+    case 'PosIntakeStatus': return db.posIntakeStatus.findUnique({ where: { id }, select: { deletedAt: true } });
+    case 'PosIntake': return db.posIntake.findUnique({ where: { id }, select: { deletedAt: true } });
   }
 }
 
@@ -152,5 +177,9 @@ async function clearDeleted(entityType: TrashEntity, id: number): Promise<void> 
     case 'Bank': await db.bank.update({ where: { id }, data }); return;
     case 'CardType': await db.cardType.update({ where: { id }, data }); return;
     case 'Partner': await db.partner.update({ where: { id }, data }); return;
+    case 'Supplier': await db.supplier.update({ where: { id }, data }); return;
+    case 'PosModel': await db.posModel.update({ where: { id }, data }); return;
+    case 'PosIntakeStatus': await db.posIntakeStatus.update({ where: { id }, data }); return;
+    case 'PosIntake': await db.posIntake.update({ where: { id }, data }); return;
   }
 }

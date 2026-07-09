@@ -331,6 +331,109 @@ export interface PartnerBankMatrix {
 export interface BulkDeleteOutcome extends MutationOutcome {
   deleted?: number;
 }
+
+// ── G-CFG.2 DTOs (Cấu hình cung ứng POS §C6–C8) ──
+export interface SupplierDto extends AuditTrail {
+  id: number;
+  name: string;
+  code: string;
+  address: string | null;
+  phone: string | null;
+  contactPerson: string | null;
+}
+export interface SupplierFilter {
+  search?: string;
+  fromDate?: string;
+  toDate?: string;
+}
+export interface CreateSupplierInput {
+  name: string;
+  code: string;
+  address?: string | null;
+  phone?: string | null;
+  contactPerson?: string | null;
+}
+export interface UpdateSupplierInput {
+  name?: string;
+  code?: string;
+  address?: string | null;
+  phone?: string | null;
+  contactPerson?: string | null;
+}
+export interface PosModelDto extends AuditTrail {
+  id: number;
+  code: string;
+  name: string;
+}
+export interface PosModelFilter {
+  search?: string;
+  fromDate?: string;
+  toDate?: string;
+}
+export interface CreatePosModelInput {
+  code: string;
+  name: string;
+}
+export interface UpdatePosModelInput {
+  code?: string;
+  name?: string;
+}
+export interface IntakeStatusDto extends AuditTrail {
+  id: number;
+  name: string;
+}
+export interface CreateIntakeStatusInput {
+  name: string;
+}
+export interface UpdateIntakeStatusInput {
+  name?: string;
+}
+export interface PosIntakeDto extends AuditTrail {
+  id: number;
+  posModelId: number;
+  posModelCode: string | null;
+  posModelName: string | null;
+  serial: string;
+  intakeStatusId: number;
+  intakeStatusName: string | null;
+  supplierId: number;
+  supplierCode: string | null;
+  supplierName: string | null;
+  importPrice: number;
+  importedAt: string;
+  note: string | null;
+}
+export interface PosIntakeFilter {
+  search?: string;
+  posModelId?: number;
+  supplierId?: number;
+  intakeStatusId?: number;
+  fromDate?: string;
+  toDate?: string;
+}
+export interface CreatePosIntakeInput {
+  posModelId: number;
+  serial: string;
+  intakeStatusId: number;
+  supplierId: number;
+  importPrice: number;
+  importedAt: string;
+  note?: string | null;
+}
+export interface UpdatePosIntakeInput {
+  posModelId?: number;
+  serial?: string;
+  intakeStatusId?: number;
+  supplierId?: number;
+  importPrice?: number;
+  importedAt?: string;
+  note?: string | null;
+}
+export interface LiteRef {
+  id: number;
+  code: string;
+  name: string;
+}
 export interface LinkOutcome extends MutationOutcome {
   linked?: number;
   unlinked?: number;
@@ -459,6 +562,29 @@ export interface GlbApi {
   partnerDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
   partnerBankMatrix(): Promise<{ ok: boolean; data?: PartnerBankMatrix; error?: string; message?: string }>;
   partnerBankSet(partnerId: number, bankIds: number[]): Promise<LinkOutcome>;
+
+  // ── Cấu hình cung ứng POS (G-CFG.2 §C6–C8) ──
+  supplierList(filter: SupplierFilter): Promise<ListResult<SupplierDto>>;
+  supplierLite(): Promise<ListResult<LiteRef>>;
+  supplierCreate(input: CreateSupplierInput): Promise<MutationOutcome>;
+  supplierUpdate(id: number, input: UpdateSupplierInput): Promise<MutationOutcome>;
+  supplierDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
+
+  posModelList(filter: PosModelFilter): Promise<ListResult<PosModelDto>>;
+  posModelLite(): Promise<ListResult<LiteRef>>;
+  posModelCreate(input: CreatePosModelInput): Promise<MutationOutcome>;
+  posModelUpdate(id: number, input: UpdatePosModelInput): Promise<MutationOutcome>;
+  posModelDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
+
+  intakeStatusList(): Promise<ListResult<IntakeStatusDto>>;
+  intakeStatusCreate(input: CreateIntakeStatusInput): Promise<MutationOutcome>;
+  intakeStatusUpdate(id: number, input: UpdateIntakeStatusInput): Promise<MutationOutcome>;
+  intakeStatusDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
+
+  posIntakeList(filter: PosIntakeFilter): Promise<ListResult<PosIntakeDto>>;
+  posIntakeCreate(input: CreatePosIntakeInput): Promise<MutationOutcome>;
+  posIntakeUpdate(id: number, input: UpdatePosIntakeInput): Promise<MutationOutcome>;
+  posIntakeDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
 
   // Thùng rác (E4)
   trashList(): Promise<{ ok: boolean; data?: TrashRow[]; error?: string; message?: string }>;

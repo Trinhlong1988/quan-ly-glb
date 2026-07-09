@@ -333,3 +333,76 @@ model PartnerBank {
   @@index([bankId])
   @@map("partner_banks")
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// G-CFG.2 — Chuỗi cung ứng máy POS (§C6 NCC · §C7 Chủng loại · §C8 Nhập kho)
+// Mọi cột @unique trên bảng có deletedAt → service xử lý va chạm với bản đã xóa
+// mềm (DUPLICATE_TRASH) + lưới P2002 (bài học B05/G-CFG-B01).
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Nhà cung cấp máy POS (§C6).
+model Supplier {
+  id            Int       @id @default(autoincrement())
+  name          String
+  code          String    @unique
+  address       String?
+  phone         String?
+  contactPerson String?   @map("contact_person")
+  createdBy     Int?      @map("created_by")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedBy     Int?      @map("updated_by")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+
+  @@map("suppliers")
+}
+
+// Chủng loại máy POS (§C7) — Mã máy + Tên máy.
+model PosModel {
+  id        Int       @id @default(autoincrement())
+  code      String    @unique // mã máy POS
+  name      String // tên máy POS
+  createdBy Int?      @map("created_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedBy Int?      @map("updated_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("pos_models")
+}
+
+// Trạng thái nhập máy (§C8a) — ví dụ: Máy mới, máy cũ, Máy đổi, Máy thuê.
+model PosIntakeStatus {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
+  createdBy Int?      @map("created_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedBy Int?      @map("updated_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("pos_intake_statuses")
+}
+
+// Nhập kho máy POS (§C8b) — 1 bản ghi = 1 máy nhập kho công ty. Link scalar tới
+// chủng loại / trạng thái / NCC (join ở service, resilient soft-delete).
+model PosIntake {
+  id             Int       @id @default(autoincrement())
+  posModelId     Int       @map("pos_model_id")
+  serial         String    @unique // Seri number — chữ+số, không giới hạn
+  intakeStatusId Int       @map("intake_status_id")
+  supplierId     Int       @map("supplier_id")
+  importPrice    Int       @map("import_price") // giá nhập (VND, số nguyên đồng)
+  importedAt     DateTime  @map("imported_at") // ngày nhập
+  note           String?
+  createdBy      Int?      @map("created_by")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedBy      Int?      @map("updated_by")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
+
+  @@index([posModelId])
+  @@index([supplierId])
+  @@index([intakeStatusId])
+  @@map("pos_intakes")
+}

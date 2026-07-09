@@ -96,6 +96,29 @@ const api = {
   partnerBankMatrix: () => ipcRenderer.invoke('partnerBank:matrix'),
   partnerBankSet: (partnerId: number, bankIds: number[]) => ipcRenderer.invoke('partnerBank:set', { partnerId, bankIds }),
 
+  // Cấu hình cung ứng POS (G-CFG.2 §C6–C8)
+  supplierList: (filter: unknown) => ipcRenderer.invoke('supplier:list', filter),
+  supplierLite: () => ipcRenderer.invoke('supplier:lite'),
+  supplierCreate: (input: unknown) => ipcRenderer.invoke('supplier:create', input),
+  supplierUpdate: (id: number, input: unknown) => ipcRenderer.invoke('supplier:update', { id, input }),
+  supplierDelete: (ids: number[], password: string) => ipcRenderer.invoke('supplier:delete', { ids, password }),
+
+  posModelList: (filter: unknown) => ipcRenderer.invoke('posModel:list', filter),
+  posModelLite: () => ipcRenderer.invoke('posModel:lite'),
+  posModelCreate: (input: unknown) => ipcRenderer.invoke('posModel:create', input),
+  posModelUpdate: (id: number, input: unknown) => ipcRenderer.invoke('posModel:update', { id, input }),
+  posModelDelete: (ids: number[], password: string) => ipcRenderer.invoke('posModel:delete', { ids, password }),
+
+  intakeStatusList: () => ipcRenderer.invoke('intakeStatus:list'),
+  intakeStatusCreate: (input: unknown) => ipcRenderer.invoke('intakeStatus:create', input),
+  intakeStatusUpdate: (id: number, input: unknown) => ipcRenderer.invoke('intakeStatus:update', { id, input }),
+  intakeStatusDelete: (ids: number[], password: string) => ipcRenderer.invoke('intakeStatus:delete', { ids, password }),
+
+  posIntakeList: (filter: unknown) => ipcRenderer.invoke('posIntake:list', filter),
+  posIntakeCreate: (input: unknown) => ipcRenderer.invoke('posIntake:create', input),
+  posIntakeUpdate: (id: number, input: unknown) => ipcRenderer.invoke('posIntake:update', { id, input }),
+  posIntakeDelete: (ids: number[], password: string) => ipcRenderer.invoke('posIntake:delete', { ids, password }),
+
   // Thùng rác (E4)
   trashList: () => ipcRenderer.invoke('trash:list'),
   trashRestore: (entityType: string, id: number) => ipcRenderer.invoke('trash:restore', { entityType, id }),

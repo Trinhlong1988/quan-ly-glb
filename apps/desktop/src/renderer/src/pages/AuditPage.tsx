@@ -15,7 +15,11 @@ const ACTIONS = [
   'BANK_CREATED', 'BANK_UPDATED', 'BANK_DELETED',
   'CARD_TYPE_CREATED', 'CARD_TYPE_UPDATED', 'CARD_TYPE_DELETED',
   'PARTNER_CREATED', 'PARTNER_UPDATED', 'PARTNER_DELETED',
-  'PARTNER_BANK_LINKED', 'PARTNER_BANK_UNLINKED'
+  'PARTNER_BANK_LINKED', 'PARTNER_BANK_UNLINKED',
+  'SUPPLIER_CREATED', 'SUPPLIER_UPDATED', 'SUPPLIER_DELETED',
+  'POS_MODEL_CREATED', 'POS_MODEL_UPDATED', 'POS_MODEL_DELETED',
+  'INTAKE_STATUS_CREATED', 'INTAKE_STATUS_UPDATED', 'INTAKE_STATUS_DELETED',
+  'POS_INTAKE_CREATED', 'POS_INTAKE_UPDATED', 'POS_INTAKE_DELETED'
 ];
 
 /** Nhãn tiếng Việt cho mã hành động (nhật ký 100% tiếng Việt). */
@@ -28,14 +32,19 @@ const ACTION_LABEL: Record<string, string> = {
   BANK_CREATED: 'Tạo ngân hàng', BANK_UPDATED: 'Sửa ngân hàng', BANK_DELETED: 'Xóa ngân hàng',
   CARD_TYPE_CREATED: 'Tạo loại thẻ', CARD_TYPE_UPDATED: 'Sửa loại thẻ', CARD_TYPE_DELETED: 'Xóa loại thẻ',
   PARTNER_CREATED: 'Tạo đối tác', PARTNER_UPDATED: 'Sửa đối tác', PARTNER_DELETED: 'Xóa đối tác',
-  PARTNER_BANK_LINKED: 'Liên kết đối tác ↔ ngân hàng', PARTNER_BANK_UNLINKED: 'Hủy liên kết đối tác ↔ ngân hàng'
+  PARTNER_BANK_LINKED: 'Liên kết đối tác ↔ ngân hàng', PARTNER_BANK_UNLINKED: 'Hủy liên kết đối tác ↔ ngân hàng',
+  SUPPLIER_CREATED: 'Tạo nhà cung cấp', SUPPLIER_UPDATED: 'Sửa nhà cung cấp', SUPPLIER_DELETED: 'Xóa nhà cung cấp',
+  POS_MODEL_CREATED: 'Tạo chủng loại POS', POS_MODEL_UPDATED: 'Sửa chủng loại POS', POS_MODEL_DELETED: 'Xóa chủng loại POS',
+  INTAKE_STATUS_CREATED: 'Tạo trạng thái nhập máy', INTAKE_STATUS_UPDATED: 'Sửa trạng thái nhập máy', INTAKE_STATUS_DELETED: 'Xóa trạng thái nhập máy',
+  POS_INTAKE_CREATED: 'Nhập kho máy POS', POS_INTAKE_UPDATED: 'Sửa máy POS nhập kho', POS_INTAKE_DELETED: 'Xóa máy POS nhập kho'
 };
 const actionLabel = (a: string): string => ACTION_LABEL[a] ?? a;
 
 /** Nhãn tiếng Việt cho loại đối tượng bị tác động. */
 const TARGET_LABEL: Record<string, string> = {
   User: 'Nhân sự', Role: 'Vai trò', Customer: 'Khách hàng', PosDevice: 'Máy POS', Tid: 'TID',
-  Backup: 'Sao lưu', AppSetting: 'Cấu hình', Bank: 'Ngân hàng', CardType: 'Loại thẻ', Partner: 'Đối tác'
+  Backup: 'Sao lưu', AppSetting: 'Cấu hình', Bank: 'Ngân hàng', CardType: 'Loại thẻ', Partner: 'Đối tác',
+  Supplier: 'Nhà cung cấp', PosModel: 'Chủng loại máy POS', PosIntakeStatus: 'Trạng thái nhập máy', PosIntake: 'Máy POS nhập kho'
 };
 const targetLabel = (t: string): string => TARGET_LABEL[t] ?? t;
 

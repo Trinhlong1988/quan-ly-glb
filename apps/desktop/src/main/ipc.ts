@@ -12,6 +12,7 @@ import * as posSvc from './pos-service.js';
 import * as tidSvc from './tid-service.js';
 import * as notifySvc from './notification-service.js';
 import * as bankCfgSvc from './bank-config-service.js';
+import * as posSupplySvc from './pos-supply-service.js';
 import * as trashSvc from './trash-service.js';
 import { getRemembered, saveRemembered, clearRemembered } from './remember.js';
 
@@ -141,6 +142,29 @@ export function registerIpc(): void {
   ipcMain.handle('partner:delete', async (_e, args: { ids: number[]; password: string }) => bankCfgSvc.deletePartners(args.ids, args.password));
   ipcMain.handle('partnerBank:matrix', async () => bankCfgSvc.getPartnerBankMatrix());
   ipcMain.handle('partnerBank:set', async (_e, args: { partnerId: number; bankIds: number[] }) => bankCfgSvc.setPartnerBanks(args.partnerId, args.bankIds));
+
+  // ── G-CFG.2 Cấu hình cung ứng POS (§C6–C8) ──
+  ipcMain.handle('supplier:list', async (_e, filter: posSupplySvc.SupplierFilter) => posSupplySvc.listSuppliers(filter));
+  ipcMain.handle('supplier:lite', async () => posSupplySvc.listSuppliersLite());
+  ipcMain.handle('supplier:create', async (_e, input: posSupplySvc.CreateSupplierInput) => posSupplySvc.createSupplier(input));
+  ipcMain.handle('supplier:update', async (_e, args: { id: number; input: posSupplySvc.UpdateSupplierInput }) => posSupplySvc.updateSupplier(args.id, args.input));
+  ipcMain.handle('supplier:delete', async (_e, args: { ids: number[]; password: string }) => posSupplySvc.deleteSuppliers(args.ids, args.password));
+
+  ipcMain.handle('posModel:list', async (_e, filter: posSupplySvc.PosModelFilter) => posSupplySvc.listPosModels(filter));
+  ipcMain.handle('posModel:lite', async () => posSupplySvc.listPosModelsLite());
+  ipcMain.handle('posModel:create', async (_e, input: posSupplySvc.CreatePosModelInput) => posSupplySvc.createPosModel(input));
+  ipcMain.handle('posModel:update', async (_e, args: { id: number; input: posSupplySvc.UpdatePosModelInput }) => posSupplySvc.updatePosModel(args.id, args.input));
+  ipcMain.handle('posModel:delete', async (_e, args: { ids: number[]; password: string }) => posSupplySvc.deletePosModels(args.ids, args.password));
+
+  ipcMain.handle('intakeStatus:list', async () => posSupplySvc.listIntakeStatuses());
+  ipcMain.handle('intakeStatus:create', async (_e, input: posSupplySvc.CreateIntakeStatusInput) => posSupplySvc.createIntakeStatus(input));
+  ipcMain.handle('intakeStatus:update', async (_e, args: { id: number; input: posSupplySvc.UpdateIntakeStatusInput }) => posSupplySvc.updateIntakeStatus(args.id, args.input));
+  ipcMain.handle('intakeStatus:delete', async (_e, args: { ids: number[]; password: string }) => posSupplySvc.deleteIntakeStatuses(args.ids, args.password));
+
+  ipcMain.handle('posIntake:list', async (_e, filter: posSupplySvc.PosIntakeFilter) => posSupplySvc.listPosIntakes(filter));
+  ipcMain.handle('posIntake:create', async (_e, input: posSupplySvc.CreatePosIntakeInput) => posSupplySvc.createPosIntake(input));
+  ipcMain.handle('posIntake:update', async (_e, args: { id: number; input: posSupplySvc.UpdatePosIntakeInput }) => posSupplySvc.updatePosIntake(args.id, args.input));
+  ipcMain.handle('posIntake:delete', async (_e, args: { ids: number[]; password: string }) => posSupplySvc.deletePosIntakes(args.ids, args.password));
 
   // ── E4 Thùng rác ──
   ipcMain.handle('trash:list', async () => trashSvc.listTrash());
