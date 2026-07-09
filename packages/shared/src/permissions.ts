@@ -40,7 +40,10 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: 'ASSET_EXPORT', name: 'Xuất dữ liệu tài sản POS/TID', group: 'POS' },
   // ── G-CFG.1 (§C1–C4) — Cấu hình ngân hàng ──
   { code: 'CONFIG_BANK_VIEW', name: 'Xem cấu hình ngân hàng', group: 'Cấu hình ngân hàng' },
-  { code: 'CONFIG_BANK_MANAGE', name: 'Quản lý cấu hình ngân hàng (ngân hàng/loại thẻ/đối tác)', group: 'Cấu hình ngân hàng' }
+  { code: 'CONFIG_BANK_MANAGE', name: 'Quản lý cấu hình ngân hàng (ngân hàng/loại thẻ/đối tác)', group: 'Cấu hình ngân hàng' },
+  // ── Thùng rác (R_TRASH_RESTORE) — chỉ ADMIN ──
+  { code: 'TRASH_VIEW', name: 'Xem thùng rác', group: 'Thùng rác' },
+  { code: 'TRASH_RESTORE', name: 'Phục hồi dữ liệu đã xóa', group: 'Thùng rác' }
 ];
 
 export const PERMISSION_CODES = PERMISSIONS.map((p) => p.code);

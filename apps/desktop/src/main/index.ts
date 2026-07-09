@@ -46,7 +46,7 @@ app.whenReady().then(async () => {
   // Harness guard (B04): self-test 2/3 mutate the DB. Nếu KHÔNG chỉ định GLB_DB_URL riêng thì
   // chúng sẽ ghi vào dev.db và làm nhiễm dữ liệu (chạy lần 2 hỏng). Bắt buộc chạy trên DB throwaway.
   const st = process.env['GLB_SELFTEST'];
-  if ((st === '2' || st === '3') && !process.env['GLB_DB_URL']) {
+  if (st && st !== '1' && !process.env['GLB_DB_URL']) {
     // eslint-disable-next-line no-console
     console.error(
       `SELFTEST${st} ABORT | phải set GLB_DB_URL trỏ tới DB throwaway đã migrate ` +
@@ -80,6 +80,13 @@ app.whenReady().then(async () => {
   if (process.env['GLB_SELFTEST'] === '3') {
     const { runGposSelfTest } = await import('./selftest-gpos.js');
     const code = await runGposSelfTest();
+    app.exit(code);
+    return;
+  }
+  // E4 Thùng rác self-test: 50 đúng + 50 sai (soft-delete → trash → restore + link warning).
+  if (process.env['GLB_SELFTEST'] === '6') {
+    const { runTrashSelfTest } = await import('./selftest-trash.js');
+    const code = await runTrashSelfTest();
     app.exit(code);
     return;
   }
