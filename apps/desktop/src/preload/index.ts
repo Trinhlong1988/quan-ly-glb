@@ -154,6 +154,17 @@ const api = {
   dossierUpdate: (id: number, input: unknown) => ipcRenderer.invoke('dossier:update', { id, input }),
   dossierDelete: (ids: number[], password: string) => ipcRenderer.invoke('dossier:delete', { ids, password }),
 
+  // Cấu hình TID (G-CFG.6 §9)
+  tidStatusList: () => ipcRenderer.invoke('tidStatus:list'),
+  tidStatusCreate: (input: unknown) => ipcRenderer.invoke('tidStatus:create', input),
+  tidStatusUpdate: (id: number, input: unknown) => ipcRenderer.invoke('tidStatus:update', { id, input }),
+  tidStatusDelete: (ids: number[], password: string) => ipcRenderer.invoke('tidStatus:delete', { ids, password }),
+
+  tidConfigList: (filter: unknown) => ipcRenderer.invoke('tidConfig:list', filter),
+  tidConfigCreate: (input: unknown) => ipcRenderer.invoke('tidConfig:create', input),
+  tidConfigUpdate: (id: number, input: unknown) => ipcRenderer.invoke('tidConfig:update', { id, input }),
+  tidConfigDelete: (ids: number[], password: string) => ipcRenderer.invoke('tidConfig:delete', { ids, password }),
+
   // Thùng rác (E4)
   trashList: () => ipcRenderer.invoke('trash:list'),
   trashRestore: (entityType: string, id: number) => ipcRenderer.invoke('trash:restore', { entityType, id }),

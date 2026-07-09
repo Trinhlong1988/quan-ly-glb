@@ -16,6 +16,7 @@ import * as posSupplySvc from './pos-supply-service.js';
 import * as feeCfgSvc from './fee-config-service.js';
 import * as rcvAcctSvc from './receive-account-service.js';
 import * as dossierSvc from './dossier-service.js';
+import * as tidCfgSvc from './tid-config-service.js';
 import { readAttachmentDataUrl } from './file-store.js';
 import * as trashSvc from './trash-service.js';
 import { getRemembered, saveRemembered, clearRemembered } from './remember.js';
@@ -212,6 +213,17 @@ export function registerIpc(): void {
   ipcMain.handle('dossier:create', async (_e, input: dossierSvc.DossierInput) => dossierSvc.createDossier(input));
   ipcMain.handle('dossier:update', async (_e, args: { id: number; input: dossierSvc.DossierInput }) => dossierSvc.updateDossier(args.id, args.input));
   ipcMain.handle('dossier:delete', async (_e, args: { ids: number[]; password: string }) => dossierSvc.deleteDossiers(args.ids, args.password));
+
+  // ── G-CFG.6 (§9) Cấu hình TID ──
+  ipcMain.handle('tidStatus:list', async () => tidCfgSvc.listStatuses());
+  ipcMain.handle('tidStatus:create', async (_e, input: tidCfgSvc.CreateTidConfigStatusInput) => tidCfgSvc.createStatus(input));
+  ipcMain.handle('tidStatus:update', async (_e, args: { id: number; input: tidCfgSvc.UpdateTidConfigStatusInput }) => tidCfgSvc.updateStatus(args.id, args.input));
+  ipcMain.handle('tidStatus:delete', async (_e, args: { ids: number[]; password: string }) => tidCfgSvc.deleteStatuses(args.ids, args.password));
+
+  ipcMain.handle('tidConfig:list', async (_e, filter: tidCfgSvc.ConfigTidFilter) => tidCfgSvc.listConfigTids(filter));
+  ipcMain.handle('tidConfig:create', async (_e, input: tidCfgSvc.ConfigTidInput) => tidCfgSvc.createConfigTid(input));
+  ipcMain.handle('tidConfig:update', async (_e, args: { id: number; input: tidCfgSvc.ConfigTidInput }) => tidCfgSvc.updateConfigTid(args.id, args.input));
+  ipcMain.handle('tidConfig:delete', async (_e, args: { ids: number[]; password: string }) => tidCfgSvc.deleteConfigTids(args.ids, args.password));
 
   // ── E4 Thùng rác ──
   ipcMain.handle('trash:list', async () => trashSvc.listTrash());

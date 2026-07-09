@@ -116,6 +116,12 @@ app.whenReady().then(async () => {
     app.exit(code);
     return;
   }
+  if (process.env['GLB_SELFTEST'] === '10') {
+    const { runTidConfigSelfTest } = await import('./selftest-gcfg6.js');
+    const code = await runTidConfigSelfTest();
+    app.exit(code);
+    return;
+  }
   // E4 Thùng rác self-test: 50 đúng + 50 sai (soft-delete → trash → restore + link warning).
   if (process.env['GLB_SELFTEST'] === '6') {
     const { runTrashSelfTest } = await import('./selftest-trash.js');

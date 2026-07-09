@@ -1,12 +1,12 @@
 ---
 project: Quản Lý GLB (IMS)
-phase: G-CFG.5
-current_version: 0.8.0-gcfg5
+phase: G-CFG.6
+current_version: 0.9.0-gcfg6
 status: BUILDING (Engineering, chưa Production Validated)
 last_update_ts: 2026-07-09
 last_update_by: CMD_BUILD (Claude)
 rule_break_count: 0
-schema_version: 8
+schema_version: 9
 ---
 
 # VERSION — Quản Lý GLB
@@ -18,6 +18,17 @@ schema_version: 8
 4. Đọc `bible/00_constitution.md`.
 
 ## Nhật ký phiên bản
+### 0.9.0-gcfg6 — 2026-07-09 (CMD_BUILD) — HOÀN TẤT MODULE §C CẤU HÌNH
+- **G-CFG.6 Cấu hình TID (§C mục 9)**: §9a trạng thái TID (bảng cấu hình riêng) + §9 thêm/sửa TID kèm thông tin thương mại (ngân hàng · đối tác + **biểu phí dẫn xuất realtime** · chuỗi TID · tên HKD · TK nhận tiền §8 · ngày cấp · trạng thái §9a · nguồn hồ sơ §10a).
+- **QUYẾT ĐỊNH kiến trúc (Mr.Long chốt "Cách 1")**: GỘP thông tin thương mại §9 **vào chính bảng `tids`** (G-POS.1), KHÔNG tạo bảng riêng — 1 khái niệm TID duy nhất: cấu hình §9 → gắn POS §11 → vận hành cùng 1 record.
+- **Schema v9**: migration `20260709190000_gcfg6_tid_config` — ALTER `tids` thêm cột nullable (bank_id/partner_id/hkd_name/receive_account_id/issued_at/config_status_id/dossier_source_id/note/created_by/updated_by/**deleted_at**) + bảng mới `tid_config_statuses` (name @unique). **Additive only** — hàng TID cũ (event-sourced) không ảnh hưởng. `tids` giờ soft-deletable (§9b xóa→thùng rác→phục hồi). B05 áp cho tid @unique + tid_config_statuses.name @unique.
+- **2 permission** CONFIG_TID_VIEW/MANAGE (gán ADMIN/MANAGER/WAREHOUSE). 6 AuditAction mới (TID_CONFIG_STATUS_*/TID_CONFIG_*).
+- **Backend** `tid-config-service.ts`: CRUD trạng thái (B05) + CRUD cấu hình TID (thao tác trên `tids`, ngân hàng+đối tác bắt buộc, TK nhận/trạng thái/nguồn hồ sơ validate-nếu-có, tid @unique + DUPLICATE_TRASH) + soft-delete. **Biểu phí = DẪN XUẤT** từ partnerId (không lưu trùng — form gọi `feeRateList{partnerId,bankId}`). `tid-service.listTids` thêm lọc `deletedAt:null` (an toàn, hàng cũ không đổi).
+- **UI** `TidConfigPage.tsx` (2 tab) — form chọn ngân hàng+đối tác → **hiện bảng biểu phí realtime** (mua/cài máy/bán theo loại thẻ) → TID/HKD/TK nhận/ngày cấp/trạng thái/nguồn hồ sơ. Multi-select + Xuất Excel + lọc theo đối tác. Menu "Cấu hình TID". AuditPage + Thùng rác mở rộng Tid/TidConfigStatus.
+- **Regression fix**: selftest thùng rác (=6) có assertion cũ `linkSummary("Tid")→BAD_ENTITY` (giả định TID không xóa mềm). Nay TID soft-deletable → cập nhật test dùng entity khác ('Setting'/'AuditLog'). Test đã làm đúng việc bắt thay đổi tiền đề.
+- Bằng chứng: **Vitest 178/178** · typecheck node+web 0 · build 0 · **GLB_SELFTEST=10 108/108 PASS exit 0** (52 đúng + 56 sai, R_LINK_VERIFY) · regression **=3 G-POS 0-fail** (tid-service edit an toàn) · **=6 Thùng rác 106/106** (sau fix) · **=8 113/113 · =9 115/115** (schema v9 additive OK).
+- **✅ MODULE §C CẤU HÌNH HOÀN TẤT (Engineering)**: §5 phí · §6-8 NCC/POS/nhập kho · §8 TK nhận tiền · §9 TID · §10 Hồ sơ + C1-C4 ngân hàng. **CHƯA**: nghiệm thu UI thật (LEAD) · §11 Quản lý chi tiết TID/POS (gắn TID↔POS — module VẬN HÀNH kế tiếp, ngoài §C). Status L1 Engineering PASS (R196).
+
 ### 0.8.0-gcfg5 — 2026-07-09 (CMD_BUILD)
 - **G-CFG.5 Quản lý Hồ sơ HKD (§C mục 10)**: Nguồn hồ sơ (§10a/b: mã @unique + chính sách chiết khấu %) + Hồ sơ HKD (§10c/d: đủ trường HKD/chủ hộ/CCCD) kèm **đính kèm ảnh ĐKKD 2 mặt + CCCD 2 mặt** (PNG/JPG/PDF, mặt sau KHÔNG bắt buộc).
 - **Làm TRƯỚC §9** (Cấu hình TID) theo thứ tự phụ thuộc: §9 "Thêm TID" lấy "nguồn hồ sơ" từ §10a → build §9 trước sẽ nợ tham chiếu. Topological order: §8 (done) → §10 → §9.

@@ -98,13 +98,14 @@ export async function runTrashSelfTest(): Promise<number> {
     ok(`SAI phục hồi khách chưa xóa ${customers[i]} → NOT_DELETED`, r.ok === false && r.error === 'NOT_DELETED', r.error);
   }
   // (C) loại thực thể không hợp lệ → BAD_ENTITY (10)
-  const badTypes = ['PosDevice', 'Tid', 'User', 'Role', 'Invoice', 'Xyz', '', 'customer', 'BANK', 'agent'];
+  // Lưu ý: 'Tid' đã trở thành thực thể thùng rác từ G-CFG.6 (§9 xóa mềm cấu hình TID) → dùng 'Setting'/'AuditLog' thay thế.
+  const badTypes = ['PosDevice', 'Setting', 'User', 'Role', 'Invoice', 'Xyz', '', 'customer', 'BANK', 'agent'];
   for (const t of badTypes) {
     const r = await trash.restoreItem(t, 1);
     ok(`SAI restore loại "${t}" → BAD_ENTITY hoặc bị chặn`, r.ok === false, r.error);
   }
   // (D) linkSummary loại không hợp lệ → BAD_ENTITY (5)
-  for (const t of ['PosDevice', 'Tid', 'Foo', 'User', '']) {
+  for (const t of ['PosDevice', 'AuditLog', 'Foo', 'User', '']) {
     const r = await trash.linkSummary(t, 1);
     ok(`SAI linkSummary loại "${t}" → BAD_ENTITY`, r.ok === false && r.error === 'BAD_ENTITY', r.error);
   }

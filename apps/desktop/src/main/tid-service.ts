@@ -77,6 +77,7 @@ export async function listTids(filter: TidFilter = {}): Promise<{ ok: boolean; d
   if (!g.ok) return g;
   const rows = await g.db.tid.findMany({
     where: {
+      deletedAt: null,
       bank: filter.bank || undefined,
       status: filter.status || undefined,
       openedAt: dateRange(filter.fromDate, filter.toDate),

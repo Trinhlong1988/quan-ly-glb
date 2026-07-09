@@ -124,6 +124,12 @@ export type AuditAction =
   | 'DOSSIER_CREATED'
   | 'DOSSIER_UPDATED'
   | 'DOSSIER_DELETED'
+  | 'TID_CONFIG_STATUS_CREATED'
+  | 'TID_CONFIG_STATUS_UPDATED'
+  | 'TID_CONFIG_STATUS_DELETED'
+  | 'TID_CONFIG_CREATED'
+  | 'TID_CONFIG_UPDATED'
+  | 'TID_CONFIG_DELETED'
   // Extra (superset of §16 minimum): a mutation refused because the actor lacked the
   // required permission MUST still be logged (R_AUDIT_003).
   | 'PERMISSION_DENIED';

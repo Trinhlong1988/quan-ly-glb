@@ -25,7 +25,9 @@ const ACTIONS = [
   'RCV_ACCT_SOURCE_CREATED', 'RCV_ACCT_SOURCE_UPDATED', 'RCV_ACCT_SOURCE_DELETED',
   'RCV_ACCT_CREATED', 'RCV_ACCT_UPDATED', 'RCV_ACCT_DELETED',
   'DOSSIER_SOURCE_CREATED', 'DOSSIER_SOURCE_UPDATED', 'DOSSIER_SOURCE_DELETED',
-  'DOSSIER_CREATED', 'DOSSIER_UPDATED', 'DOSSIER_DELETED'
+  'DOSSIER_CREATED', 'DOSSIER_UPDATED', 'DOSSIER_DELETED',
+  'TID_CONFIG_STATUS_CREATED', 'TID_CONFIG_STATUS_UPDATED', 'TID_CONFIG_STATUS_DELETED',
+  'TID_CONFIG_CREATED', 'TID_CONFIG_UPDATED', 'TID_CONFIG_DELETED'
 ];
 
 /** Nhãn tiếng Việt cho mã hành động (nhật ký 100% tiếng Việt). */
@@ -48,7 +50,9 @@ const ACTION_LABEL: Record<string, string> = {
   RCV_ACCT_SOURCE_CREATED: 'Tạo nguồn TK nhận tiền', RCV_ACCT_SOURCE_UPDATED: 'Sửa nguồn TK nhận tiền', RCV_ACCT_SOURCE_DELETED: 'Xóa nguồn TK nhận tiền',
   RCV_ACCT_CREATED: 'Tạo TK nhận tiền', RCV_ACCT_UPDATED: 'Sửa TK nhận tiền', RCV_ACCT_DELETED: 'Xóa TK nhận tiền',
   DOSSIER_SOURCE_CREATED: 'Tạo nguồn hồ sơ', DOSSIER_SOURCE_UPDATED: 'Sửa nguồn hồ sơ', DOSSIER_SOURCE_DELETED: 'Xóa nguồn hồ sơ',
-  DOSSIER_CREATED: 'Tạo hồ sơ HKD', DOSSIER_UPDATED: 'Sửa hồ sơ HKD', DOSSIER_DELETED: 'Xóa hồ sơ HKD'
+  DOSSIER_CREATED: 'Tạo hồ sơ HKD', DOSSIER_UPDATED: 'Sửa hồ sơ HKD', DOSSIER_DELETED: 'Xóa hồ sơ HKD',
+  TID_CONFIG_STATUS_CREATED: 'Tạo trạng thái TID', TID_CONFIG_STATUS_UPDATED: 'Sửa trạng thái TID', TID_CONFIG_STATUS_DELETED: 'Xóa trạng thái TID',
+  TID_CONFIG_CREATED: 'Tạo cấu hình TID', TID_CONFIG_UPDATED: 'Sửa cấu hình TID', TID_CONFIG_DELETED: 'Xóa cấu hình TID'
 };
 const actionLabel = (a: string): string => ACTION_LABEL[a] ?? a;
 
@@ -58,7 +62,7 @@ const TARGET_LABEL: Record<string, string> = {
   Backup: 'Sao lưu', AppSetting: 'Cấu hình', Bank: 'Ngân hàng', CardType: 'Loại thẻ', Partner: 'Đối tác',
   Supplier: 'Nhà cung cấp', PosModel: 'Chủng loại máy POS', PosIntakeStatus: 'Trạng thái nhập máy', PosIntake: 'Máy POS nhập kho',
   FeeType: 'Loại phí', FeeRate: 'Biểu phí', ReceiveAccountSource: 'Nguồn TK nhận tiền', ReceiveAccount: 'TK nhận tiền',
-  DossierSource: 'Nguồn hồ sơ', Dossier: 'Hồ sơ HKD'
+  DossierSource: 'Nguồn hồ sơ', Dossier: 'Hồ sơ HKD', TidConfigStatus: 'Trạng thái TID'
 };
 const targetLabel = (t: string): string => TARGET_LABEL[t] ?? t;
 

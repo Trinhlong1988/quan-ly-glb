@@ -53,6 +53,9 @@ export const PERMISSIONS: PermissionDef[] = [
   // ── G-CFG.5 (§10) — Quản lý Hồ sơ HKD ──
   { code: 'CONFIG_DOSSIER_VIEW', name: 'Xem hồ sơ HKD (nguồn hồ sơ + hồ sơ)', group: 'Hồ sơ HKD' },
   { code: 'CONFIG_DOSSIER_MANAGE', name: 'Quản lý hồ sơ HKD (nguồn hồ sơ + hồ sơ)', group: 'Hồ sơ HKD' },
+  // ── G-CFG.6 (§9) — Cấu hình TID ──
+  { code: 'CONFIG_TID_VIEW', name: 'Xem cấu hình TID (trạng thái + TID)', group: 'Cấu hình TID' },
+  { code: 'CONFIG_TID_MANAGE', name: 'Quản lý cấu hình TID (trạng thái + TID)', group: 'Cấu hình TID' },
   // ── Thùng rác (R_TRASH_RESTORE) — chỉ ADMIN ──
   { code: 'TRASH_VIEW', name: 'Xem thùng rác', group: 'Thùng rác' },
   { code: 'TRASH_RESTORE', name: 'Phục hồi dữ liệu đã xóa', group: 'Thùng rác' }
@@ -96,13 +99,16 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'CONFIG_RCV_ACCT_MANAGE',
     // G-CFG.5: managers quản lý hồ sơ HKD.
     'CONFIG_DOSSIER_VIEW',
-    'CONFIG_DOSSIER_MANAGE'
+    'CONFIG_DOSSIER_MANAGE',
+    // G-CFG.6: managers quản lý cấu hình TID.
+    'CONFIG_TID_VIEW',
+    'CONFIG_TID_MANAGE'
   ],
   D_MANAGER: ['DASHBOARD_VIEW', 'USER_READ', 'ROLE_READ', 'CUSTOMER_VIEW', 'POS_VIEW', 'TID_VIEW', 'CONFIG_BANK_VIEW'],
   ACCOUNTANT: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW', 'CONFIG_BANK_VIEW', 'CONFIG_FEE_VIEW', 'CONFIG_FEE_MANAGE', 'CONFIG_RCV_ACCT_VIEW', 'CONFIG_RCV_ACCT_MANAGE', 'CONFIG_DOSSIER_VIEW', 'CONFIG_DOSSIER_MANAGE'],
   TECHNICIAN: ['DASHBOARD_VIEW', 'POS_VIEW'],
   SUPPORT: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW'],
-  WAREHOUSE: ['DASHBOARD_VIEW', 'POS_VIEW', 'TID_VIEW', 'CONFIG_POS_SUPPLY_VIEW', 'CONFIG_POS_SUPPLY_MANAGE'],
+  WAREHOUSE: ['DASHBOARD_VIEW', 'POS_VIEW', 'TID_VIEW', 'CONFIG_POS_SUPPLY_VIEW', 'CONFIG_POS_SUPPLY_MANAGE', 'CONFIG_TID_VIEW', 'CONFIG_TID_MANAGE'],
   SALES: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW', 'CUSTOMER_CREATE'],
   CUSTOMER: []
 };

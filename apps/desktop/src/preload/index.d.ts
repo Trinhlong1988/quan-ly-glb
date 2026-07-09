@@ -605,6 +605,57 @@ export interface DossierInput {
   cccdFrontSrc?: string | null;
   cccdBackSrc?: string | null;
 }
+// ── G-CFG.6 DTOs (Cấu hình TID §9) ──
+export interface TidConfigStatusDto extends AuditTrail {
+  id: number;
+  name: string;
+}
+export interface CreateTidConfigStatusInput {
+  name: string;
+}
+export interface UpdateTidConfigStatusInput {
+  name?: string;
+}
+export interface ConfigTidDto extends AuditTrail {
+  id: number;
+  tid: string;
+  status: string;
+  posSerial: string | null;
+  bankId: number | null;
+  bankCode: string | null;
+  bankName: string | null;
+  partnerId: number | null;
+  partnerCode: string | null;
+  partnerName: string | null;
+  hkdName: string | null;
+  receiveAccountId: number | null;
+  receiveAccountLabel: string | null;
+  issuedAt: string | null;
+  configStatusId: number | null;
+  configStatusName: string | null;
+  dossierSourceId: number | null;
+  dossierSourceCode: string | null;
+  note: string | null;
+}
+export interface ConfigTidFilter {
+  search?: string;
+  bankId?: number;
+  partnerId?: number;
+  configStatusId?: number;
+  fromDate?: string;
+  toDate?: string;
+}
+export interface ConfigTidInput {
+  tid: string;
+  bankId: number;
+  partnerId: number;
+  hkdName: string;
+  receiveAccountId?: number | null;
+  issuedAt?: string | null;
+  configStatusId?: number | null;
+  dossierSourceId?: number | null;
+  note?: string | null;
+}
 export interface PickImageResult {
   ok: boolean;
   path?: string;
@@ -802,6 +853,17 @@ export interface GlbApi {
   dossierCreate(input: DossierInput): Promise<MutationOutcome>;
   dossierUpdate(id: number, input: DossierInput): Promise<MutationOutcome>;
   dossierDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
+
+  // ── Cấu hình TID (G-CFG.6 §9) ──
+  tidStatusList(): Promise<ListResult<TidConfigStatusDto>>;
+  tidStatusCreate(input: CreateTidConfigStatusInput): Promise<MutationOutcome>;
+  tidStatusUpdate(id: number, input: UpdateTidConfigStatusInput): Promise<MutationOutcome>;
+  tidStatusDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
+
+  tidConfigList(filter: ConfigTidFilter): Promise<ListResult<ConfigTidDto>>;
+  tidConfigCreate(input: ConfigTidInput): Promise<MutationOutcome>;
+  tidConfigUpdate(id: number, input: ConfigTidInput): Promise<MutationOutcome>;
+  tidConfigDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
 
   // Thùng rác (E4)
   trashList(): Promise<{ ok: boolean; data?: TrashRow[]; error?: string; message?: string }>;

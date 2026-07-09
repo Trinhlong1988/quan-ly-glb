@@ -201,18 +201,45 @@ model Tid {
   id          Int       @id @default(autoincrement())
   tid         String    @unique
   mid         String?
-  bank        String?
-  status      String    @default("UNASSIGNED") // UNASSIGNED|ACTIVE|DEAD|CLOSED|RECALLED
+  bank        String? // legacy text (G-POS.1) — giữ tương thích
+  status      String    @default("UNASSIGNED") // vòng đời vận hành: UNASSIGNED|ACTIVE|DEAD|CLOSED|RECALLED
   posSerial   String?   @map("pos_serial")
   customerId  Int?      @map("customer_id")
   agentId     Int?      @map("agent_id")
   openedAt    DateTime? @map("opened_at")
   deliveredAt DateTime? @map("delivered_at")
   closedAt    DateTime? @map("closed_at")
+  // ── G-CFG.6 §9 Cấu hình TID (Cách 1: gộp thông tin thương mại vào chính bảng tids) ──
+  bankId          Int?      @map("bank_id") // Ngân hàng (chọn từ danh sách, thay text `bank`)
+  partnerId       Int?      @map("partner_id") // Đối tác → tra biểu phí
+  hkdName         String?   @map("hkd_name") // Tên Hộ Kinh Doanh của máy POS
+  receiveAccountId Int?     @map("receive_account_id") // TK nhận tiền (§8)
+  issuedAt        DateTime? @map("issued_at") // Ngày cấp TID (§9)
+  configStatusId  Int?      @map("config_status_id") // Trạng thái TID cấu hình (§9a)
+  dossierSourceId Int?      @map("dossier_source_id") // Nguồn hồ sơ (§10a)
+  note            String?
+  createdBy       Int?      @map("created_by")
+  updatedBy       Int?      @map("updated_by")
+  deletedAt       DateTime? @map("deleted_at") // soft-delete cho cấu hình TID (§9b)
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
+  @@index([partnerId])
+  @@index([bankId])
   @@map("tids")
+}
+
+// Trạng thái TID cấu hình (§9a) — ví dụ: mới cấp, thu hồi, đổi cho đối tác. Khác status vận hành.
+model TidConfigStatus {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
+  createdBy Int?      @map("created_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedBy Int?      @map("updated_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("tid_config_statuses")
 }
 
 // NHẬT KÝ BẤT BIẾN (§A1) — mọi sự kiện vòng đời POS/TID. Không sửa/xóa.

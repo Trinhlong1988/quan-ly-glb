@@ -34,6 +34,7 @@ import { PosSupplyPage } from './PosSupplyPage.js';
 import { FeeConfigPage } from './FeeConfigPage.js';
 import { ReceiveAccountPage } from './ReceiveAccountPage.js';
 import { DossierPage } from './DossierPage.js';
+import { TidConfigPage } from './TidConfigPage.js';
 
 interface MenuItem {
   key: string;
@@ -61,6 +62,7 @@ const MENU: MenuItem[] = [
   { key: 'feecfg', label: 'Cấu hình phí', icon: <Percent className="h-[18px] w-[18px]" />, perms: ['CONFIG_FEE_VIEW'] },
   { key: 'rcvacct', label: 'Tài khoản nhận tiền', icon: <Wallet className="h-[18px] w-[18px]" />, perms: ['CONFIG_RCV_ACCT_VIEW'] },
   { key: 'dossier', label: 'Hồ sơ HKD', icon: <FolderKanban className="h-[18px] w-[18px]" />, perms: ['CONFIG_DOSSIER_VIEW'] },
+  { key: 'tidcfg', label: 'Cấu hình TID', icon: <CreditCard className="h-[18px] w-[18px]" />, perms: ['CONFIG_TID_VIEW'] },
   { key: 'audit', label: 'Nhật ký hệ thống', icon: <ScrollText className="h-[18px] w-[18px]" />, perms: ['AUDIT_LOG_VIEW'] },
   { key: 'trash', label: 'Thùng rác', icon: <Trash2 className="h-[18px] w-[18px]" />, perms: ['TRASH_VIEW'] },
   { key: 'settings', label: 'Cài đặt', icon: <Settings className="h-[18px] w-[18px]" />, perms: ['SYSTEM_SETTING_VIEW'] },
@@ -175,6 +177,7 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
           {activeItem?.key === 'feecfg' && <FeeConfigPage user={user} />}
           {activeItem?.key === 'rcvacct' && <ReceiveAccountPage user={user} />}
           {activeItem?.key === 'dossier' && <DossierPage user={user} />}
+          {activeItem?.key === 'tidcfg' && <TidConfigPage user={user} />}
           {activeItem?.key === 'trash' && <TrashPage user={user} />}
           {activeItem?.key === 'settings' && <SettingsPage user={user} />}
           {activeItem?.key === 'backup' && <BackupPage user={user} />}
