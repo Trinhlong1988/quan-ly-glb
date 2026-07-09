@@ -1073,6 +1073,345 @@ Doanh thu/kho/thu chi làm sau
 Đây là nền móng đủ chắc để phát triển thành phần mềm quản lý nội bộ lâu dài, có thể mở rộng sang doanh thu, kho, thu chi, công nợ, báo cáo, multi-branch và VPS sync mà không phải phá kiến trúc ban đầu.
 
 Mô tả: giao diện đăng nhập hiện đại, có user, pass, có tích chọn hiện thị passm nặc định ẩn, ghi nhớ đăng nhập lần sau mở lại luôn ghi nhớ user mật khẩu, đăng nhập xong vào giao diện Trang chủ
-Cấu hình trên menu sẽ có: Trang chủ, Quản lý Nhân sự như cấu trúc trên, Cấu hình ngân hàng, phần ngân hàng tương tự như nhân sự, các vai trò nào mới được cấu hình chức năng này thì set cho logic
-Quản lý Ngân hàng có Thêm mới Ngân hàng, Quản lý Danh sách ngân hàng, Cấu hình Loại thẻ Trên máy Pos
-- Bên cạnh ngân hàng sẽ có Quản lý Đối tác, tương tự ngân hàng sẽ có Thêm mới đối tác, Quản lý danh sách đối tác, Thiết lập Liên kết sản phẩm ngân hàng và đối tác, Thiết lập biểu phí Pos Ngân hàng của đối tác
+Cấu hình trên menu sẽ có: 
+A. Trang chủ 
+1. Hiển thị Doanh Số tháng này (để sẵn logic dữ liệu sau)
+2. Lợi nhuận tháng này (để sẵn logic dữ liệu sau)
+3. Chi phí Kinh doanh tháng này (để sẵn logic dữ liệu sau)
+4. Chi phí Hồ sơ tháng này (để sẵn logic dữ liệu sau)
+5. Chi phí Văn phòng tháng này (để sẵn logic dữ liệu sau)
+6. Chi phí lương tháng này (để sẵn logic dữ liệu sau)
+
+7. Máy Pos mới nhập tháng này(để sẵn logic dữ liệu sau)
+8. Danh sách TID phát sinh tháng này (để sẵn logic dữ liệu sau)
+9. Công nợ tồn đọng (để sẵn logic dữ liệu sau)
+10. Số TID hoạt động tháng này (để sẵn logic dữ liệu sau)
+11. Số TID không hoạt động tháng này (để sẵn logic dữ liệu sau)
+12. Số TID đã đóng tháng này (để sẵn logic dữ liệu sau)
+
+
+B. Quản lý Nhân sự như cấu trúc trên… đã note trong md
+
+
+C. Cấu hình ngân hàng bao gồm, 
+phần ngân hàng tương tự như nhân sự, các vai trò nào mới được cấu hình chức năng này thì set cho logic
+
+1. Thêm mới Ngân hàng, 
+- Tên Ngân hàng
+- Mã Ngân hàng
+Xác nhận – Hủy bỏ (button) 
+- Thông báo khi thêm ngân hàng mới thành công hoặc lỗi, thông báo ngân hàng đã tồn tại
+Sau khi thêm mới bên dưới sẽ có danh sách Ngân hàng thêm mới realtime, có lịch sử user thêm mới là ai, ngày giờ thao tác thêm mới(đây là yếu tố truy vết)
+
+2. Quản lý Danh sách ngân hàng 
+- danh sách ngân hàng hiện thị từ dữ liệu thêm mới ngân hàng
+- Có tích chọn 1 hoặc nhiều ngân hàng
+Button: Làm mới, Chỉnh sửa, Bỏ tích, Xóa ngân hàng đã chọn, Xuất Excel, khi thao tác chỉnh sửa hay xóa phải có Xác nhận – Hủy bỏ (button)
+Thao tác xong luôn có thông báo push như thêm mới ngân hàng
+(thêm yếu tố truy vết trong danh sách ngân hàng hiển thị người sửa hoặc thao tác gần nhất)
+
+3. Cấu hình Loại thẻ sử dụng trên máy Pos
+a. Thêm mới loại thẻ sử dụng trên máy Pos
+- Chọn ngân hàng (từ danh sách ngân hàng)
+- Thêm mới loại thẻ
+- Tên loại thẻ
+- Mã loại thẻ
+Hiển thị danh sách thẻ thêm mới realtime(có yếu tố truy vết)
+Thao tác xong luôn có thông báo Pus
+b. Quản lý danh sách thẻ theo ngân hàng
+- Hiện thị danh sách ngân hàng, các loại thẻ sử dụng trên máy Pos
+Button menu: có tích chọn ngân hàng, chọn loại thẻ sử dụng trên máy Pos của ngân hàng đó, Button Sửa, Xóa, Làm mới, Xuất Excel
+chỉnh sửa hay xóa phải có Xác nhận – Hủy bỏ (button)
+Thao tác xong luôn có thông báo push
+
+4. Quản lý đối tác
+
+a. Thêm mới đối tác: 
+- Tên đối tác
+- Mã đối tác
+- Địa chỉ đối tác
+- Số điện thoại
+- Người liên hệ
+Xác nhận – Hủy bỏ (button) 
+Thông báo Push khi thêm mới thành công, hiển thị realtime danh sách đối tác, lưu ý yếu tố truy vết, lỗi trùng lặp thông tin… dialog báo rõ ràng nổi bật
+
+b. Quản lý danh sách đối tác
+- Hiển thị danh sách đối tác 
+Menu button: Làm mới, sửa thông tin đối tác, Bỏ chọn đối tác, Xóa
+chỉnh sửa hay xóa phải có Xác nhận – Hủy bỏ (button)
+Thao tác xong luôn có thông báo push, lưu ý yếu tố truy vết, lỗi trùng lặp thông tin… dialog báo rõ ràng nổi bật
+
+c. Quản lý sản phẩm Ngân hàng liên kết với đối tác click vào hiện bảng: bản chất mỗi đối tác sẽ liên kết với nhiều ngân hàng khác nhau trong danh sách ngân hàng.
+- Chọn đối tác (từ danh sách đối tác đã có)
+- Chọn Ngân hàng liên kết đối tác (từ danh sách ngân hàng)
+- Xác nhận – Hủy Bỏ (button)
+Thao tác xong luôn có thông báo push, lưu ý yếu tố truy vết, lỗi trùng lặp thông tin… dialog báo rõ ràng nổi bật
+- Hiển thị danh sách đối tác và ngân hàng liên kết dạng bảng hoặc hình cây hoặc bảng tích xanh các ngân hàng liên kết realtime
+
+Button menu: Làm mới, Sửa Ngân hàng liên kết đối tác, Xóa đói tác chọn, Xuất Excel
+- Xác nhận – Hủy Bỏ (button)
+Thao tác xong luôn có thông báo push, lưu ý yếu tố truy vết, lỗi trùng lặp thông tin… dialog báo rõ ràng nổi bật
+
+
+5. Cấu hình phí mua, phí cài máy bao gồm 2 mục con
+a. Cấu hình Loại phí bán:
+- Thêm mới loại phí: bảng điền bao gồm
++ Tên loại phí (ví dụ ủy quyền, Tiền chờ, Tiền Nhanh…)
+- Xác nhận – Hủy Bỏ (button)
+Thao tác xong luôn có thông báo push, lưu ý yếu tố truy vết, lỗi trùng lặp thông tin… dialog báo rõ ràng nổi bật
+- Hiển thị danh sách realtime, đầy đủ button: làm mới, sửa loại phí
+Thao tác xong luôn có thông báo push, lưu ý yếu tố truy vết, lỗi trùng lặp thông tin… dialog báo rõ ràng nổi bật - Xác nhận – Hủy Bỏ (button)
+
+b. Cấu hình Giá % phí bán ra, phí bán click vào hiện bảng
+- Chọn đối tác (từ danh sách đối tác)
+- Chọn ngân hàng (từ danh sách ngân hàng liên kết với đối tác)
+- Chọn Loại thẻ sử dụng trên máy Pos (thẻ này đã cấu hình ở trên) đi theo ngân hàng)
+- Bên dưới có bảng set phí % như sau ví dụ 1.02 1.03 1.05 1.067 1.068… tối đa 3 số sau dấu “,” bao gồm: Phí mua (%), Phí Cài máy (%), Phí bán (%)
+Set xong sẽ hiện thị 2 trường: Chênh lệch với NCC (%) áp thẳng luôn = Phí mua – phí cài máy (màu đỏ âm, màu xanh dương, đỏ âm cho vào trong ngoặc)
+Phí chênh lẹch với Khách hàng = Phí bán (%) – phí cài máy (%) 2 mục này tương tự nhau chỉ hiển thị kết quả
+- Hiển thị danh sách các loại phí như ủy quyền… đã thêm ở trên 
+- Xác nhận – Hủy Bỏ (button)
+Thao tác xong luôn có thông báo push, lưu ý yếu tố truy vết, lỗi trùng lặp thông tin… dialog báo rõ ràng nổi bật
+Hiển thị danh sách realtime, đầy đủ button: làm mới, sửa loại phí, Xuất Exell
+Thao tác xong luôn có thông báo push, lưu ý yếu tố truy vết, lỗi trùng lặp thông tin… dialog báo rõ ràng nổi bật.
+
+6. Cấu hình Nhà cung cấp máy Pos
+a. Thêm mới đối NCC: 
+- Tên đối tác
+- Mã đối tác
+- Địa chỉ NCC
+- Số điện thoại
+- Người liên hệ
+Xác nhận – Hủy bỏ (button) 
+Thông báo Push khi thêm mới thành công, hiển thị realtime danh sách đối tác, lưu ý yếu tố truy vết, lỗi trùng lặp thông tin… dialog báo rõ ràng nổi bật
+
+b. Quản lý danh sách NCC
+- Hiển thị danh sách NCC
+Menu button: Làm mới, sửa thông tin đối tác, Bỏ chọn NCC, Xóa, Xuất exell
+chỉnh sửa hay xóa phải có Xác nhận – Hủy bỏ (button)
+Thao tác xong luôn có thông báo push, lưu ý yếu tố truy vết, lỗi trùng lặp thông tin… dialog báo rõ ràng nổi bật
+
+
+
+7. Quản lý Cấu hình máy Pos
+
+a. Thêm mới Chủng Loại Pos
+- Mã Máy Pos
+- Tên Máy Pos
+Xác nhận – Hủy bỏ (button) 
+Thông báo Push khi thêm mới thành công, hiển thị realtime danh sách đối tác, lưu ý yếu tố truy vết, lỗi trùng lặp thông tin… dialog báo rõ ràng nổi bật
+Hiển thị realtime danh sách Pos vừa thêm
+
+b. Quản lý Danh sách chủng loại Pos
+- Hiển thị danh sách máy Pos tất cả
+Menu button: Làm mới, sửa thông tin máy Pos, Bỏ chọn đối tác, Xóa
+chỉnh sửa hay xóa phải có Xác nhận – Hủy bỏ (button)
+Thao tác xong luôn có thông báo push, lưu ý yếu tố truy vết, lỗi trùng lặp thông tin… dialog báo rõ ràng nổi bật
+
+8. Quản lý nhập xuất máy Pos Công ty – Kho
+a. Cấu hình trạng thái nhập máy:
+- Thêm cấu hình trạng thái nhập máy: ví dụ Máy mới, máy cũ, Máy đổi, Máy thuê
+Xác nhận – Hủy bỏ (button) 
+Thông báo Push khi thêm mới thành công, hiển thị realtime danh sách đối tác, lưu ý yếu tố truy vết, lỗi trùng lặp thông tin… dialog báo rõ ràng nổi bật
+Hiển thị realtime danh sách trạng thái vừa thêm
+
+b. Nhập kho – nhâp mới máy Pos
+b1. Nhập máy vào kho quản lý: click vào hiển thị:
+- Chọn chủng loại máy (từ danh sách chủng loại máy)
+- Seri number: ô điền dạng chữ và số không giới hạn ký tự
+- Chọn trạng thái nhập máy từ cấu hình 8a
+- Chọn Nhà cung cấp
+- Chọn Giá nhập
+- Chọn ngày nhập (dạng ô date tách 3 trường dd mm yy ví dụ 1 ô ngày 03, ô tháng 12, ô năm 2026…
+- Xác nhận – Hủy Bỏ
+- Thông báo Push khi thêm mới thành công, hiển thị realtime danh sách đối tác, lưu ý yếu tố truy vết, lỗi trùng lặp thông tin… dialog báo rõ ràng nổi bật
+- Hiển thị realtime danh sách máy Pos vừa nhập kho quản lý:
+b2. Quản lý danh sách máy Pos click vào hiển thị:
+- Hiển thị realtime danh sách máy Pos tất cả quản lý:
+- Danh sách hiển thị list, có số thứ tự (STT), Tên chủng loại, Seri number, Nhà cung cấp, giá nhập, ngày nhập, trạng thái…, 
+- Thông báo Push khi thêm mới thành công, hiển thị realtime danh sách đối tác, lưu ý yếu tố truy vết, lỗi trùng lặp thông tin… dialog báo rõ ràng nổi bật
+- Hiển thị realtime danh sách máy Pos vừa nhập kho quản lý:
+- Menu button: Làm mới, sửa thông tin máy Pos, Bỏ chọn máy Pos, Xóa, xuất Excel
+- chỉnh sửa hay xóa phải có Xác nhận – Hủy bỏ (button)
+- Mục sửa thông tin máy Pos phải cho chỉnh sửa full thông tin, được chuyển từ nhà cung cấp này sang nhà cung cấp khác tức là tùy chọn lại nhà cung cấp
+
+8. Cấu hình Tài khoản nhận tiền – ủy quyền (là tài khoản ngân hàng gắn với mỗi TID ở mục 9
+8a. Thêm mới nguồn tài khoản, click vào bảng hiển thị setup:
+- Nguồn tài khoản ủy quyền: ví dụ Khách hàng, Nội bộ…
+- Xác nhận – Hủy bỏ (Button)
+- Hiển thị realtime danh sách
+- Thông báo Push khi thêm mới thành công, hiển thị realtime danh sách đối tác, lưu ý yếu tố truy vết, lỗi trùng lặp thông tin… dialog báo rõ ràng nổi bật
+- 
+8b. Thêm mới tài khoản nhận tiền – ủy quyền
+- Thêm mới tài khoản: click hiện setup:
++ Tên tài khoản
++ Số tài khoản
++ Ngân hàng
++ Chi nhánh
++ Số CCCD nhận Ủy quyền – nhận tiền, Ngày cấp, nơi cấp, ngày hết hạn…
++ Tải ảnh CCCD 2 mặt (attack file mặt trước, mặt sau)
++ Số điện thoại
++ Email đối soát điền thông tin dạng email
++ Tùy chọn tài khoản thuộc khách hàng nào (từ nguồn danh sách khách hàng hoặc nội bộ do vai trò user lúc khởi tạo)
+- Xác nhận – Hủy bỏ (Button)
+- Hiển thị realtime danh sách mới: STT, nguồn tài khoản, Mã User gắn với vai trò user, Tên STK, STK, Ngân hàng… ngày thêm, user sửa hoặc tạo mới nhất, ghi chú
+- Thông báo Push khi thêm mới thành công, hiển thị realtime danh sách đối tác, lưu ý yếu tố truy vết, lỗi trùng lặp thông tin… dialog báo rõ ràng nổi bật
+
+
+8c. Quản lý danh sách nguồn tài khoản nhận tiền - ủy quyền
+- Hiển thị bảng danh sách bao gồm: Số thứ tự, tên nguồn tài khoản, ngày thêm, user thêm
+- Hiển thị realtime danh sách tất cả cũ mới, đảm bảo truy vết
+- Menu button: Làm mới, sửa thông tin, Bỏ chọn, Xóa
+- chỉnh sửa hay xóa phải có Xác nhận – Hủy bỏ (button)
+- Thao tác xong luôn có thông báo push, lưu ý yếu tố truy vết, lỗi trùng lặp thông tin… dialog báo rõ ràng nổi bật
+- Hiển thị realtime danh sách tất cả cũ mới: STT, nguồn tài khoản, Mã User gắn với vai trò user, Tên STK, STK, Ngân hàng… ngày thêm, user sửa hoặc tạo mới nhất, ghi chú
+- Thông báo Push khi thêm mới thành công, hiển thị realtime danh sách đối tác, lưu ý yếu tố truy vết, lỗi trùng lặp thông tin… dialog báo rõ ràng nổi bật.
+
+9. Quản lý TID/POS: mỗi thiết bị có thể được gắn 1 hoặc nhiều TID hoặc hủy bỏ, xóa TID cũ đi thêm TID mới.
+9a. Cấu hình trạng thái TID, click vào hiện bảng setup
+- Thêm mới trạng thái:
++ Điền thông tin trạng thái: ví dụ: mới cấp, thu hồi.. đổi cho đối tác
+- Xác nhận – Hủy bỏ (Button)
+- Hiển thị realtime danh sách tất cả cũ mới, đảm bảo truy vết
+
+
+9a. Thêm mới TID click vào sẽ hiện bảng setup như sau:
+- Chọn Ngân hàng (từ danh sách ngân hàng)
+- Chọn Đối tác (từ danh sách đối tác), chọn xong sẽ show ra biểu phí mua bán cài máy chi tiết từ trường cấu hình ở trên
+- Điền thông tin TID: dạng ký tự hoặc số không giới hạn
+- Điền thông tin Hộ Kinh Doanh: Tên Hộ Kinh Doanh máy Pos
+- Chọn tài khoản từ nguồn nguồn tài khoản nhận tiền - ủy quyền
+- Ngày cấp TID: dd/mm/yy cùng định dạng ở các mục trên
+- Trạng thái: từ nguồn cấu hình trạng thái 9a
+- Nguồn hồ sơ: từ nguồn hồ sơ 10.a
+- Xác nhận – Hủy bỏ (Button)
+- Hiển thị realtime danh sách tất cả cũ mới, đảm bảo truy vết
+- Thông báo Push khi thêm mới thành công, hiển thị realtime danh sách, lưu ý yếu tố truy vết, lỗi trùng lặp thông tin… dialog báo rõ ràng nổi bật
+
+9b. Quản lý danh sách TID cũ – mới nhập:
+- Hiển thị full bảng danh sách TID: STT, Tên HKD, TID, Ngân hàng, Đối tác, ngày cấp, biểu phí bán, phí mua, phí cài máy…, Trạng thái, nguồn hồ sơ, ngày tạo, sửa, user sửa hoặc tạo mới nhất, ghi chú
+- Menu button: Làm mới, sửa thông tin, Bỏ chọn, Xóa
+- chỉnh sửa hay xóa phải có Xác nhận – Hủy bỏ (button)
+- Thao tác xong luôn có thông báo push, lưu ý yếu tố truy vết, lỗi trùng lặp thông tin… dialog báo rõ ràng nổi bật
+- Thông báo Push khi thêm mới thành công, hiển thị realtime danh sách đối tác, lưu ý yếu tố truy vết, lỗi trùng lặp thông tin… dialog báo rõ ràng nổi bật.
+
+10. Quản lý Hồ sơ
+10a. Cấu hình nguồn hồ sơ, click hiện bảng setup:
+- Thêm mới nguồn hồ sơ
+- Mã nguồn hồ sơ
+- Chính sách chiết khấu (%): điền dạng % như 0.5 0.05 0.02 0.003… tối đa 3 số sau dấu phẩy)
+- Xác nhận – Hủy bỏ (Button)
+- Hiển thị realtime danh sách mới, đảm bảo truy vết
+- Thông báo Push khi thêm mới thành công, hiển thị realtime danh sách, lưu ý yếu tố truy vết, lỗi trùng lặp thông tin… dialog báo rõ ràng nổi bật
+10b. Quản lý danh sách nguồn hồ sơ
+- Hiển thị realtime danh sách tất cả cũ mới, đảm bảo truy vết
+- Thông báo Push khi thêm mới thành công, hiển thị realtime danh sách, lưu ý yếu tố truy vết, lỗi trùng lặp thông tin… dialog báo rõ ràng nổi bật
+- Menu button: Làm mới, sửa thông tin, Bỏ chọn, Xóa
+- chỉnh sửa hay xóa phải có Xác nhận – Hủy bỏ (button)
+- Thao tác xong luôn có thông báo push, lưu ý yếu tố truy vết, lỗi trùng lặp thông tin… dialog báo rõ ràng nổi bật
+10c. Thêm mới hồ sơ:
+10c1. Thêm mới hồ sơ click hiện bảng Setup như sau:
+- Tùy chọn nguồn hồ sơ (từ danh sách)
+- Tên Hộ Kinh Doanh: điền dạng Text, số…
+- Địa chỉ đăng ký HKD:
+- Mã số Thuế - Mã số ĐK HKD:
+- Ngày Cấp ĐKKD:
+- Nơi cấp ĐKKD:
+- Tên chủ hộ Kinh doanh:
+- Giới tính
+- Dân tộc
+- Số CCCD: 
+- Ngày cấp:
+- Nơi cấp:
+- Ngày hết hạn:
+- Địa chỉ thường Trú:
+- Nơi ở hiện tại:
+- Tùy chọn nguồn hồ sơ (sổ ra tùy chọn từ 10b
+- Xác nhận – Hủy bỏ (Button)
+- Hiển thị realtime danh sách mới, đảm bảo truy vết
+- Thao tác xong luôn có thông báo push, lưu ý yếu tố truy vết, lỗi trùng lặp thông tin… dialog báo rõ ràng nổi bật
+
+
+10c2. Thêm mới dữ liệu Hồ sơ:
+- Chọn Hộ kinh Doanh từ nguồn 10c1
+- Tải lên Ảnh ĐKKD (attack file PNG, JPG, PDF)
++ mặt trước
++ mặt sau
+Chọn xong tự link show ra tên chủ hộ kinh doanh và cho phép
+- Tải lên CCCD (attack file PNG, JPG, PDF)
++ mặt trước
++ mặt sau
+- Tải lên Ảnh ĐKKD (attack file PNG, JPG, PDF)
++ mặt trước
++ mặt sau
+- Xác nhận – Hủy bỏ (Button)
+- Hiển thị realtime danh sách mới, đảm bảo truy vết
+- Thao tác xong luôn có thông báo push, lưu ý yếu tố truy vết, lỗi trùng lặp thông tin… dialog báo rõ ràng nổi bật.
+
+10d. Quản lý danh sách dữ liệu hồ sơ:
+- Click vào hiển thị full thông tin bảng 10c1 
+- Menu button: Làm mới, sửa thông tin, Bỏ chọn, Xóa
+- chỉnh sửa hay xóa phải có Xác nhận – Hủy bỏ (button)
+- Thao tác xong luôn có thông báo push, lưu ý yếu tố truy vết, lỗi trùng lặp thông tin… dialog báo rõ ràng nổi bật
+
+11. Quản lý chi tiết TID/ POS: sau khi cấu hình xong máy pos nhập kho, TID mới nhập, TID sẽ được gắn với 1 thiết bị máy Pos duy nhất tại 1 thời điểm
+
+11a. Cấu hình TID vào máy POS, click vào hiện bảng setup
+- Chọn TID từ nguồn TID tồn kho, chỉ show nguồn TID chưa được gắn với POS (seri number trống chưa gắn tid)
+- Chọn xong show full thông tin TID ở cấu hình 9b
+- Chọn Pos (từ nguồn Seri number nguồn POS tồn kho chỉ show Pos chưa gắn Tid hoặc đang trống
+- Chọn trạng thái TID (cài đặt sãn có trạng Thái: Nhập kho chưa giao, Giao TID luôn. 
+- Nếu chưa giao nhập kho thực hiện luôn: Xác nhận 
+- Xác nhận – Hủy bỏ (Button)
+- Nếu Giao TID luôn show ra chọn giao cho ai: user mã user từ nguồn user, danh sách khách hàng (user)
+- Chọn Tài khoản ủy quyền
+- Chọn ngày giao TID
+- Cấu hình giá bán, giá mua, giá cài máy (giá cấu hình ở trên là giá công ty niêm yết còn bây giờ là set giá thực bán) mỗi khách hàng một giá bán khác nhau đặc biệt lưu ý vấn đề này
+- Show trạng thái tích tùy chọn Ủy quyền, tiền chờ hay tiền nhanh đã được cấu hình (giá mua, giá cài máy đã niêm yết chỉ có giá bán tùy chỉnh)
+- Xác nhận – Hủy bỏ (Button)
+- Hiển thị realtime danh sách mới, đảm bảo truy vết
+- Thao tác xong luôn có thông báo push, lưu ý yếu tố truy vết, lỗi trùng lặp thông tin… dialog báo rõ ràng nổi bật.
+- Chọn khách hàng giao ( từ danh sách User bao gồm Mã User, Tên Khách hàng
+
+
+12. Quản lý thu chi (nghiên cứu thiết kế phù hợp với đặc tính của phần mềm và báo cáo thu chi phân tích app sẵn thị trường tối ưu)
+13. Hướng dẫn sử dụng
+14. Đăng xuất
+
+Phân mô tả cần tư vấn, nghiên cứu sâu: cần có thư viện quản lý dữ liệu máy pos, TID, user chuẩn hóa, hành vi user, lịch sử user, vi phạm, quyền hạn, quy tắc, đặc biệt bảo mật dữ liệu.
+
+1. 1 máy Pos vật lý có seri number có thể được gắn với nhiều TID do TID bị đóng, chết, máy Pos có thể bị hư hỏng phải đi bảo trì, trong quá trình sử dụng TID có thể chết thì thay TID khác, hoặc thu hồi cả TID, máy Pos từ khách hàng về kho nhập kho, hoặc chuyển từ đại lý này sang đại lý khác, phải có thư viện quản lý máy Pos có lịch sử thao tác di chuyển, chuyển đổi, thu hồi hoặc báo hỏng, sửa, nhận sửa xong , thời gian phải cụ thể chi tiết dễ quản lý
+2. Cần có mục quản lý danh sách TID chưa giao và Push thông báo mỗi ngày vì lãng phí không mang lại nguồn thu
+3. Trường Quản lý Doanh số: đặc biệt quan trọng cho thành mục 2 hoặc 3 hoặc em tự sắp xếp khi click vào Quản lý doanh số sẽ hiển thị:
+- Bảng setup chọn: TID, khi chọn TID sẽ show thông tin bao gồm: HỘ KINH DOANH, Phí mua, phí cài máy, phí bán (%), Thông tin TID đó giao cho khách hàng nào: tên Khách hàng – mã Khách hàng, ngày giao
+- Trường điền Doanh số: dạng số ví dụ 1000,000,000 không giới hạn 
+- Trường chọn loại thẻ: thẻ đã được cấu hình, mỗi loại thẻ có 1 giá mua, giá cài máy và giá bán khác nhau kiểm tra xem có chưa và bổ xung nếu chưa có thì đưa vào cấu hình đúng mục giá mua giá bán từng loại thẻ
+- Điền doanh số xong sẽ tự cho ra từ công thức kết quả thành tiền phí chênh thu của khách hàng, thành tiền phí chênh thu của Đối tác
+- = % phí chênh (theo công thức đã có) * số tiền doanh số
+- Tùy chọn thời gian: từ ngày: dd mm yy đến ngày dd mm yy
+- Xác nhận – Hủy bỏ (Button)
+- Hiển thị realtime danh sách mới, đảm bảo truy vết
+- Thao tác xong luôn có thông báo push, lưu ý yếu tố truy vết, lỗi trùng lặp thông tin… dialog báo rõ ràng nổi bật.
+- Thêm hóa đơn doanh số xong thì show ở dưới luôn STT, thời gian từ đến từ, TID, Tên HKD, Khách Hàng, Doanh số… % phí chênh, thành tiền phí chênh, Tổng bên dưới từng loại phí
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
