@@ -94,7 +94,12 @@ const api = {
   partnerUpdate: (id: number, input: unknown) => ipcRenderer.invoke('partner:update', { id, input }),
   partnerDelete: (ids: number[], password: string) => ipcRenderer.invoke('partner:delete', { ids, password }),
   partnerBankMatrix: () => ipcRenderer.invoke('partnerBank:matrix'),
-  partnerBankSet: (partnerId: number, bankIds: number[]) => ipcRenderer.invoke('partnerBank:set', { partnerId, bankIds })
+  partnerBankSet: (partnerId: number, bankIds: number[]) => ipcRenderer.invoke('partnerBank:set', { partnerId, bankIds }),
+
+  // Thùng rác (E4)
+  trashList: () => ipcRenderer.invoke('trash:list'),
+  trashRestore: (entityType: string, id: number) => ipcRenderer.invoke('trash:restore', { entityType, id }),
+  trashLinkSummary: (entityType: string, id: number) => ipcRenderer.invoke('trash:linkSummary', { entityType, id })
 };
 
 export type GlbApi = typeof api;

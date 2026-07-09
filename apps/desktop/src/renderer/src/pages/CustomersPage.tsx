@@ -23,6 +23,7 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<CustomerDto | null>(null);
   const [confirmDel, setConfirmDel] = useState<CustomerDto | null>(null);
+  const [delLinks, setDelLinks] = useState<{ label: string; count: number }[]>([]);
 
   const canCreate = hasPermission(user, 'CUSTOMER_CREATE');
   const canUpdate = hasPermission(user, 'CUSTOMER_UPDATE');
@@ -142,7 +143,15 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
                         </IconBtn>
                       )}
                       {canDelete && (
-                        <IconBtn title="Xóa" variant="danger" onClick={() => setConfirmDel(c)}>
+                        <IconBtn
+                          title="Xóa"
+                          variant="danger"
+                          onClick={async () => {
+                            const lk = await window.api.trashLinkSummary('Customer', c.id);
+                            setDelLinks(lk.ok && lk.data ? lk.data : []);
+                            setConfirmDel(c);
+                          }}
+                        >
                           <Trash2 className="h-4 w-4" />
                         </IconBtn>
                       )}
@@ -172,11 +181,21 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
       {confirmDel && (
         <ConfirmDialog
           title="Xóa khách hàng"
-          message={`Xóa mềm khách hàng "${confirmDel.display}". Nhập lại mật khẩu để xác nhận.`}
+          message={
+            `Khách hàng "${confirmDel.display}" sẽ được chuyển vào Thùng rác (có thể phục hồi).` +
+            (delLinks.length
+              ? `\n\n⚠️ Đang có dữ liệu liên kết: ${delLinks.map((l) => `${l.label} (${l.count})`).join(', ')}. ` +
+                `Các dữ liệu này KHÔNG bị mất — vẫn giữ nguyên.`
+              : '') +
+            `\n\nNhập lại mật khẩu để xác nhận.`
+          }
           confirmLabel="Xóa"
           danger
           requirePassword
-          onCancel={() => setConfirmDel(null)}
+          onCancel={() => {
+            setConfirmDel(null);
+            setDelLinks([]);
+          }}
           onConfirm={(pwd) => doDelete(confirmDel, pwd)}
         />
       )}

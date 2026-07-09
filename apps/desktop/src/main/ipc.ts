@@ -12,6 +12,7 @@ import * as posSvc from './pos-service.js';
 import * as tidSvc from './tid-service.js';
 import * as notifySvc from './notification-service.js';
 import * as bankCfgSvc from './bank-config-service.js';
+import * as trashSvc from './trash-service.js';
 import { getRemembered, saveRemembered, clearRemembered } from './remember.js';
 
 export function registerIpc(): void {
@@ -140,4 +141,9 @@ export function registerIpc(): void {
   ipcMain.handle('partner:delete', async (_e, args: { ids: number[]; password: string }) => bankCfgSvc.deletePartners(args.ids, args.password));
   ipcMain.handle('partnerBank:matrix', async () => bankCfgSvc.getPartnerBankMatrix());
   ipcMain.handle('partnerBank:set', async (_e, args: { partnerId: number; bankIds: number[] }) => bankCfgSvc.setPartnerBanks(args.partnerId, args.bankIds));
+
+  // ── E4 Thùng rác ──
+  ipcMain.handle('trash:list', async () => trashSvc.listTrash());
+  ipcMain.handle('trash:restore', async (_e, args: { entityType: string; id: number }) => trashSvc.restoreItem(args.entityType, args.id));
+  ipcMain.handle('trash:linkSummary', async (_e, args: { entityType: string; id: number }) => trashSvc.linkSummary(args.entityType, args.id));
 }

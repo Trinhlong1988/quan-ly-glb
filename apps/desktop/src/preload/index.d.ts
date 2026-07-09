@@ -440,6 +440,25 @@ export interface GlbApi {
 
   notifyUndeliveredSummary(): Promise<{ ok: boolean; data?: UndeliveredSummary; error?: string; message?: string }>;
   notifyPushUndelivered(): Promise<{ ok: boolean; stub: true; message?: string; error?: string }>;
+
+  // Thùng rác (E4)
+  trashList(): Promise<{ ok: boolean; data?: TrashRow[]; error?: string; message?: string }>;
+  trashRestore(entityType: string, id: number): Promise<MutationOutcome>;
+  trashLinkSummary(entityType: string, id: number): Promise<{ ok: boolean; data?: TrashLinkRef[]; error?: string; message?: string }>;
+}
+
+export interface TrashRow {
+  entityType: string;
+  entityLabel: string;
+  id: number;
+  code: string | null;
+  label: string;
+  deletedAt: string;
+}
+
+export interface TrashLinkRef {
+  label: string;
+  count: number;
 }
 
 declare global {

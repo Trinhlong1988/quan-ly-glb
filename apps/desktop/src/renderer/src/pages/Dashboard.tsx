@@ -10,7 +10,8 @@ import {
   ChevronDown,
   UserRound,
   HardDrive,
-  CreditCard
+  CreditCard,
+  Trash2
 } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, hasAnyPermission } from '@glb/shared';
@@ -22,6 +23,7 @@ import { SettingsPage } from './SettingsPage.js';
 import { CustomersPage } from './CustomersPage.js';
 import { PosPage } from './PosPage.js';
 import { TidPage } from './TidPage.js';
+import { TrashPage } from './TrashPage.js';
 
 interface MenuItem {
   key: string;
@@ -45,8 +47,9 @@ const MENU: MenuItem[] = [
   { key: 'pos', label: 'Máy POS', icon: <HardDrive className="h-[18px] w-[18px]" />, perms: ['POS_VIEW'] },
   { key: 'tid', label: 'TID', icon: <CreditCard className="h-[18px] w-[18px]" />, perms: ['TID_VIEW'], badge: 'undeliveredTid' },
   { key: 'audit', label: 'Nhật ký hệ thống', icon: <ScrollText className="h-[18px] w-[18px]" />, perms: ['AUDIT_LOG_VIEW'] },
+  { key: 'trash', label: 'Thùng rác', icon: <Trash2 className="h-[18px] w-[18px]" />, perms: ['TRASH_VIEW'] },
   { key: 'settings', label: 'Cài đặt', icon: <Settings className="h-[18px] w-[18px]" />, perms: ['SYSTEM_SETTING_VIEW'] },
-  { key: 'backup', label: 'Backup / Restore', icon: <DatabaseBackup className="h-[18px] w-[18px]" />, perms: ['BACKUP_CREATE', 'BACKUP_RESTORE'] }
+  { key: 'backup', label: 'Sao lưu & Phục hồi', icon: <DatabaseBackup className="h-[18px] w-[18px]" />, perms: ['BACKUP_CREATE', 'BACKUP_RESTORE'] }
 ];
 
 export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => void }): JSX.Element {
@@ -152,6 +155,7 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
           {activeItem?.key === 'staff' && <StaffPage user={user} />}
           {activeItem?.key === 'roles' && <RolesPage user={user} />}
           {activeItem?.key === 'audit' && <AuditPage />}
+          {activeItem?.key === 'trash' && <TrashPage user={user} />}
           {activeItem?.key === 'settings' && <SettingsPage user={user} />}
           {activeItem?.key === 'backup' && <BackupPage user={user} />}
         </main>

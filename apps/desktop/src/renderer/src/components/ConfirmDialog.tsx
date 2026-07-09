@@ -49,7 +49,7 @@ export function ConfirmDialog({
           <AlertTriangle className="h-5 w-5" />
         </div>
         <div className="flex-1">
-          <p className="text-sm leading-relaxed text-slate-600">{message}</p>
+          <p className="whitespace-pre-line text-sm leading-relaxed text-slate-600">{message}</p>
           {requirePassword && (
             <label className="mt-4 flex flex-col gap-1.5">
               <span className="text-sm font-medium text-slate-700">Nhập lại mật khẩu để xác nhận</span>
