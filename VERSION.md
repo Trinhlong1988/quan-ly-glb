@@ -1,12 +1,12 @@
 ---
 project: Quản Lý GLB (IMS)
-phase: G-CFG.3
-current_version: 0.6.0-gcfg3
+phase: G-CFG.4
+current_version: 0.7.0-gcfg4
 status: BUILDING (Engineering, chưa Production Validated)
 last_update_ts: 2026-07-09
 last_update_by: CMD_BUILD (Claude)
 rule_break_count: 0
-schema_version: 6
+schema_version: 7
 ---
 
 # VERSION — Quản Lý GLB
@@ -18,6 +18,16 @@ schema_version: 6
 4. Đọc `bible/00_constitution.md`.
 
 ## Nhật ký phiên bản
+### 0.7.0-gcfg4 — 2026-07-09 (CMD_BUILD)
+- **G-CFG.4 Tài khoản nhận tiền – ủy quyền (§C mục 8)**: Nguồn tài khoản (§8a) + Tài khoản nhận tiền (§8b) kèm **đính kèm ảnh CCCD 2 mặt** (mặt sau KHÔNG bắt buộc — LEAD chốt "chỉ có mặt trước thì dùng mặt trước").
+- **Schema v7**: migration `20260709170000_gcfg4_receive_account` (`receive_account_sources`, `receive_accounts` — TK có sourceId/bankId/customerId liên kết scalar + trường CCCD + cột path/tên ảnh 2 mặt; truy vết created_by/updated_by/deleted_at). Áp B05 (nguồn tên @unique → DUPLICATE_TRASH + lưới P2002).
+- **Kho file ngoài DB** `file-store.ts` (docs/FILE_UPLOAD_CONVENTION.md): ảnh vào `<userData>/uploads/receiveAccount/<id>/`, đặt tên chuẩn `1. CCCD MT - <tên chủ hộ>` / `2. CCCD MS - <tên>`. DB chỉ giữ path tương đối + tên gốc + checksum. Thay/gỡ ảnh → chuyển `_trash` (KHÔNG xóa cứng — R_AUDIT_TRAIL). Đọc lại qua IPC `file:read` → data URL (renderer sandbox không đọc fs). Chọn ảnh qua `dialog.showOpenDialog` (main, `file:pickImage`). Chặn path traversal, chỉ nhận PNG/JPG/PDF. `GLB_UPLOADS_DIR` override cho self-test.
+- **2 permission** CONFIG_RCV_ACCT_VIEW/MANAGE (gán ADMIN/MANAGER/ACCOUNTANT). 8 AuditAction mới (RCV_ACCT_SOURCE_*/RCV_ACCT_*).
+- **Backend** `receive-account-service.ts`: CRUD nguồn (B05) + CRUD TK + `applyAttachments` (undefined=giữ / null=gỡ→trash / path=lưu) + validate khóa tham chiếu (nguồn/ngân hàng/khách còn sống). Xóa mềm + nhập lại mật khẩu.
+- **UI** `ReceiveAccountPage.tsx` (2 tab) — form TK đầy đủ (nguồn→gắn KH→ngân hàng→CCCD…) + 2 ô đính kèm CCCD (Chọn/Đổi/Gỡ ảnh) + ảnh thu nhỏ click phóng to. Multi-select + Xuất Excel + lọc theo nguồn. Menu "Tài khoản nhận tiền". AuditPage + Thùng rác mở rộng ReceiveAccountSource/ReceiveAccount.
+- Bằng chứng: **Vitest 178/178** · typecheck node+web 0 · build 0 · **GLB_SELFTEST=8 113/113 PASS exit 0** (59 đúng + 54 sai, R_LINK_VERIFY — gồm kiểm tra tên file chuẩn, đọc lại data URL, thay/gỡ ảnh→_trash) · regression **=4 109/109 · =5 107/107 · =7 102/102 · =6 106/106**. File thật kiểm trên đĩa: `1. CCCD MT - Trần Thị B.png`, `2. CCCD MS - Lê Văn C.jpg`, ảnh gỡ nằm trong `_trash/`.
+- **CHƯA**: nghiệm thu UI thật (LEAD) · §9 Cấu hình TID (trạng thái TID + thêm TID) · §C mục 10 Hồ sơ HKD (G-CFG.5). Status L1 Engineering PASS (R196).
+
 ### 0.6.0-gcfg3 — 2026-07-09 (CMD_BUILD)
 - **G-CFG.3 Cấu hình phí (§C5)**: Loại phí (C5a) + Biểu phí % theo **Đối tác × Loại thẻ** (C5b). LEAD chốt: mỗi loại thẻ (Visa/Master/Napas/UnionPay/Amex…) của 1 đối tác có biểu phí riêng; set lại = cập nhật (upsert).
 - **Schema v6**: migration `20260709160000_gcfg3_fee_config` (`fee_types`, `fee_rates`). Phí lưu Int = %×1000 (≤3 thập phân, chính xác tuyệt đối, KHÔNG float). Chênh lệch NCC/KH là cột TÍNH động (không lưu).

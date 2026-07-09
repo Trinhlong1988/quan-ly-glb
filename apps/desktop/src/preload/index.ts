@@ -129,6 +129,20 @@ const api = {
   feeRateSet: (input: unknown) => ipcRenderer.invoke('feeRate:set', input),
   feeRateDelete: (ids: number[], password: string) => ipcRenderer.invoke('feeRate:delete', { ids, password }),
 
+  // Tài khoản nhận tiền – ủy quyền (G-CFG.4 §8)
+  rcvSourceList: () => ipcRenderer.invoke('rcvSource:list'),
+  rcvSourceCreate: (input: unknown) => ipcRenderer.invoke('rcvSource:create', input),
+  rcvSourceUpdate: (id: number, input: unknown) => ipcRenderer.invoke('rcvSource:update', { id, input }),
+  rcvSourceDelete: (ids: number[], password: string) => ipcRenderer.invoke('rcvSource:delete', { ids, password }),
+
+  rcvAccountList: (filter: unknown) => ipcRenderer.invoke('rcvAccount:list', filter),
+  rcvAccountCreate: (input: unknown) => ipcRenderer.invoke('rcvAccount:create', input),
+  rcvAccountUpdate: (id: number, input: unknown) => ipcRenderer.invoke('rcvAccount:update', { id, input }),
+  rcvAccountDelete: (ids: number[], password: string) => ipcRenderer.invoke('rcvAccount:delete', { ids, password }),
+
+  pickImage: () => ipcRenderer.invoke('file:pickImage'),
+  readAttachment: (relPath: string) => ipcRenderer.invoke('file:read', relPath),
+
   // Thùng rác (E4)
   trashList: () => ipcRenderer.invoke('trash:list'),
   trashRestore: (entityType: string, id: number) => ipcRenderer.invoke('trash:restore', { entityType, id }),

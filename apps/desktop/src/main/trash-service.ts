@@ -18,7 +18,9 @@ export type TrashEntity =
   | 'PosIntakeStatus'
   | 'PosIntake'
   | 'FeeType'
-  | 'FeeRate';
+  | 'FeeRate'
+  | 'ReceiveAccountSource'
+  | 'ReceiveAccount';
 
 const LABEL: Record<TrashEntity, string> = {
   Customer: 'Khách hàng',
@@ -31,7 +33,9 @@ const LABEL: Record<TrashEntity, string> = {
   PosIntakeStatus: 'Trạng thái nhập máy',
   PosIntake: 'Máy POS nhập kho',
   FeeType: 'Loại phí',
-  FeeRate: 'Biểu phí'
+  FeeRate: 'Biểu phí',
+  ReceiveAccountSource: 'Nguồn TK nhận tiền',
+  ReceiveAccount: 'TK nhận tiền'
 };
 
 export function isTrashEntity(v: string): v is TrashEntity {
@@ -65,7 +69,7 @@ export async function listTrash(): Promise<{ ok: boolean; data?: TrashRow[]; err
   if (!g.ok) return g;
   const db = g.db;
   const del = { deletedAt: { not: null } } as const;
-  const [customers, agents, banks, cardTypes, partners, suppliers, posModels, intakeStatuses, posIntakes, feeTypes, feeRates] = await Promise.all([
+  const [customers, agents, banks, cardTypes, partners, suppliers, posModels, intakeStatuses, posIntakes, feeTypes, feeRates, rcvSources, rcvAccounts] = await Promise.all([
     db.customer.findMany({ where: del }),
     db.agent.findMany({ where: del }),
     db.bank.findMany({ where: del }),
@@ -76,7 +80,9 @@ export async function listTrash(): Promise<{ ok: boolean; data?: TrashRow[]; err
     db.posIntakeStatus.findMany({ where: del }),
     db.posIntake.findMany({ where: del }),
     db.feeType.findMany({ where: del }),
-    db.feeRate.findMany({ where: del })
+    db.feeRate.findMany({ where: del }),
+    db.receiveAccountSource.findMany({ where: del }),
+    db.receiveAccount.findMany({ where: del })
   ]);
   const rows: TrashRow[] = [
     ...customers.map((c) => row('Customer', c.id, c.code, `${c.nickname} (${c.fullName})`, c.deletedAt)),
@@ -89,7 +95,9 @@ export async function listTrash(): Promise<{ ok: boolean; data?: TrashRow[]; err
     ...intakeStatuses.map((st) => row('PosIntakeStatus', st.id, null, st.name, st.deletedAt)),
     ...posIntakes.map((pi) => row('PosIntake', pi.id, pi.serial, pi.serial, pi.deletedAt)),
     ...feeTypes.map((ft) => row('FeeType', ft.id, null, ft.name, ft.deletedAt)),
-    ...feeRates.map((fr) => row('FeeRate', fr.id, null, `Biểu phí #${fr.id}`, fr.deletedAt))
+    ...feeRates.map((fr) => row('FeeRate', fr.id, null, `Biểu phí #${fr.id}`, fr.deletedAt)),
+    ...rcvSources.map((s) => row('ReceiveAccountSource', s.id, null, s.name, s.deletedAt)),
+    ...rcvAccounts.map((a) => row('ReceiveAccount', a.id, a.accountNumber, `${a.accountName} · ${a.accountNumber}`, a.deletedAt))
   ].sort((x, y) => (x.deletedAt < y.deletedAt ? 1 : -1));
   return { ok: true, data: rows };
 }
@@ -175,6 +183,8 @@ async function findOne(entityType: TrashEntity, id: number): Promise<{ deletedAt
     case 'PosIntake': return db.posIntake.findUnique({ where: { id }, select: { deletedAt: true } });
     case 'FeeType': return db.feeType.findUnique({ where: { id }, select: { deletedAt: true } });
     case 'FeeRate': return db.feeRate.findUnique({ where: { id }, select: { deletedAt: true } });
+    case 'ReceiveAccountSource': return db.receiveAccountSource.findUnique({ where: { id }, select: { deletedAt: true } });
+    case 'ReceiveAccount': return db.receiveAccount.findUnique({ where: { id }, select: { deletedAt: true } });
   }
 }
 
@@ -193,5 +203,7 @@ async function clearDeleted(entityType: TrashEntity, id: number): Promise<void> 
     case 'PosIntake': await db.posIntake.update({ where: { id }, data }); return;
     case 'FeeType': await db.feeType.update({ where: { id }, data }); return;
     case 'FeeRate': await db.feeRate.update({ where: { id }, data }); return;
+    case 'ReceiveAccountSource': await db.receiveAccountSource.update({ where: { id }, data }); return;
+    case 'ReceiveAccount': await db.receiveAccount.update({ where: { id }, data }); return;
   }
 }

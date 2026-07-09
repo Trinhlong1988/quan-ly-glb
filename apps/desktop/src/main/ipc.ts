@@ -1,5 +1,5 @@
 // IPC registration (main). Renderer never touches the DB — all DB work lives behind these handlers.
-import { ipcMain } from 'electron';
+import { ipcMain, dialog, BrowserWindow } from 'electron';
 import { validatePassword } from '@glb/shared';
 import * as auth from './auth-service.js';
 import * as roleSvc from './role-service.js';
@@ -14,6 +14,8 @@ import * as notifySvc from './notification-service.js';
 import * as bankCfgSvc from './bank-config-service.js';
 import * as posSupplySvc from './pos-supply-service.js';
 import * as feeCfgSvc from './fee-config-service.js';
+import * as rcvAcctSvc from './receive-account-service.js';
+import { readAttachmentDataUrl } from './file-store.js';
 import * as trashSvc from './trash-service.js';
 import { getRemembered, saveRemembered, clearRemembered } from './remember.js';
 
@@ -176,6 +178,28 @@ export function registerIpc(): void {
   ipcMain.handle('feeRate:list', async (_e, filter: feeCfgSvc.FeeRateFilter) => feeCfgSvc.listFeeRates(filter));
   ipcMain.handle('feeRate:set', async (_e, input: feeCfgSvc.SetFeeRateInput) => feeCfgSvc.setFeeRate(input));
   ipcMain.handle('feeRate:delete', async (_e, args: { ids: number[]; password: string }) => feeCfgSvc.deleteFeeRates(args.ids, args.password));
+
+  // ── G-CFG.4 Tài khoản nhận tiền – ủy quyền (§8) ──
+  ipcMain.handle('rcvSource:list', async () => rcvAcctSvc.listSources());
+  ipcMain.handle('rcvSource:create', async (_e, input: rcvAcctSvc.CreateRcvSourceInput) => rcvAcctSvc.createSource(input));
+  ipcMain.handle('rcvSource:update', async (_e, args: { id: number; input: rcvAcctSvc.UpdateRcvSourceInput }) => rcvAcctSvc.updateSource(args.id, args.input));
+  ipcMain.handle('rcvSource:delete', async (_e, args: { ids: number[]; password: string }) => rcvAcctSvc.deleteSources(args.ids, args.password));
+
+  ipcMain.handle('rcvAccount:list', async (_e, filter: rcvAcctSvc.RcvAccountFilter) => rcvAcctSvc.listAccounts(filter));
+  ipcMain.handle('rcvAccount:create', async (_e, input: rcvAcctSvc.RcvAccountInput) => rcvAcctSvc.createAccount(input));
+  ipcMain.handle('rcvAccount:update', async (_e, args: { id: number; input: rcvAcctSvc.RcvAccountInput }) => rcvAcctSvc.updateAccount(args.id, args.input));
+  ipcMain.handle('rcvAccount:delete', async (_e, args: { ids: number[]; password: string }) => rcvAcctSvc.deleteAccounts(args.ids, args.password));
+
+  // Chọn ảnh (PNG/JPG/PDF) qua hộp thoại hệ điều hành → trả đường dẫn tuyệt đối.
+  ipcMain.handle('file:pickImage', async () => {
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+    const res = win
+      ? await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'Ảnh/PDF', extensions: ['png', 'jpg', 'jpeg', 'pdf'] }] })
+      : await dialog.showOpenDialog({ properties: ['openFile'], filters: [{ name: 'Ảnh/PDF', extensions: ['png', 'jpg', 'jpeg', 'pdf'] }] });
+    if (res.canceled || res.filePaths.length === 0) return { ok: false, canceled: true };
+    return { ok: true, path: res.filePaths[0] };
+  });
+  ipcMain.handle('file:read', async (_e, relPath: string) => readAttachmentDataUrl(relPath));
 
   // ── E4 Thùng rác ──
   ipcMain.handle('trash:list', async () => trashSvc.listTrash());

@@ -111,6 +111,13 @@ export type AuditAction =
   | 'FEE_TYPE_DELETED'
   | 'FEE_RATE_SET'
   | 'FEE_RATE_DELETED'
+  // ── G-CFG.4 (§8) — Tài khoản nhận tiền – ủy quyền ──
+  | 'RCV_ACCT_SOURCE_CREATED'
+  | 'RCV_ACCT_SOURCE_UPDATED'
+  | 'RCV_ACCT_SOURCE_DELETED'
+  | 'RCV_ACCT_CREATED'
+  | 'RCV_ACCT_UPDATED'
+  | 'RCV_ACCT_DELETED'
   // Extra (superset of §16 minimum): a mutation refused because the actor lacked the
   // required permission MUST still be logged (R_AUDIT_003).
   | 'PERMISSION_DENIED';

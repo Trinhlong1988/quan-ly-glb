@@ -445,3 +445,54 @@ model FeeRate {
   @@index([cardTypeId])
   @@map("fee_rates")
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// G-CFG.4 — Tài khoản nhận tiền – ủy quyền (§8): nguồn TK (8a) + TK (8b)
+// Ảnh CCCD lưu ngoài DB (docs/FILE_UPLOAD_CONVENTION.md): DB giữ path + tên gốc + checksum.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Nguồn tài khoản ủy quyền (§8a) — ví dụ: Khách hàng, Nội bộ…
+model ReceiveAccountSource {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
+  createdBy Int?      @map("created_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedBy Int?      @map("updated_by")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("receive_account_sources")
+}
+
+// Tài khoản nhận tiền – ủy quyền (§8b).
+model ReceiveAccount {
+  id             Int       @id @default(autoincrement())
+  sourceId       Int       @map("source_id") // nguồn TK (8a)
+  accountName    String    @map("account_name") // Tên tài khoản (chủ TK)
+  accountNumber  String    @map("account_number") // STK
+  bankId         Int       @map("bank_id") // Ngân hàng
+  branch         String? // Chi nhánh
+  cccdNumber     String?   @map("cccd_number") // Số CCCD nhận ủy quyền
+  cccdIssueDate  DateTime? @map("cccd_issue_date") // Ngày cấp
+  cccdIssuePlace String?   @map("cccd_issue_place") // Nơi cấp
+  cccdExpiry     DateTime? @map("cccd_expiry") // Ngày hết hạn
+  phone          String?
+  email          String? // email đối soát
+  customerId     Int?      @map("customer_id") // gắn KH (null = nội bộ)
+  // Ảnh CCCD (path tương đối trong uploads/ + tên gốc). Mặt sau không bắt buộc.
+  cccdFrontPath  String?   @map("cccd_front_path")
+  cccdFrontName  String?   @map("cccd_front_name")
+  cccdBackPath   String?   @map("cccd_back_path")
+  cccdBackName   String?   @map("cccd_back_name")
+  note           String?
+  createdBy      Int?      @map("created_by")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedBy      Int?      @map("updated_by")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
+
+  @@index([sourceId])
+  @@index([bankId])
+  @@index([customerId])
+  @@map("receive_accounts")
+}

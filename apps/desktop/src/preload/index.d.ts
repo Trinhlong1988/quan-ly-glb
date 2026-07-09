@@ -475,6 +475,77 @@ export interface SetFeeRateInput {
   phiCaiMay: number;
   phiBan: number;
 }
+
+// ── G-CFG.4 DTOs (Tài khoản nhận tiền §8) ──
+export interface RcvSourceDto extends AuditTrail {
+  id: number;
+  name: string;
+}
+export interface CreateRcvSourceInput {
+  name: string;
+}
+export interface UpdateRcvSourceInput {
+  name?: string;
+}
+export interface RcvAccountDto extends AuditTrail {
+  id: number;
+  sourceId: number;
+  sourceName: string | null;
+  accountName: string;
+  accountNumber: string;
+  bankId: number;
+  bankCode: string | null;
+  bankName: string | null;
+  branch: string | null;
+  cccdNumber: string | null;
+  cccdIssueDate: string | null;
+  cccdIssuePlace: string | null;
+  cccdExpiry: string | null;
+  phone: string | null;
+  email: string | null;
+  customerId: number | null;
+  customerName: string | null;
+  cccdFrontPath: string | null;
+  cccdFrontName: string | null;
+  cccdBackPath: string | null;
+  cccdBackName: string | null;
+}
+export interface RcvAccountFilter {
+  search?: string;
+  sourceId?: number;
+  bankId?: number;
+  customerId?: number;
+  fromDate?: string;
+  toDate?: string;
+}
+export interface RcvAccountInput {
+  sourceId: number;
+  accountName: string;
+  accountNumber: string;
+  bankId: number;
+  branch?: string | null;
+  cccdNumber?: string | null;
+  cccdIssueDate?: string | null;
+  cccdIssuePlace?: string | null;
+  cccdExpiry?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  customerId?: number | null;
+  note?: string | null;
+  cccdFrontSrc?: string | null;
+  cccdBackSrc?: string | null;
+}
+export interface PickImageResult {
+  ok: boolean;
+  path?: string;
+  canceled?: boolean;
+}
+export interface ReadAttachmentResult {
+  ok: boolean;
+  dataUrl?: string;
+  error?: string;
+  message?: string;
+}
 export interface LinkOutcome extends MutationOutcome {
   linked?: number;
   unlinked?: number;
@@ -636,6 +707,20 @@ export interface GlbApi {
   feeRateList(filter: FeeRateFilter): Promise<ListResult<FeeRateDto>>;
   feeRateSet(input: SetFeeRateInput): Promise<MutationOutcome>;
   feeRateDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
+
+  // ── Tài khoản nhận tiền – ủy quyền (G-CFG.4 §8) ──
+  rcvSourceList(): Promise<ListResult<RcvSourceDto>>;
+  rcvSourceCreate(input: CreateRcvSourceInput): Promise<MutationOutcome>;
+  rcvSourceUpdate(id: number, input: UpdateRcvSourceInput): Promise<MutationOutcome>;
+  rcvSourceDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
+
+  rcvAccountList(filter: RcvAccountFilter): Promise<ListResult<RcvAccountDto>>;
+  rcvAccountCreate(input: RcvAccountInput): Promise<MutationOutcome>;
+  rcvAccountUpdate(id: number, input: RcvAccountInput): Promise<MutationOutcome>;
+  rcvAccountDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
+
+  pickImage(): Promise<PickImageResult>;
+  readAttachment(relPath: string): Promise<ReadAttachmentResult>;
 
   // Thùng rác (E4)
   trashList(): Promise<{ ok: boolean; data?: TrashRow[]; error?: string; message?: string }>;
