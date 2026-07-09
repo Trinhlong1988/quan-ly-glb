@@ -1,0 +1,33 @@
+{
+  "name": "quan-ly-glb",
+  "version": "0.1.0-phaseA",
+  "private": true,
+  "description": "Quản Lý GLB — Internal Management System (IMS). G1 Phase A foundation + auth slice.",
+  "workspaces": [
+    "packages/shared",
+    "packages/business-rules",
+    "packages/database",
+    "apps/desktop"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @glb/desktop",
+    "build": "npm run build --workspace @glb/desktop",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -b --noEmit || tsc --noEmit -p tsconfig.json",
+    "db:generate": "npm run generate --workspace @glb/database",
+    "db:migrate": "npm run migrate --workspace @glb/database",
+    "db:seed": "npm run seed --workspace @glb/database",
+    "db:reset": "npm run reset --workspace @glb/database",
+    "db:setup": "npm run generate --workspace @glb/database && npm run migrate --workspace @glb/database && npm run seed --workspace @glb/database"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.10",
+    "tsx": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
