@@ -12,6 +12,7 @@ datasource db {
 
 model User {
   id                  Int       @id @default(autoincrement())
+  employeeCode        String?   @unique @map("employee_code") // mã NV (§D) — NV01, NV02...
   fullName            String    @map("full_name")
   birthDate           DateTime? @map("birth_date")
   gender              String?
@@ -137,4 +138,126 @@ model LoginSession {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("login_sessions")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// G-POS.1 — POS/TID asset library (event-sourced) + code counter (§A/§D).
+// Asset tables use scalar id links (no hard FK) to keep the immutable event log
+// resilient to soft-deletes/renames; joins are done in the service layer.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Đại lý (§A2).
+model Agent {
+  id        Int       @id @default(autoincrement())
+  code      String?   @unique
+  name      String
+  region    String?
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("agents")
+}
+
+// Khách hàng / điểm bán (§A2/§D). Mã KH## + nickname bắt buộc ("dễ gọi").
+model Customer {
+  id        Int       @id @default(autoincrement())
+  code      String    @unique // KH01, KH02...
+  fullName  String    @map("full_name") // tên thật
+  nickname  String // biệt danh dễ gọi — BẮT BUỘC (§D)
+  phone     String?
+  email     String?
+  address   String?
+  agentId   Int?      @map("agent_id")
+  note      String?
+  createdBy Int?      @map("created_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("customers")
+}
+
+// Máy POS vật lý — danh tính = serial number bất biến (§A2).
+model PosDevice {
+  id                Int      @id @default(autoincrement())
+  serial            String   @unique
+  model             String?
+  bank              String?
+  status            String   @default("IN_STOCK") // IN_STOCK|DEPLOYED|IN_REPAIR|DAMAGED|RETIRED
+  currentAgentId    Int?     @map("current_agent_id")
+  currentCustomerId Int?     @map("current_customer_id")
+  currentTid        String?  @map("current_tid")
+  warehouseLoc      String?  @map("warehouse_loc")
+  note              String?
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@map("pos_devices")
+}
+
+// Terminal ID (§A2).
+model Tid {
+  id          Int       @id @default(autoincrement())
+  tid         String    @unique
+  mid         String?
+  bank        String?
+  status      String    @default("UNASSIGNED") // UNASSIGNED|ACTIVE|DEAD|CLOSED|RECALLED
+  posSerial   String?   @map("pos_serial")
+  customerId  Int?      @map("customer_id")
+  agentId     Int?      @map("agent_id")
+  openedAt    DateTime? @map("opened_at")
+  deliveredAt DateTime? @map("delivered_at")
+  closedAt    DateTime? @map("closed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@map("tids")
+}
+
+// NHẬT KÝ BẤT BIẾN (§A1) — mọi sự kiện vòng đời POS/TID. Không sửa/xóa.
+model AssetEvent {
+  id           Int      @id @default(autoincrement())
+  deviceSerial String?  @map("device_serial")
+  tid          String?
+  eventType    String   @map("event_type")
+  fromState    String?  @map("from_state")
+  toState      String?  @map("to_state")
+  fromAgentId  Int?     @map("from_agent_id")
+  toAgentId    Int?     @map("to_agent_id")
+  customerId   Int?     @map("customer_id")
+  actorUserId  Int?     @map("actor_user_id")
+  occurredAt   DateTime @map("occurred_at") // thời gian thao tác thực (≠ createdAt)
+  note         String?
+  beforeJson   String?  @map("before_json")
+  afterJson    String?  @map("after_json")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([deviceSerial])
+  @@index([tid])
+  @@map("asset_events")
+}
+
+// Gắn POS↔TID theo thời gian (§A2) — giữ lịch sử bind/unbind.
+model PosTidBinding {
+  id           Int       @id @default(autoincrement())
+  posSerial    String    @map("pos_serial")
+  tid          String
+  boundAt      DateTime  @map("bound_at")
+  unboundAt    DateTime? @map("unbound_at")
+  unbindReason String?   @map("unbind_reason")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@index([posSerial])
+  @@index([tid])
+  @@map("pos_tid_bindings")
+}
+
+// Bộ đếm sinh mã atomic (§D) — NV/KH/POS... zero-pad ≥2.
+model CodeCounter {
+  prefix    String   @id
+  lastValue Int      @default(0) @map("last_value")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("code_counters")
 }

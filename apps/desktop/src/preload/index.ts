@@ -43,7 +43,39 @@ const api = {
 
   // Settings
   settingList: () => ipcRenderer.invoke('setting:list'),
-  settingUpdate: (key: string, value: string) => ipcRenderer.invoke('setting:update', { key, value })
+  settingUpdate: (key: string, value: string) => ipcRenderer.invoke('setting:update', { key, value }),
+
+  // Customers (G-POS.1)
+  customerList: (filter: unknown) => ipcRenderer.invoke('customer:list', filter),
+  customerCreate: (input: unknown) => ipcRenderer.invoke('customer:create', input),
+  customerUpdate: (id: number, input: unknown) => ipcRenderer.invoke('customer:update', { id, input }),
+  customerDelete: (id: number, password: string) => ipcRenderer.invoke('customer:delete', { id, password }),
+  agentList: () => ipcRenderer.invoke('agent:list'),
+
+  // POS devices (G-POS.1)
+  posList: (filter: unknown) => ipcRenderer.invoke('pos:list', filter),
+  posTimeline: (serial: string) => ipcRenderer.invoke('pos:timeline', serial),
+  posCreate: (input: unknown) => ipcRenderer.invoke('pos:create', input),
+  posDeploy: (serial: string, input: unknown) => ipcRenderer.invoke('pos:deploy', { serial, input }),
+  posRecall: (serial: string, input: unknown) => ipcRenderer.invoke('pos:recall', { serial, input }),
+  posTransferAgent: (serial: string, input: unknown) => ipcRenderer.invoke('pos:transferAgent', { serial, input }),
+  posReportDamage: (serial: string, input: unknown) => ipcRenderer.invoke('pos:reportDamage', { serial, input }),
+  posSendRepair: (serial: string, input: unknown) => ipcRenderer.invoke('pos:sendRepair', { serial, input }),
+  posReceiveRepaired: (serial: string, input: unknown) => ipcRenderer.invoke('pos:receiveRepaired', { serial, input }),
+  posRetire: (serial: string, password: string, input: unknown) => ipcRenderer.invoke('pos:retire', { serial, password, input }),
+
+  // TIDs (G-POS.1)
+  tidList: (filter: unknown) => ipcRenderer.invoke('tid:list', filter),
+  tidUndelivered: () => ipcRenderer.invoke('tid:undelivered'),
+  tidCreate: (input: unknown) => ipcRenderer.invoke('tid:create', input),
+  tidAssign: (tid: string, input: unknown) => ipcRenderer.invoke('tid:assign', { tid, input }),
+  tidReplace: (tid: string, input: unknown) => ipcRenderer.invoke('tid:replace', { tid, input }),
+  tidRecall: (tid: string, input: unknown) => ipcRenderer.invoke('tid:recall', { tid, input }),
+  tidMarkDelivered: (tid: string, input: unknown) => ipcRenderer.invoke('tid:markDelivered', { tid, input }),
+
+  // Notifications (undelivered TID)
+  notifyUndeliveredSummary: () => ipcRenderer.invoke('notify:undeliveredSummary'),
+  notifyPushUndelivered: () => ipcRenderer.invoke('notify:pushUndelivered')
 };
 
 export type GlbApi = typeof api;

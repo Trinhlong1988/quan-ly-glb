@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   LayoutDashboard,
   Users,
@@ -7,7 +7,10 @@ import {
   Settings,
   DatabaseBackup,
   LogOut,
-  ChevronDown
+  ChevronDown,
+  UserRound,
+  HardDrive,
+  CreditCard
 } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, hasAnyPermission } from '@glb/shared';
@@ -16,6 +19,9 @@ import { StaffPage } from './StaffPage.js';
 import { AuditPage } from './AuditPage.js';
 import { BackupPage } from './BackupPage.js';
 import { SettingsPage } from './SettingsPage.js';
+import { CustomersPage } from './CustomersPage.js';
+import { PosPage } from './PosPage.js';
+import { TidPage } from './TidPage.js';
 
 interface MenuItem {
   key: string;
@@ -23,10 +29,15 @@ interface MenuItem {
   icon: JSX.Element;
   /** Permission(s) required to see the item; undefined = always visible. Any-of semantics. */
   perms?: string[];
+  /** Show a live badge (e.g. undelivered TID count). */
+  badge?: 'undeliveredTid';
 }
 
 const MENU: MenuItem[] = [
   { key: 'dashboard', label: 'Trang chủ', icon: <LayoutDashboard className="h-[18px] w-[18px]" />, perms: ['DASHBOARD_VIEW'] },
+  { key: 'customers', label: 'Khách hàng', icon: <UserRound className="h-[18px] w-[18px]" />, perms: ['CUSTOMER_VIEW'] },
+  { key: 'pos', label: 'Máy POS', icon: <HardDrive className="h-[18px] w-[18px]" />, perms: ['POS_VIEW'] },
+  { key: 'tid', label: 'TID', icon: <CreditCard className="h-[18px] w-[18px]" />, perms: ['TID_VIEW'], badge: 'undeliveredTid' },
   { key: 'staff', label: 'Quản lý Nhân sự', icon: <Users className="h-[18px] w-[18px]" />, perms: ['USER_READ'] },
   { key: 'roles', label: 'Vai trò & Quyền', icon: <ShieldCheck className="h-[18px] w-[18px]" />, perms: ['ROLE_READ'] },
   { key: 'audit', label: 'Nhật ký hệ thống', icon: <ScrollText className="h-[18px] w-[18px]" />, perms: ['AUDIT_LOG_VIEW'] },
@@ -38,6 +49,14 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
   const visible = MENU.filter((m) => !m.perms || hasAnyPermission(user, m.perms));
   const [active, setActive] = useState(visible[0]?.key ?? 'dashboard');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [undeliveredCount, setUndeliveredCount] = useState(0);
+
+  useEffect(() => {
+    if (!hasPermission(user, 'TID_VIEW')) return;
+    window.api.notifyUndeliveredSummary().then((r) => {
+      if (r.ok && r.data) setUndeliveredCount(r.data.count);
+    });
+  }, [user, active]);
 
   const activeItem = visible.find((m) => m.key === active) ?? visible[0];
 
@@ -64,7 +83,10 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
               }
             >
               {m.icon}
-              {m.label}
+              <span className="flex-1 text-left">{m.label}</span>
+              {m.badge === 'undeliveredTid' && undeliveredCount > 0 && (
+                <span className="rounded-full bg-danger px-1.5 text-xs font-semibold text-white">{undeliveredCount}</span>
+              )}
             </button>
           ))}
         </nav>
@@ -119,6 +141,9 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
         {/* Content */}
         <main className="flex-1 overflow-auto p-6">
           {activeItem?.key === 'dashboard' && <Home user={user} visibleCount={visible.length} />}
+          {activeItem?.key === 'customers' && <CustomersPage user={user} />}
+          {activeItem?.key === 'pos' && <PosPage user={user} />}
+          {activeItem?.key === 'tid' && <TidPage user={user} />}
           {activeItem?.key === 'staff' && <StaffPage user={user} />}
           {activeItem?.key === 'roles' && <RolesPage user={user} />}
           {activeItem?.key === 'audit' && <AuditPage />}

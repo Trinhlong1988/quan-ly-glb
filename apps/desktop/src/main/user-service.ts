@@ -16,9 +16,11 @@ import { requirePermission, verifyActorPassword } from './guard.js';
 import { me } from './auth-service.js';
 import { getDb } from './db.js';
 import { writeAudit } from './audit.js';
+import { nextCode } from './code-service.js';
 
 export interface UserDto {
   id: number;
+  employeeCode: string | null;
   fullName: string;
   birthDate: string | null;
   gender: string | null;
@@ -48,6 +50,7 @@ export interface UserFilter {
 
 function toDto(u: {
   id: number;
+  employeeCode: string | null;
   fullName: string;
   birthDate: Date | null;
   gender: string | null;
@@ -64,6 +67,7 @@ function toDto(u: {
 }): UserDto {
   return {
     id: u.id,
+    employeeCode: u.employeeCode,
     fullName: u.fullName,
     birthDate: u.birthDate ? u.birthDate.toISOString() : null,
     gender: u.gender,
@@ -195,29 +199,34 @@ export async function createUser(input: CreateUserInput): Promise<MutationResult
   }
 
   const roles = await db.role.findMany({ where: { code: { in: roleCodes } } });
-  const created = await db.user.create({
-    data: {
-      fullName: input.fullName.trim(),
-      birthDate: input.birthDate ? new Date(input.birthDate) : null,
-      gender: input.gender ?? null,
-      phone: input.phone ?? null,
-      email: input.email || null,
-      address: input.address ?? null,
-      joinDate: input.joinDate ? new Date(input.joinDate) : null,
-      username: input.username,
-      passwordHash: hashPassword(input.password),
-      status: input.status === 'PENDING' ? 'PENDING' : 'ACTIVE',
-      forceChangePassword: true,
-      createdBy: user.id,
-      roles: { create: roles.map((r) => ({ roleId: r.id })) }
-    }
+  // Atomic: mint the mã NV (§D) and create the user together.
+  const created = await db.$transaction(async (tx) => {
+    const employeeCode = await nextCode('NV', tx);
+    return tx.user.create({
+      data: {
+        employeeCode,
+        fullName: input.fullName.trim(),
+        birthDate: input.birthDate ? new Date(input.birthDate) : null,
+        gender: input.gender ?? null,
+        phone: input.phone ?? null,
+        email: input.email || null,
+        address: input.address ?? null,
+        joinDate: input.joinDate ? new Date(input.joinDate) : null,
+        username: input.username,
+        passwordHash: hashPassword(input.password),
+        status: input.status === 'PENDING' ? 'PENDING' : 'ACTIVE',
+        forceChangePassword: true,
+        createdBy: user.id,
+        roles: { create: roles.map((r) => ({ roleId: r.id })) }
+      }
+    });
   });
   await writeAudit(db, {
     actorUserId: user.id,
     action: 'USER_CREATED',
     targetType: 'User',
     targetId: String(created.id),
-    after: auditSnapshot({ username: created.username, fullName: created.fullName, status: created.status, roles: roleCodes })
+    after: auditSnapshot({ employeeCode: created.employeeCode, username: created.username, fullName: created.fullName, status: created.status, roles: roleCodes })
   });
   return { ok: true, id: created.id };
 }

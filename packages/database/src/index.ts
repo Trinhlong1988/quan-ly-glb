@@ -10,4 +10,11 @@ export type {
   AppSetting,
   BackupLog,
   LoginSession,
+  Agent,
+  Customer,
+  PosDevice,
+  Tid,
+  AssetEvent,
+  PosTidBinding,
+  CodeCounter,
 } from "../generated/prisma/client.js";

@@ -7,6 +7,7 @@ import { app } from 'electron';
 import { createPrisma, type Db } from '@glb/database';
 import { PERMISSIONS, ROLES, DEFAULT_ROLE_PERMISSIONS } from '@glb/shared';
 import { hashPassword } from '@glb/business-rules';
+import { backfillEmployeeCodes } from './code-service.js';
 
 const ADMIN_USERNAME = 'adminroot';
 const ADMIN_DEFAULT_PASSWORD = 'Admin@123456';
@@ -31,12 +32,14 @@ export function getDb(): Db {
   return prisma;
 }
 
-/** Seed permissions/roles/role_permissions + default admin when the DB is empty (idempotent). */
+/**
+ * Provision the catalog + default admin. Idempotent and ADDITIVE:
+ * - permissions/roles/role_permissions are always upserted so schema evolution
+ *   (e.g. new G-POS CUSTOMER/POS/TID permissions) lands on existing databases too.
+ * - the default admin is created only when NO admin exists (R001).
+ * - every user missing an employee_code is backfilled a NV## code (adminroot → NV01, §D).
+ */
 async function seedIfEmpty(db: Db): Promise<void> {
-  const userCount = await db.user.count();
-  const permCount = await db.permission.count();
-  if (userCount > 0 && permCount > 0) return; // already provisioned
-
   for (const p of PERMISSIONS) {
     await db.permission.upsert({
       where: { code: p.code },
@@ -80,6 +83,9 @@ async function seedIfEmpty(db: Db): Promise<void> {
       }
     });
   }
+
+  // §D: ensure every user carries a mã NV (adminroot → NV01).
+  await backfillEmployeeCodes(db);
 }
 
 export async function initDb(): Promise<Db> {

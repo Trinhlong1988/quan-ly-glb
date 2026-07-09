@@ -117,6 +117,7 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
+              <th className="px-4 py-3">Mã NV</th>
               <th className="px-4 py-3">Nhân sự</th>
               <th className="px-4 py-3">Username</th>
               <th className="px-4 py-3">Liên hệ</th>
@@ -128,14 +129,14 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
           <tbody className="divide-y divide-line">
             {loading && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
                   <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                 </td>
               </tr>
             )}
             {!loading && rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-slate-400">
+                <td colSpan={7} className="px-4 py-10 text-center text-slate-400">
                   <Users className="mx-auto mb-2 h-6 w-6" />
                   Không có nhân sự phù hợp bộ lọc.
                 </td>
@@ -144,6 +145,7 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
             {!loading &&
               rows.map((u) => (
                 <tr key={u.id} className="hover:bg-appbg/60">
+                  <td className="px-4 py-3 font-mono text-xs font-semibold text-brand">{u.employeeCode ?? '—'}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2.5">
                       <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-tint text-xs font-semibold text-brand">
@@ -370,6 +372,13 @@ function StaffForm({
   return (
     <>
       <Modal title={editing ? 'Sửa thông tin nhân sự' : 'Thêm nhân sự mới'} onClose={onClose} width="max-w-2xl">
+        {editing ? (
+          <div className="mb-3 rounded-md bg-brand-tint px-3 py-2 text-sm text-brand">
+            Mã nhân viên: <span className="font-mono font-semibold">{target!.employeeCode ?? '—'}</span> (tự sinh, không đổi)
+          </div>
+        ) : (
+          <div className="mb-3 rounded-md bg-appbg px-3 py-2 text-sm text-slate-500">Mã nhân viên (NV##) sẽ được tự sinh khi tạo.</div>
+        )}
         <div className="grid grid-cols-2 gap-4">
           <Field label="Họ và tên" required>
             <input className={inputCls} value={fullName} onChange={(e) => setFullName(e.target.value)} />

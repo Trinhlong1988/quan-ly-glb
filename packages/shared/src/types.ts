@@ -66,6 +66,20 @@ export type AuditAction =
   | 'BACKUP_CREATED'
   | 'RESTORE_EXECUTED'
   | 'SETTING_UPDATED'
+  // ── G-POS.1 (§A/§D) ──
+  | 'CUSTOMER_CREATED'
+  | 'CUSTOMER_UPDATED'
+  | 'CUSTOMER_DELETED'
+  | 'POS_CREATED'
+  | 'POS_UPDATED'
+  | 'POS_TRANSITION'
+  | 'TID_CREATED'
+  | 'TID_UPDATED'
+  | 'TID_ASSIGNED'
+  | 'TID_REPLACED'
+  | 'TID_RECALLED'
+  | 'TID_DELIVERED'
+  | 'ASSET_EXPORTED'
   // Extra (superset of §16 minimum): a mutation refused because the actor lacked the
   // required permission MUST still be logged (R_AUDIT_003).
   | 'PERMISSION_DENIED';

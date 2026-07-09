@@ -64,6 +64,13 @@ app.whenReady().then(async () => {
     app.exit(code);
     return;
   }
+  // G-POS.1 integration self-test: customer/POS/TID/code services + event log.
+  if (process.env['GLB_SELFTEST'] === '3') {
+    const { runGposSelfTest } = await import('./selftest-gpos.js');
+    const code = await runGposSelfTest();
+    app.exit(code);
+    return;
+  }
 
   await createWindow();
 

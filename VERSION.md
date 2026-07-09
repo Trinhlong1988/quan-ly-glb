@@ -1,12 +1,12 @@
 ---
 project: Quản Lý GLB (IMS)
-phase: G1
-current_version: 0.2.0-phaseB
+phase: G-POS.1
+current_version: 0.3.0-gpos1
 status: BUILDING (Engineering, chưa Production Validated)
 last_update_ts: 2026-07-09
 last_update_by: CMD_BUILD (Claude)
 rule_break_count: 0
-schema_version: 2
+schema_version: 3
 ---
 
 # VERSION — Quản Lý GLB
@@ -18,6 +18,16 @@ schema_version: 2
 4. Đọc `bible/00_constitution.md`.
 
 ## Nhật ký phiên bản
+### 0.3.0-gpos1 — 2026-07-09 (CMD_BUILD)
+- **G-POS.1 phần A (POS/TID event-sourced) + D (mã NV/KH + KH nickname)** theo `docs/POS_TID_CASHFLOW_DESIGN_PROPOSAL.md` (APPROVED). KHÔNG làm phần B thu chi.
+- **Schema v3**: migration `20260709130000_gpos1_asset_library` (additive): `users.employee_code` + 7 bảng (`customers`, `agents`, `pos_devices`, `tids`, `asset_events`, `pos_tid_bindings`, `code_counters`). Resolve drift `join_date` + `migrate deploy` sạch. adminroot → NV01.
+- **9 permissions mới** (CUSTOMER/POS/TID/ASSET) + `db.ts` seed đổi thành idempotent additive re-sync mỗi boot. ADMIN=29 quyền.
+- **business-rules/asset.rules.ts**: state machine POS+TID + code format (13 vitest).
+- **Services**: code-service (nextCode atomic), customer-service, pos-service (7 transition + timeline), tid-service (assign/replace/recall/markDelivered + undelivered aging), notification-service (badge REAL, push Zalo STUB).
+- **UI**: CustomersPage, PosPage (+Timeline), TidPage (+tab TID chưa giao), StaffPage mã NV, Dashboard 3 menu + badge, `components/FilterBar.tsx` tái dùng (R_UX_FILTER: date range + dims + search + Làm mới, lọc server-side). R_UX_WARN: message tiếng Việt cụ thể mọi lỗi.
+- Bằng chứng: **Vitest 74/74 PASS** · desktop typecheck node+web exit 0 · `build -w @glb/desktop` exit 0 · **GLB_SELFTEST=3 40/40 PASS exit 0** · **GLB_SELFTEST=2 (Phase B regression) failures=0** (G1 KHÔNG vỡ) · dev.db verify NV01 + counters.
+- **CHƯA**: nghiệm thu UI tương tác thật (LEAD) · push Zalo thật (STUB) · thu chi (phần B) · .exe (Phase C). Status L1 Engineering PASS (R196).
+
 ### 0.0.1-scaffold — 2026-07-09
 - CMD_AUDIT dựng khung governance: CLAUDE.md, bible/00, docs/IMS_SPEC_v1_0.md (copy), prompts/CMD_BUILD + CMD_AUDIT, .gitignore.
 - Chưa có code app. Status: chờ CMD_BUILD implement G1.
@@ -51,4 +61,10 @@ schema_version: 2
 | packages/business-rules | 0.2.0 | enforced (role/backup/audit/user rules; 61 test PASS) |
 | packages/database (schema v2) | 0.2.0 | enforced (joinDate + migration file) |
 | G1 role/user/audit/backup | 0.2.0 | enforced (24 self-test integration PASS) — L1 Engineering, chờ LEAD nghiệm thu |
+| packages/database (schema v3) | 0.3.0 | enforced (migration 20260709130000 deploy thật + 7 bảng) |
+| business-rules asset.rules (state machine + code) | 0.3.0 | enforced (13 vitest) |
+| G-POS.1 customer/POS/TID services + event log | 0.3.0 | enforced (GLB_SELFTEST=3 40/40 PASS) — L1 Engineering |
+| G-POS.1 UI (Customer/POS/TID/FilterBar/badge) | 0.3.0 | partial — build+typecheck sạch, chờ LEAD nghiệm thu tương tác |
+| Undelivered Zalo push + scheduler | — | roadmap/STUB (badge REAL) |
+| Thu chi (phần B) | — | roadmap (chờ research) |
 | .exe packaging | — | roadmap (Phase C) |

@@ -304,3 +304,79 @@ Còn **roadmap Phase C**: restore swap-on-restart · prod DB provisioning · `.e
 Validation PASS** — chờ LEAD (Mr.Long) `npm run dev` nghiệm thu thật mới lên L2.
 
 `READY_FOR_AUDIT: YES` (Phase B. §21 toàn phần chưa PASS: #2 `.exe` = Phase C.)
+
+---
+
+# G-POS.1 — POS/TID Asset Library + Mã NV/KH — CMD_BUILD Report
+
+> Vai: **CMD_BUILD**. KHÔNG tự claim PASS. Phạm vi: phần **A (POS/TID event-sourced)** + **D (mã NV/KH + KH nickname)** theo `docs/POS_TID_CASHFLOW_DESIGN_PROPOSAL.md` (APPROVED). KHÔNG làm module thu chi (phần B — chờ research).
+> Ngày: 2026-07-09 · Node v24.14.1 · Electron (ABI 130). Áp dụng R_UX_WARN + R_UX_FILTER (Mr.Long bổ sung, phần E proposal).
+
+## 1. Đã làm gì
+
+### Schema (migration mới, KHÔNG phá bảng G1)
+Migration `packages/database/prisma/migrations/20260709130000_gpos1_asset_library` — **additive** (chỉ ADD 1 cột nullable vào `users` + tạo 7 bảng mới). Đã `prisma migrate resolve` cột `join_date` (drift do Phase B ALTER thủ công không ghi history) rồi `prisma migrate deploy` sạch.
+- `users.employee_code` (String? unique) — mã NV; adminroot backfill = **NV01** (verify thật).
+- `customers` (KH## unique, full_name, **nickname bắt buộc**, phone/email/address/agentId/note, soft-delete).
+- `agents`, `pos_devices` (serial unique, status IN_STOCK|DEPLOYED|IN_REPAIR|DAMAGED|RETIRED), `tids` (tid unique, status UNASSIGNED|ACTIVE|DEAD|CLOSED|RECALLED).
+- `asset_events` (**NHẬT KÝ BẤT BIẾN**: occurredAt riêng ≠ createdAt, beforeJson/afterJson, index deviceSerial+tid).
+- `pos_tid_bindings` (bind/unbind theo thời gian), `code_counters` (prefix PK, last_value — sinh mã atomic).
+
+### Permissions mới (packages/shared/permissions.ts + seed-sync)
+`CUSTOMER_VIEW/CREATE/UPDATE/DELETE`, `POS_VIEW/MANAGE`, `TID_VIEW/MANAGE`, `ASSET_EXPORT` (9 quyền). ADMIN full (29 quyền tổng, verify). MANAGER: CUSTOMER_* + POS/TID_VIEW. Các role khác gán hợp lý (WAREHOUSE POS/TID_VIEW, TECHNICIAN POS_VIEW, SALES CUSTOMER_VIEW/CREATE…). `db.ts` seed đổi thành **idempotent additive** (upsert perm/role/rolePerm mỗi boot) để quyền mới landing lên DB đang tồn tại + backfill employee_code.
+
+### Business rules thuần (packages/business-rules/asset.rules.ts + 13 vitest)
+State machine POS (`decidePosTransition`) + TID (`decideTidTransition`) — **chặn nhảy trạng thái sai**; `formatCode/isValidCode` (zero-pad ≥2, tràn NV100). 13 test PASS.
+
+### Services (main, guarded + audited — theo mẫu user-service.ts)
+- `code-service.ts` — `nextCode(prefix, tx?)` atomic qua `code_counters` (upsert increment); `backfillEmployeeCodes`.
+- `customer-service.ts` — CRUD, auto KH##, **nickname bắt buộc**, display `KH## · biệt danh (tên thật)`, soft-delete, xóa nhập lại mật khẩu (§14). `listAgents`, `dateRange` helper.
+- `pos-service.ts` — CRUD + 7 transition (deploy/recall/transferAgent/reportDamage/sendRepair/receiveRepaired/retire) → mỗi cái tạo `asset_event` có occurredAt + cập nhật status; `getDeviceTimeline`. Retire nhập lại mật khẩu.
+- `tid-service.ts` — CRUD + assign/replace/recall/markDelivered → `asset_event` + `pos_tid_binding`; `listUndeliveredTids` (aging từ openedAt, sort lâu nhất trước).
+- `notification-service.ts` — badge undelivered **REAL**; push Zalo + scheduler = **STUB rõ ràng** (log, chưa gửi thật — chờ tích hợp Zalo QLTK).
+- IPC + preload: 30 handler mới; renderer KHÔNG chạm DB (giữ luật G1).
+
+### UI KiotViet (Dashboard router + menu ẩn theo quyền)
+- **CustomersPage** (`KH## · biệt danh (tên thật)` + SĐT, form mã readonly + nickname bắt buộc).
+- **PosPage** (list serial/bank/TID/trạng thái + **Timeline vòng đời** + menu thao tác theo trạng thái).
+- **TidPage** (list + tab **"TID chưa giao"** với aging, tô đậm ≥30 ngày; gán/đổi/thu hồi/đánh dấu giao).
+- **StaffPage**: thêm cột **Mã NV** + hiển thị trong form.
+- **Dashboard**: 3 menu mới + **badge số TID chưa giao** ở sidebar.
+- **`components/FilterBar.tsx`** tái dùng (R_UX_FILTER): text search + **từ ngày → đến ngày** + N select (đại lý/trạng thái…) + Lọc + **Làm mới**. Lọc **server-side** (service nhận fromDate/toDate + dims). Áp cho Customer/POS/TID.
+
+### R_UX_WARN (mọi thao tác sai → message cụ thể tiếng Việt)
+Service trả `{ok,error,message}` cụ thể: `Serial POS "X" đã tồn tại` · `TID "Y" đã tồn tại` · `Biệt danh… là bắt buộc` · `Mật khẩu xác nhận không đúng` · `Không thể thực hiện "Nhận sửa xong" khi máy đang ở trạng thái DEPLOYED` · FORBIDDEN. UI dùng toast ✔/✖ + ConfirmDialog (nút Hủy + nhập lại mật khẩu cho xóa/retire).
+
+## 2. Bằng chứng chạy thật (lệnh + kết quả)
+| Lệnh | Kết quả |
+|------|---------|
+| `npm run generate -w @glb/database` | ✔ Generated Prisma Client 7.8.0 |
+| `prisma migrate resolve` + `prisma migrate deploy` | ✔ Applied `20260709130000_gpos1_asset_library` (7 bảng + cột) |
+| `npm test` (vitest) | **74/74 PASS** (61 cũ + 13 asset.rules mới) |
+| `npm run typecheck -w @glb/desktop` | **exit 0** (node + web sạch) |
+| `npm run build -w @glb/desktop` | **exit 0** (built in ~3.4s, no error) |
+| `GLB_SELFTEST=3` (integration, throwaway DB copy) | **40/40 PASS, exit 0** |
+| `GLB_SELFTEST=2` (Phase B regression, throwaway copy) | **failures=0, exit 0** — G1 KHÔNG vỡ |
+| Verify dev.db | adminroot.employee_code=**NV01**, code_counters NV=1, ADMIN perms=**29** |
+
+**GLB_SELFTEST=3 chứng minh (40 assert):** mã NV/KH sinh liên tục 01→02→03 đúng prefix không trùng · KH thiếu nickname bị chặn (message cụ thể) · POS create→deploy→reportDamage→sendRepair→receiveRepaired = đúng chuỗi 5 asset_event (STOCK_IN + 4) có occurredAt · state machine chặn transition sai · đổi TID → old DEAD + new ACTIVE + 2 binding (1 unbound, 1 open) · undelivered list đúng + aging + rớt khỏi list sau markDelivered · SALES bị FORBIDDEN POS/TID + được tạo customer · permission denial được audit (R_AUDIT_003).
+
+## 3. Trạng thái (chống overclaim)
+| Hạng mục | Trạng thái |
+|----------|-----------|
+| Schema + migration + code counters + mã NV/KH | **enforced** (migrate deploy thật + 40 self-test) |
+| Customer/POS/TID core services + state machine + event log | **enforced** (self-test + 13 vitest) |
+| Permissions + guard + audit + R_UX_WARN message | **enforced** (self-test assert message) |
+| UI 3 trang + FilterBar + StaffPage mã NV + badge | **partial** — build+typecheck sạch, CHƯA nghiệm thu tương tác thật (LEAD `npm run dev`) |
+| Push Zalo undelivered + scheduler daily | **roadmap/STUB** (badge REAL, gửi thật chưa wire) |
+| Thu chi (phần B) | **roadmap** (chờ research — KHÔNG làm) |
+
+Theo R196: **L1 Engineering Validation PASS · Ready for Production Validation**. Chưa L2 (cần LEAD chạy thật + nghe/nhìn UI).
+
+## 4. Rủi ro
+- `db.ts` seed giờ **additive re-sync mỗi boot**: nếu ADMIN chủ ý gỡ 1 quyền default khỏi system role, reboot sẽ thêm lại. Chấp nhận ở giai đoạn Engineering (giúp quyền mới landing). Ghi rõ để CMD_AUDIT cân nhắc.
+- Bảng asset dùng scalar id link (không hard FK) — chủ ý cho event log bền với soft-delete/rename; join ở service. Không có ràng buộc referential ở DB.
+- UI chưa có test tương tác tự động (chỉ typecheck+build). Cần LEAD nghiệm thu.
+- Prod DB provisioning/.exe vẫn Phase C (migrations đã sẵn để deploy).
+
+`READY_FOR_AUDIT: YES` (G-POS.1 phần A+D. Phần B thu chi = ngoài scope.)

@@ -7,6 +7,10 @@ import * as userSvc from './user-service.js';
 import * as auditSvc from './audit-service.js';
 import * as backupSvc from './backup-service.js';
 import * as settingSvc from './settings-service.js';
+import * as customerSvc from './customer-service.js';
+import * as posSvc from './pos-service.js';
+import * as tidSvc from './tid-service.js';
+import * as notifySvc from './notification-service.js';
 import { getRemembered, saveRemembered, clearRemembered } from './remember.js';
 
 export function registerIpc(): void {
@@ -80,4 +84,40 @@ export function registerIpc(): void {
   ipcMain.handle('setting:update', async (_e, args: { key: string; value: string }) =>
     settingSvc.updateSetting(args.key, args.value)
   );
+
+  // ---- Customers (G-POS.1 §A/§D) ----------------------------------------
+  ipcMain.handle('customer:list', async (_e, filter: customerSvc.CustomerFilter) => customerSvc.listCustomers(filter));
+  ipcMain.handle('customer:create', async (_e, input: customerSvc.CreateCustomerInput) => customerSvc.createCustomer(input));
+  ipcMain.handle('customer:update', async (_e, args: { id: number; input: customerSvc.UpdateCustomerInput }) =>
+    customerSvc.updateCustomer(args.id, args.input)
+  );
+  ipcMain.handle('customer:delete', async (_e, args: { id: number; password: string }) =>
+    customerSvc.deleteCustomer(args.id, args.password)
+  );
+  ipcMain.handle('agent:list', async () => customerSvc.listAgents());
+
+  // ---- POS devices (G-POS.1 §A) -----------------------------------------
+  ipcMain.handle('pos:list', async (_e, filter: posSvc.PosFilter) => posSvc.listPosDevices(filter));
+  ipcMain.handle('pos:timeline', async (_e, serial: string) => posSvc.getDeviceTimeline(serial));
+  ipcMain.handle('pos:create', async (_e, input: posSvc.CreatePosInput) => posSvc.createPos(input));
+  ipcMain.handle('pos:deploy', async (_e, args: { serial: string; input: posSvc.TransitionInput }) => posSvc.deployPos(args.serial, args.input));
+  ipcMain.handle('pos:recall', async (_e, args: { serial: string; input: posSvc.TransitionInput }) => posSvc.recallPos(args.serial, args.input));
+  ipcMain.handle('pos:transferAgent', async (_e, args: { serial: string; input: posSvc.TransitionInput }) => posSvc.transferPosAgent(args.serial, args.input));
+  ipcMain.handle('pos:reportDamage', async (_e, args: { serial: string; input: posSvc.TransitionInput }) => posSvc.reportPosDamage(args.serial, args.input));
+  ipcMain.handle('pos:sendRepair', async (_e, args: { serial: string; input: posSvc.TransitionInput }) => posSvc.sendPosRepair(args.serial, args.input));
+  ipcMain.handle('pos:receiveRepaired', async (_e, args: { serial: string; input: posSvc.TransitionInput }) => posSvc.receivePosRepaired(args.serial, args.input));
+  ipcMain.handle('pos:retire', async (_e, args: { serial: string; password: string; input: posSvc.TransitionInput }) => posSvc.retirePos(args.serial, args.password, args.input));
+
+  // ---- TIDs (G-POS.1 §A) ------------------------------------------------
+  ipcMain.handle('tid:list', async (_e, filter: tidSvc.TidFilter) => tidSvc.listTids(filter));
+  ipcMain.handle('tid:undelivered', async () => tidSvc.listUndeliveredTids());
+  ipcMain.handle('tid:create', async (_e, input: tidSvc.CreateTidInput) => tidSvc.createTid(input));
+  ipcMain.handle('tid:assign', async (_e, args: { tid: string; input: tidSvc.AssignTidInput }) => tidSvc.assignTid(args.tid, args.input));
+  ipcMain.handle('tid:replace', async (_e, args: { tid: string; input: tidSvc.ReplaceTidInput }) => tidSvc.replaceTid(args.tid, args.input));
+  ipcMain.handle('tid:recall', async (_e, args: { tid: string; input: tidSvc.RecallTidInput }) => tidSvc.recallTid(args.tid, args.input));
+  ipcMain.handle('tid:markDelivered', async (_e, args: { tid: string; input: tidSvc.MarkDeliveredInput }) => tidSvc.markTidDelivered(args.tid, args.input));
+
+  // ---- Notifications (undelivered TID — badge REAL, push STUB) -----------
+  ipcMain.handle('notify:undeliveredSummary', async () => notifySvc.getUndeliveredSummary());
+  ipcMain.handle('notify:pushUndelivered', async () => notifySvc.pushUndeliveredZalo());
 }

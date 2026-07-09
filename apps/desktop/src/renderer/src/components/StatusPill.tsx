@@ -4,7 +4,18 @@ const MAP: Record<string, { label: string; cls: string }> = {
   LOCKED: { label: 'Đã khóa', cls: 'bg-danger/10 text-danger' },
   PENDING: { label: 'Chờ kích hoạt', cls: 'bg-warning/10 text-warning' },
   DISABLED: { label: 'Ngưng dùng', cls: 'bg-slate-200 text-slate-500' },
-  DELETED: { label: 'Đã xóa', cls: 'bg-slate-200 text-slate-500' }
+  DELETED: { label: 'Đã xóa', cls: 'bg-slate-200 text-slate-500' },
+  // POS device statuses (§A3)
+  IN_STOCK: { label: 'Trong kho', cls: 'bg-slate-100 text-slate-600' },
+  DEPLOYED: { label: 'Đã triển khai', cls: 'bg-success/10 text-success' },
+  IN_REPAIR: { label: 'Đang sửa', cls: 'bg-warning/10 text-warning' },
+  DAMAGED: { label: 'Hư hỏng', cls: 'bg-danger/10 text-danger' },
+  RETIRED: { label: 'Đã thanh lý', cls: 'bg-slate-200 text-slate-500' },
+  // TID statuses (§A3)
+  UNASSIGNED: { label: 'Chưa gán', cls: 'bg-warning/10 text-warning' },
+  DEAD: { label: 'TID chết', cls: 'bg-danger/10 text-danger' },
+  CLOSED: { label: 'Đã đóng', cls: 'bg-slate-200 text-slate-500' },
+  RECALLED: { label: 'Đã thu hồi', cls: 'bg-slate-200 text-slate-500' }
 };
 
 export function StatusPill({ status }: { status: string }): JSX.Element {

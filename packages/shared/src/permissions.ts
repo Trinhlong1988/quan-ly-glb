@@ -27,7 +27,17 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: 'BACKUP_CREATE', name: 'Tạo backup', group: 'BACKUP' },
   { code: 'BACKUP_RESTORE', name: 'Restore backup', group: 'BACKUP' },
   { code: 'SYSTEM_SETTING_VIEW', name: 'Xem cấu hình', group: 'SYSTEM' },
-  { code: 'SYSTEM_SETTING_UPDATE', name: 'Sửa cấu hình', group: 'SYSTEM' }
+  { code: 'SYSTEM_SETTING_UPDATE', name: 'Sửa cấu hình', group: 'SYSTEM' },
+  // ── G-POS.1 (§A/§D) ──
+  { code: 'CUSTOMER_VIEW', name: 'Xem khách hàng', group: 'CUSTOMER' },
+  { code: 'CUSTOMER_CREATE', name: 'Tạo khách hàng', group: 'CUSTOMER' },
+  { code: 'CUSTOMER_UPDATE', name: 'Sửa khách hàng', group: 'CUSTOMER' },
+  { code: 'CUSTOMER_DELETE', name: 'Xóa khách hàng', group: 'CUSTOMER' },
+  { code: 'POS_VIEW', name: 'Xem máy POS', group: 'POS' },
+  { code: 'POS_MANAGE', name: 'Quản lý máy POS (tạo/luân chuyển/sửa chữa)', group: 'POS' },
+  { code: 'TID_VIEW', name: 'Xem TID', group: 'TID' },
+  { code: 'TID_MANAGE', name: 'Quản lý TID (gán/đổi/thu hồi/giao)', group: 'TID' },
+  { code: 'ASSET_EXPORT', name: 'Xuất dữ liệu tài sản POS/TID', group: 'POS' }
 ];
 
 export const PERMISSION_CODES = PERMISSIONS.map((p) => p.code);
@@ -46,14 +56,21 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'USER_UPDATE',
     'USER_LOCK',
     'USER_UNLOCK',
-    'ROLE_READ'
+    'ROLE_READ',
+    // G-POS: managers run the customer book and can read POS/TID (not mutate).
+    'CUSTOMER_VIEW',
+    'CUSTOMER_CREATE',
+    'CUSTOMER_UPDATE',
+    'CUSTOMER_DELETE',
+    'POS_VIEW',
+    'TID_VIEW'
   ],
-  D_MANAGER: ['DASHBOARD_VIEW', 'USER_READ', 'ROLE_READ'],
-  ACCOUNTANT: ['DASHBOARD_VIEW'],
-  TECHNICIAN: ['DASHBOARD_VIEW'],
-  SUPPORT: ['DASHBOARD_VIEW'],
-  WAREHOUSE: ['DASHBOARD_VIEW'],
-  SALES: ['DASHBOARD_VIEW'],
+  D_MANAGER: ['DASHBOARD_VIEW', 'USER_READ', 'ROLE_READ', 'CUSTOMER_VIEW', 'POS_VIEW', 'TID_VIEW'],
+  ACCOUNTANT: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW'],
+  TECHNICIAN: ['DASHBOARD_VIEW', 'POS_VIEW'],
+  SUPPORT: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW'],
+  WAREHOUSE: ['DASHBOARD_VIEW', 'POS_VIEW', 'TID_VIEW'],
+  SALES: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW', 'CUSTOMER_CREATE'],
   CUSTOMER: []
 };
 

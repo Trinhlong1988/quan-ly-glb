@@ -73,3 +73,35 @@ Self-test 2 phủ (em tự chạy): R004 last-admin · R_ROLE_005 (role-with-use
 
 ## Kết luận Phase B
 Role/User/Audit/Backup **CHẠY THẬT + đúng luật**. 61 test + 24 self-test độc lập PASS. Còn lại: **Phase C** = restore swap-on-restart + đóng `.exe` (migration đóng gói + electron-rebuild). L1 Engineering PASS — chờ LEAD nghiệm thu.
+
+---
+
+# G-POS.1 AUDIT — POS/TID Asset Library + Mã NV/KH + Khách hàng (2026-07-09)
+
+**Verdict:** ✅ **ENGINEERING PASS (L1)** phần A (POS/TID event-sourced) + D (mã NV/KH + KH biệt danh). **1 finding cần LEAD quyết** (G-POS-A01). UI = **partial**, chưa nghiệm thu tương tác thật. CMD_AUDIT tự chạy lại toàn bộ, KHÔNG tin report builder.
+
+## B1 — Chạy lại bằng máy (bằng chứng em tự chạy)
+| Lệnh | Kết quả | Exit |
+|------|---------|------|
+| `npm test` (Vitest) | **74/74 PASS** (61 G1 + 13 asset.rules) | 0 |
+| `npm run generate -w @glb/database` | ✔ Prisma Client 7.8.0 | 0 |
+| `npm run typecheck -w @glb/desktop` (node+web) | **0 lỗi** | 0 |
+| `npm run build -w @glb/desktop` | **built 3.67s, 0 warning** | 0 |
+| `GLB_SELFTEST=3` (electron, throwaway DB) | **failures=0** (~40 assert) | 0 |
+| `GLB_SELFTEST=2` (G1 regression) | **failures=0** — G1 KHÔNG vỡ | 0 |
+
+SELFTEST3 độc lập chứng minh (không chép builder): mã NV/KH liên tục 01→02→03 đúng prefix không trùng · adminroot=NV01 · KH thiếu biệt danh bị chặn + message VN cụ thể · KH auto KH01..KH04 · POS `IN_STOCK→DEPLOY→REPORT_DAMAGE→SEND_REPAIR→RECEIVE_REPAIRED` = 5 asset_event đúng thứ tự + đều có occurredAt · state-machine chặn transition sai (DEPLOYED không receiveRepaired) · duplicate serial/TID bị chặn message rõ · thay TID → old **DEAD** + new **ACTIVE** + 2 pos_tid_binding · undelivered list + agingDays + markDelivered rớt khỏi list · SALES **FORBIDDEN** POS/TID + denial được audit (R_AUDIT_003).
+
+## B4 — Đọc code rule-critical
+- `code-service.nextCode`: mint mã bằng `codeCounter.upsert(increment)` **atomic**, nhận cả transaction client → mã sinh trong cùng transaction tạo KH (rollback không lệch số). Không derive từ autoincrement id (id có thể gap). ✓
+- `customer-service`: biệt danh **bắt buộc cả create lẫn update** (message "Biệt danh (tên dễ gọi)… là bắt buộc.") · mã KH mint trong `$transaction` · `display = "KH03 · Anh Thanh Hải Phòng (Nguyễn Văn Thanh)"` đúng §D · soft-delete + `verifyActorPassword` (§14) · audit before/after · lọc theo ngày/đại lý/search (R_UX_FILTER). ✓
+- `Dashboard.tsx`: 3 menu (Khách hàng/Máy POS/TID) gate theo `CUSTOMER_VIEW/POS_VIEW/TID_VIEW`, TID có badge "chưa giao". 3 trang tái dùng component chung (FilterBar/Modal/ConfirmDialog/StatusPill/Field/toast: 30/49/43 lần) → **đồng nhất design-system** (R_UI_DESKTOP_CONSISTENT). ✓
+
+## Findings G-POS.1
+- **[G-POS-A01] ⚠️ CẦN LEAD QUYẾT — seed re-sync âm thầm hoàn quyền admin đã sửa.** `db.ts::seedIfEmpty` upsert `DEFAULT_ROLE_PERMISSIONS` **mỗi lần boot** (`rolePermission.upsert(update:{})`). Nếu ADMIN cố ý gỡ 1 quyền default khỏi role hệ thống/mặc định → **reboot tự cấp lại, KHÔNG audit**. Đánh đổi: giữ hành vi này thì nâng cấp schema tự phát quyền mới cho ADMIN; bỏ thì tôn trọng tùy biến của admin. Không tự sửa (đổi semantics dữ liệu = thẩm quyền LEAD, R4/R7). **Đề xuất:** chỉ seed role-permission khi role **mới tạo lần đầu**, hoặc chỉ auto-grant cho `isSystem` role; kèm ghi audit khi tự thêm. → chờ LEAD chọn.
+- **[UI-partial]** 3 trang build/typecheck sạch nhưng **chưa nghiệm thu tương tác thật** (chưa screenshot/click). Theo R196 + luật gate mới `R_PROCESS_FEATURE_GATE`: cần LEAD `npm run dev` chấp nhận thị giác ("UI giống thiết kế .exe") mới lên L2.
+- **[STUB trung thực]** Push Zalo undelivered + scheduler daily: badge REAL, **gửi thật chưa wire** — builder đánh dấu STUB rõ. Không tính vào PASS.
+- Không phát hiện bug logic mới ngoài A01. Không có gì "sửa cho xanh".
+
+## Kết luận G-POS.1
+Domain POS/TID + mã NV/KH + khách hàng **CHẠY THẬT + đúng luật** (74 test + 40 self-test G-POS + 24 regression, tất cả failures=0). **L1 Engineering PASS**. Chặn lên L2 bởi: (1) LEAD quyết G-POS-A01, (2) LEAD nghiệm thu thị giác 3 trang UI. Chưa `.exe` (Phase C).
