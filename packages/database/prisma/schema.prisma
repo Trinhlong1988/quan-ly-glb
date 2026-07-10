@@ -524,13 +524,18 @@ model FeeType {
 // Mỗi loại thẻ (Visa/Master/Napas…) của 1 đối tác có biểu phí riêng. Set lại = cập nhật (upsert).
 // Phí lưu Int = phần trăm × 1000 (tối đa 3 số thập phân, chính xác tuyệt đối — không dùng float).
 // Chênh lệch NCC/KH là cột TÍNH (không lưu): CL_NCC = phiMua−phiCaiMay, CL_KH = phiBan−phiCaiMay.
+// P1.1 (GIÁ THEO KỲ): mỗi dòng = 1 KỲ giá của tổ hợp (Đối tác × Loại thẻ), phân biệt bởi
+// `effectiveFrom`. Nhiều kỳ cùng tồn tại (lịch sử giá). Phí của 1 GD = kỳ đang hiệu lực tại
+// `txnDate` (pickEffectiveRate). KHÔNG @@unique DB (bảng có deletedAt — bài học B05); "1 kỳ/1 mốc"
+// enforce ở service. Dòng cũ (mô hình 1-dòng/tổ hợp) backfill effective_from = mốc sàn 1970-01-01.
 model FeeRate {
-  id         Int       @id @default(autoincrement())
-  partnerId  Int       @map("partner_id")
-  cardTypeId Int       @map("card_type_id")
-  phiMua     Int       @map("phi_mua") // ×1000
-  phiCaiMay  Int       @map("phi_cai_may") // ×1000
-  phiBan     Int       @map("phi_ban") // ×1000
+  id           Int       @id @default(autoincrement())
+  partnerId    Int       @map("partner_id")
+  cardTypeId   Int       @map("card_type_id")
+  phiMua       Int       @map("phi_mua") // ×1000
+  phiCaiMay    Int       @map("phi_cai_may") // ×1000
+  phiBan       Int       @map("phi_ban") // ×1000
+  effectiveFrom DateTime @map("effective_from") // ngày bắt đầu hiệu lực của kỳ giá (P1.1)
   createdBy  Int?      @map("created_by")
   createdAt  DateTime  @default(now()) @map("created_at")
   updatedBy  Int?      @map("updated_by")

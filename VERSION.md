@@ -1,12 +1,13 @@
 ---
 project: Quản Lý GLB (IMS)
 phase: G-REV.B / G-MAINT.E
-current_version: 0.14.1-audit-fixes
-status: BUILDING (Engineering, chưa Production Validated)
+current_version: 0.15.0-p1.1-gia-theo-ky
+status: P1.1 PRODUCTION VALIDATED (LEAD accept 10/7) — FROZEN + tag p1.1-gia-theo-ky
 last_update_ts: 2026-07-10
-last_update_by: CMD_AUDIT (Claude)
+last_update_by: CMD_AUDIT (Claude) + LEAD accept
 rule_break_count: 0
-schema_version: 12
+schema_version: 13
+repo_path: D:\TT HKD AI\tools\quan-ly-glb (chuyển C→D 10/7; bản C giữ làm sao lưu, cấm sửa)
 ---
 
 # VERSION — Quản Lý GLB
@@ -18,7 +19,15 @@ schema_version: 12
 4. Đọc `bible/00_constitution.md`.
 
 ## Nhật ký phiên bản
-### 0.14.1-audit-fixes — 2026-07-10 (CMD_AUDIT) — KIỂM ĐỊNH 3 AGENT PHẢN BIỆN ĐỘC LẬP → 6 FIX + regression
+### 0.15.0-p1.1-gia-theo-ky — 2026-07-10 (Phase 1 Tier P1.1) — GIÁ THEO KỲ · PRODUCTION VALIDATED + FROZEN
+- **LEAD chốt Phase 1** = 2 tier tuần tự: **P1.1 giá theo kỳ** (①A timeline hiệu lực) → freeze → **P1.2 Approval Engine đầy đủ + bill bất biến** (②B). Spec+gate: `docs/PHASE1_GIA_THEO_KY_SPEC.md`. Đóng REV-B01 (giá theo kỳ tại txnDate). REV-B02/B03 đã xong ở B11/B15.
+- **P1.1 (schema v13):** `FeeRate`+`effectiveFrom` (migration `20260710120000_p1_1_fee_effective_from`, additive + backfill sàn `1970-01-01` + rebuild bảng giữ đủ cột, **KHÔNG @@unique** — B05). Phí GD = kỳ đang hiệu lực tại `txnDate` qua `pickEffectiveRate` (thuần, business-rules); `setFeeRate` upsert theo (đối tác×thẻ×ngày hiệu lực) — nhiều kỳ cùng tồn tại; UI `FeeConfigPage` thêm "Ngày hiệu lực từ" + badge "Đang hiệu lực"; bill snapshot **BẤT BIẾN** (I-P1/P2/P3).
+- **Bug B16 (F1)** — CMD_AUDIT phát hiện: ngày hiệu lực **lệch −1 ngày trên UTC+7** (`startOfDayUtc` bất đối xứng với txnDate lưu nửa-đêm-LOCAL) → fix **`startOfDayLocal`** + regression **UI-path** (parse-local ISO không `Z`, assert `fmtDate`). Bài học: test hiển thị/so sánh NGÀY phải có ≥1 ca đường parse-local.
+- **Bằng chứng (CMD_AUDIT tự chạy độc lập, KHÔNG tin số CMD_BUILD):** typecheck node+web **0** · build **0** · **vitest 198/198** (+5 unit `pickEffectiveRate`) · **REV15 73/0** (khối GIÁ THEO KỲ + khối L UI-path) · fresh-deploy **0** (migration mới chạy cuối — B07). **Production Validation trên môi trường D: REV15 73/0 qua service thật, LEAD accept "đạt" 10/7** (2 kỳ giá, GD 15/06→350k, GD 10/07→700k, backdate→giá cũ, đổi giá kỳ→bill bất biến, ngày hiển thị đúng).
+- **Hạ tầng:** dự án **chuyển C→D** (`D:\TT HKD AI\tools\quan-ly-glb`, robocopy 18.224 file/869MB, git+WIP+dev.db nguyên). + scrollbar UI polish (`styles.css`). dev.db KHÔNG có data thật (đã reset nhiều lần) — nhập liệu thật chờ **G10 Postgres server LAN**.
+- Status: **P1.1 L2 Production Validated + FROZEN + tag `p1.1-gia-theo-ky`.** Kế: P1.2.
+
+
 - **Quy trình**: chạy song song agent code-reviewer/security-auditor/health-scan phản biện độc lập. **Kết quả: 0 Critical / 0 High; 6 phát hiện Medium — ĐÃ FIX HẾT** (B10-B15 trong BUGS_FIXED.md).
 - **B10** snapshot doanh thu: `updateTransaction` chỉ tra lại phí khi đổi loại thẻ (không phá snapshot khi sửa note/ngày/tiền). **B11** lọc TID xóa mềm vẫn ra GD lịch sử. **B12** sàn an toàn hạn giữ (audit≥7d/thùng rác≥1d/backup≥1h), reject cấu hình dưới sàn. **B13** Health-Scan backup TRƯỚC khi tự sửa (fail → abort). **B14** trash ghi audit KỂ CẢ khi từ chối (R_AUDIT_003). **B15** trang công nợ phân trang, summary tính toàn tập lọc.
 - **2 check chuẩn SQLite** thêm vào Health-Scan: `PRAGMA integrity_check` (DB_INTEGRITY) + `PRAGMA foreign_key_check` (DB_FOREIGN_KEY) → CHECKS_TOTAL 10→12.

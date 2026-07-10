@@ -3,7 +3,14 @@
 > Rule: mỗi bug do LEAD/AUDIT phát hiện = **thất bại của quy trình test** → BẮT BUỘC thêm test/rule chặn tái diễn trước khi đóng.
 > Format: `### B<NN> — <mô tả> [FIXED|PENDING]` · Phát hiện bởi · Nguyên nhân · Fix · **Regression** (test/rule chặn tái diễn).
 
-Counter: B = 15. Last audit: 2026-07-10 (Nhóm B doanh thu + Nhóm E bảo trì + 3 agent phản biện song song).
+Counter: B = 16. Last audit: 2026-07-10 (Nhóm B doanh thu + Nhóm E bảo trì + 3 agent phản biện song song; P1.1 giá theo kỳ + F1 lệch ngày UTC+7).
+
+### B16 — Ngày hiệu lực biểu phí LỆCH −1 NGÀY trên máy UTC+7 (production) [FIXED]
+- **Phát hiện bởi:** CMD_AUDIT (audit P1.1 giá theo kỳ) — máy production chạy UTC+7. User nhập "Hiệu lực từ = 01/07/2026" nhưng bảng biểu phí hiển thị/lưu **30/06/2026**.
+- **Nguyên nhân:** `setFeeRate` floor `effectiveFrom` theo **UTC-day** (`startOfDayUtc` = `Date.UTC(getUTCFullYear/Month/Date)`), trong khi CẢ app còn lại (`txnDate`, filter `dateFrom/dateTo`) lưu **nguyên instant nửa-đêm-LOCAL** do UI dựng `new Date(d+'T00:00:00').toISOString()` (không `Z`), và `fmtDate` round-trip bằng **getter LOCAL**. Bất đối xứng đúng bằng offset +7h: UI gửi 01/07 local (= `2026-06-30T17:00Z`) → `startOfDayUtc` floor theo UTC-day về `2026-06-30T00:00Z` → `fmtDate` (local) hiện 30/06. Tiền doanh thu vẫn ĐÚNG (2 vế `pickEffectiveRate`/txnDate cùng so instant), nhưng NGÀY sai → vi phạm R_DATE_FORMAT (LEAD lock 9/7).
+- **Fix:** thay `startOfDayUtc` bằng `startOfDayLocal(d)` = `new Date(d.getFullYear(), d.getMonth(), d.getDate())` — chuẩn hóa về nửa-đêm-LOCAL, đối xứng với `fmtDate` và `txnDate`. Sau sửa: nhập 01/07 → lưu instant nửa-đêm 01/07 local → `fmtDate` hiện "01/07/2026"; GD ngày 01/07 ăn đúng kỳ, GD ngày 30/06 KHÔNG ăn kỳ 01/07. KHÔNG đụng `pickEffectiveRate` (thuần, đã đúng), dedup 24h, `isCurrent`, snapshot, schema/migration.
+- **Regression (chặn tái diễn):** REV15 khối mới **L) GIÁ THEO KỲ — ĐƯỜNG UI** (parse-LOCAL, KHÔNG `Z`, tổ hợp/tid riêng): set kỳ `effectiveFrom = new Date('2026-08-01T00:00:00').toISOString()` (như UI gửi) → `listFeeRates` → assert **`fmtDate(dto.effectiveFrom) === '01/08/2026'`** (chứng cứ chạy thật: `iso=2026-07-31T17:00:00.000Z` = nửa-đêm 01/08 trên UTC+7, hiển thị đúng 01/08). Kèm: GD `txnDate` local 2026-08-01 ăn kỳ 01/08 (margin 4000/3000); GD local 2026-07-31 KHÔNG ăn, rơi về kỳ 01/07 (margin 2000/1500). REV15 pass=73 fail=0.
+- **Đề xuất quy trình (bug class = "ngày lệch do trộn UTC-day / LOCAL-day"):** mọi test liên quan **hiển thị/so sánh NGÀY** PHẢI có ≥1 ca đi qua **đường parse-LOCAL** (ISO KHÔNG `Z`, đúng như UI gửi), KHÔNG chỉ ISO `Z` (UTC thuần). Điểm mù cũ: toàn bộ selftest + unit dùng ISO có `Z` nên không đi qua đường UI parse-local → bug lọt trên máy UTC+7. Mọi chuẩn-hóa "về đầu ngày" phải đối xứng với hàm hiển thị (`fmtDate` dùng getter LOCAL ⇒ floor phải LOCAL).
 
 ### B10 — `updateTransaction` tra lại phí "giá hôm nay" khi chỉ sửa note/ngày/số tiền → PHÁ snapshot doanh thu đã khóa [FIXED]
 - **Phát hiện bởi:** CMD_AUDIT (agent phản biện doanh thu #1) — sửa ghi chú 1 giao dịch cũ khiến doanh thu bị tính lại theo biểu phí HIỆN TẠI, làm sai sổ đã chốt.

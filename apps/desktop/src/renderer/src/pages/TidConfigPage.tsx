@@ -252,17 +252,18 @@ function TidTab({ canManage }: { canManage: boolean }): JSX.Element {
   );
 }
 
-/** Bảng biểu phí dẫn xuất theo (Đối tác × Ngân hàng) — hiện realtime khi chọn đối tác (§9). */
+/** Bảng biểu phí dẫn xuất theo (Đối tác × Ngân hàng) — hiện realtime KỲ ĐANG HIỆU LỰC khi chọn đối tác (§9). */
 function FeePreview({ bankId, partnerId }: { bankId: number; partnerId: number }): JSX.Element {
   const [rows, setRows] = useState<FeeRateDto[] | null>(null);
   useEffect(() => {
     let live = true;
     setRows(null);
-    window.api.feeRateList({ partnerId, bankId }).then((r) => { if (live) setRows(r.ok && r.data ? r.data : []); });
+    // P1.1: chỉ hiển thị KỲ đang hiệu lực hôm nay của từng loại thẻ (bỏ các kỳ lịch sử/tương lai).
+    window.api.feeRateList({ partnerId, bankId }).then((r) => { if (live) setRows(r.ok && r.data ? r.data.filter((x) => x.isCurrent) : []); });
     return () => { live = false; };
   }, [bankId, partnerId]);
   if (rows === null) return <div className="rounded-lg border border-line bg-appbg/50 p-3 text-sm text-slate-400"><Loader2 className="inline h-4 w-4 animate-spin" /> Đang tải biểu phí…</div>;
-  if (rows.length === 0) return <div className="rounded-lg border border-warning/40 bg-warning/5 p-3 text-sm text-slate-600">Đối tác này chưa có biểu phí cho ngân hàng đã chọn (cấu hình ở mục Cấu hình phí).</div>;
+  if (rows.length === 0) return <div className="rounded-lg border border-warning/40 bg-warning/5 p-3 text-sm text-slate-600">Đối tác này chưa có biểu phí hiệu lực cho ngân hàng đã chọn (cấu hình ở mục Cấu hình phí).</div>;
   return (
     <div className="overflow-hidden rounded-lg border border-line">
       <table className="w-full text-xs">

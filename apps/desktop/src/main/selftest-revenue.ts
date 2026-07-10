@@ -17,6 +17,8 @@ import {
   listTransactions,
   debtSummary
 } from './transaction-service.js';
+import { setFeeRate, listFeeRates } from './fee-config-service.js';
+import { fmtDate } from '@glb/shared';
 
 let pass = 0,
   fail = 0;
@@ -42,7 +44,8 @@ export async function runRevenueSelfTest(): Promise<number> {
   await db.partnerBank.create({ data: { partnerId: partner.id, bankId: bank.id } });
   // phiMua 3% (3000), phiCaiMay 1% (1000), phiBan 2.5% (2500)
   //   → chênh đối tác milli = 2000 (2%) ; chênh bán milli = 1500 (1.5%)
-  const rate = await db.feeRate.create({ data: { partnerId: partner.id, cardTypeId: card.id, phiMua: 3000, phiCaiMay: 1000, phiBan: 2500 } });
+  // Kỳ giá mốc sàn (1970) → phủ mọi txnDate trong khối test cũ (P1.1 backfill-compatible).
+  const rate = await db.feeRate.create({ data: { partnerId: partner.id, cardTypeId: card.id, phiMua: 3000, phiCaiMay: 1000, phiBan: 2500, effectiveFrom: new Date('1970-01-01T00:00:00.000Z') } });
   const cust = await db.customer.create({ data: { code: 'KHREV1', fullName: 'Khách Doanh Thu', nickname: 'KHR1' } });
   const cust2 = await db.customer.create({ data: { code: 'KHREV2', fullName: 'Khách Hai', nickname: 'KHR2' } });
   const tid = await db.tid.create({
@@ -167,6 +170,99 @@ export async function runRevenueSelfTest(): Promise<number> {
   ok('xóa đúng mật khẩu → deleted=1', delOk.ok === true && delOk.deleted === 1, delOk);
   const afterDel = await listTransactions({ tidId: tid.id });
   ok('sau xóa → còn 1 GD trong danh sách', afterDel.data?.length === 1, { len: afterDel.data?.length });
+
+  // ═══════════ K) GIÁ THEO KỲ (P1.1) — 8 bước §4.1, KHÔNG khôi phục giá trước khi tạo GD ═══════════
+  // Tổ hợp RIÊNG (KYP × KYCARD) để độc lập mọi assert đếm ở trên. Điểm mù cũ: selftest đổi phí rồi
+  // khôi phục về chuẩn TRƯỚC khi tạo GD → không kỳ nào lệch. Khối này để 2 KỲ khác nhau CÙNG TỒN TẠI.
+  const kyBank = await db.bank.create({ data: { name: 'NH Giá Kỳ', code: 'KYBANK' } });
+  const kyCard = await db.cardType.create({ data: { name: 'Thẻ Giá Kỳ', code: 'KYND', bankId: kyBank.id } });
+  const kyPartner = await db.partner.create({ data: { name: 'Đối tác Giá Kỳ', code: 'KYP' } });
+  await db.partnerBank.create({ data: { partnerId: kyPartner.id, bankId: kyBank.id } });
+  const kyTid = await db.tid.create({ data: { tid: 'TIDKY1', mid: 'MIDKY', hkdName: 'HKD Giá Kỳ', bankId: kyBank.id, partnerId: kyPartner.id, customerId: cust.id } });
+
+  // (1) Kỳ K1 hiệu lực 2026-01-01: phiMua 3% / phiCaiMay 1% / phiBan 2.5% → margin đối tác 2%, bán 1.5%.
+  const setK1 = await setFeeRate({ partnerId: kyPartner.id, cardTypeId: kyCard.id, phiMua: 3, phiCaiMay: 1, phiBan: 2.5, effectiveFrom: '2026-01-01T00:00:00.000Z' });
+  ok('lập kỳ K1 (2026-01-01) → ok', setK1.ok === true, setK1);
+  // (2) Kỳ K2 hiệu lực 2026-07-01: phiMua 5% / phiCaiMay 1% / phiBan 4% → margin đối tác 4%, bán 3%. KHÔNG xóa K1.
+  const setK2 = await setFeeRate({ partnerId: kyPartner.id, cardTypeId: kyCard.id, phiMua: 5, phiCaiMay: 1, phiBan: 4, effectiveFrom: '2026-07-01T00:00:00.000Z' });
+  ok('lập kỳ K2 (2026-07-01) → ok, KHÔNG xóa K1', setK2.ok === true && setK1.id !== setK2.id, { k1: setK1.id, k2: setK2.id });
+  const kyRates = await listFeeRates({ partnerId: kyPartner.id });
+  ok('2 KỲ giá cùng tồn tại cho tổ hợp', kyRates.data?.length === 2, { len: kyRates.data?.length });
+  ok('kỳ đang hiệu lực HÔM NAY = K2 (2026-07-01)', kyRates.data?.find((r) => r.isCurrent)?.id === setK2.id, kyRates.data?.map((r) => ({ id: r.id, eff: r.effectiveFrom, cur: r.isCurrent })));
+
+  // (3) GD txnDate 2026-06-15 (trong K1) → PHẢI ăn giá K1 (margin 2% & 1.5%), tổng 350.000.
+  const gK1 = await createTransaction({ tidId: kyTid.id, cardTypeId: kyCard.id, amount: 10_000_000, txnDate: '2026-06-15T00:00:00.000Z' });
+  ok('GD 2026-06-15 → ok', gK1.ok === true, gK1);
+  const tK1 = await db.transaction.findUnique({ where: { id: gK1.id! } });
+  ok('GD 2026-06-15 ăn giá K1: margin 2000/1500', tK1?.partnerMarginMilli === 2000 && tK1?.sellMarginMilli === 1500, { p: tK1?.partnerMarginMilli, s: tK1?.sellMarginMilli });
+  ok('GD 2026-06-15 doanh thu = 200.000 + 150.000 = 350.000', tK1?.revenueAmount === 350_000, { got: tK1?.revenueAmount });
+
+  // (4) GD txnDate 2026-07-10 (trong K2) → PHẢI ăn giá K2 (margin 4% & 3%), tổng 700.000.
+  const gK2 = await createTransaction({ tidId: kyTid.id, cardTypeId: kyCard.id, amount: 10_000_000, txnDate: '2026-07-10T00:00:00.000Z' });
+  ok('GD 2026-07-10 → ok', gK2.ok === true, gK2);
+  const tK2 = await db.transaction.findUnique({ where: { id: gK2.id! } });
+  ok('GD 2026-07-10 ăn giá K2: margin 4000/3000', tK2?.partnerMarginMilli === 4000 && tK2?.sellMarginMilli === 3000, { p: tK2?.partnerMarginMilli, s: tK2?.sellMarginMilli });
+  ok('GD 2026-07-10 doanh thu = 400.000 + 300.000 = 700.000', tK2?.revenueAmount === 700_000, { got: tK2?.revenueAmount });
+
+  // (5) GD BACKDATE txnDate 2026-03-01 (lập SAU khi K2 đã tồn tại) → vẫn ăn K1 (I-P2).
+  const gBack = await createTransaction({ tidId: kyTid.id, cardTypeId: kyCard.id, amount: 10_000_000, txnDate: '2026-03-01T00:00:00.000Z' });
+  ok('GD backdate 2026-03-01 → ok', gBack.ok === true, gBack);
+  const tBack = await db.transaction.findUnique({ where: { id: gBack.id! } });
+  ok('GD backdate 2026-03-01 vẫn ăn K1 (margin 2000/1500) — I-P2', tBack?.partnerMarginMilli === 2000 && tBack?.sellMarginMilli === 1500, { p: tBack?.partnerMarginMilli, s: tBack?.sellMarginMilli });
+
+  // (6) GD txnDate 2025-12-31 (trước MỌI kỳ) → NO_FEE_RATE (I-P3, không lấy đại kỳ tương lai).
+  const gNone = await createTransaction({ tidId: kyTid.id, cardTypeId: kyCard.id, amount: 10_000_000, txnDate: '2025-12-31T00:00:00.000Z' });
+  ok('GD 2025-12-31 (trước mọi kỳ) → NO_FEE_RATE (I-P3)', gNone.ok === false && gNone.error === 'NO_FEE_RATE', gNone);
+
+  // (7) ĐỔI GIÁ K1 (update kỳ K1) → các bill đã tạo ở K1/K2 GIỮ NGUYÊN doanh thu (I-P1 snapshot bất biến).
+  const revK1Before = tK1?.revenueAmount, revBackBefore = tBack?.revenueAmount, revK2Before = tK2?.revenueAmount;
+  const upK1 = await setFeeRate({ partnerId: kyPartner.id, cardTypeId: kyCard.id, phiMua: 9, phiCaiMay: 0, phiBan: 9, effectiveFrom: '2026-01-01T00:00:00.000Z' });
+  ok('đổi giá kỳ K1 (cùng mốc 2026-01-01) → update, KHÔNG tạo kỳ mới', upK1.ok === true && upK1.id === setK1.id, { upK1, k1: setK1.id });
+  ok('vẫn đúng 2 kỳ sau khi đổi giá K1', (await listFeeRates({ partnerId: kyPartner.id })).data?.length === 2);
+  const tK1After = await db.transaction.findUnique({ where: { id: gK1.id! } });
+  const tBackAfter = await db.transaction.findUnique({ where: { id: gBack.id! } });
+  const tK2After = await db.transaction.findUnique({ where: { id: gK2.id! } });
+  ok('I-P1: bill K1 (2026-06-15) GIỮ doanh thu 350.000 sau khi đổi giá K1', tK1After?.revenueAmount === revK1Before && tK1After?.revenueAmount === 350_000, { before: revK1Before, after: tK1After?.revenueAmount });
+  ok('I-P1: bill backdate (2026-03-01) GIỮ doanh thu 350.000 sau khi đổi giá K1', tBackAfter?.revenueAmount === revBackBefore && tBackAfter?.revenueAmount === 350_000, { before: revBackBefore, after: tBackAfter?.revenueAmount });
+  ok('I-P1: bill K2 (2026-07-10) GIỮ doanh thu 700.000 (không đụng)', tK2After?.revenueAmount === revK2Before && tK2After?.revenueAmount === 700_000, { before: revK2Before, after: tK2After?.revenueAmount });
+
+  // ═══════════ L) GIÁ THEO KỲ — ĐƯỜNG UI (B16/F1) — parse-LOCAL, KHÔNG 'Z' ═══════════
+  // Điểm mù cũ (thất bại quy trình test): mọi ca GIÁ THEO KỲ ở trên dùng ISO có 'Z' (UTC thuần) → KHÔNG
+  // đi qua đường UI thật. UI gửi `new Date(d+'T00:00:00').toISOString()` (parse theo giờ LOCAL của máy).
+  // Trên máy UTC+7, floor UTC-day lệch −1 NGÀY (nhập 01/08 → lưu/hiện 31/07). Khối này CHẠY đúng đường đó:
+  // set kỳ effectiveFrom local-midnight → listFeeRates → fmtDate PHẢI ra ĐÚNG ngày user nhập.
+  const uiBank = await db.bank.create({ data: { name: 'NH UI Ngày', code: 'UIBANK' } });
+  const uiCard = await db.cardType.create({ data: { name: 'Thẻ UI Ngày', code: 'UIND', bankId: uiBank.id } });
+  const uiPartner = await db.partner.create({ data: { name: 'Đối tác UI Ngày', code: 'UIP' } });
+  await db.partnerBank.create({ data: { partnerId: uiPartner.id, bankId: uiBank.id } });
+  const uiTid = await db.tid.create({ data: { tid: 'TIDUI1', mid: 'MIDUI', hkdName: 'HKD UI Ngày', bankId: uiBank.id, partnerId: uiPartner.id, customerId: cust.id } });
+
+  // Kỳ TRƯỚC hiệu lực 2026-07-01 (đường UI local): margin đối tác 2%, bán 1.5%.
+  const uiPrevEff = new Date('2026-07-01T00:00:00').toISOString(); // LOCAL parse (KHÔNG 'Z') — như UI gửi
+  const setUiPrev = await setFeeRate({ partnerId: uiPartner.id, cardTypeId: uiCard.id, phiMua: 3, phiCaiMay: 1, phiBan: 2.5, effectiveFrom: uiPrevEff });
+  ok('UI-path: lập kỳ 01/07 (parse local) → ok', setUiPrev.ok === true, setUiPrev);
+  // Kỳ 2026-08-01 (đường UI local): margin đối tác 4%, bán 3%.
+  const uiAugEff = new Date('2026-08-01T00:00:00').toISOString(); // LOCAL parse (KHÔNG 'Z') — như UI gửi
+  const setUiAug = await setFeeRate({ partnerId: uiPartner.id, cardTypeId: uiCard.id, phiMua: 5, phiCaiMay: 1, phiBan: 4, effectiveFrom: uiAugEff });
+  ok('UI-path: lập kỳ 01/08 (parse local) → ok', setUiAug.ok === true, setUiAug);
+
+  // ✦ ASSERT LÕI B16/F1: ngày HIỂN THỊ = đúng ngày user nhập (không lệch −1 ngày trên UTC+7).
+  const uiRates = await listFeeRates({ partnerId: uiPartner.id });
+  const uiAugDto = uiRates.data?.find((r) => r.id === setUiAug.id);
+  ok('UI-path: fmtDate(effectiveFrom kỳ 01/08) === "01/08/2026" (KHÔNG lệch −1 ngày)', fmtDate(uiAugDto?.effectiveFrom) === '01/08/2026', { got: fmtDate(uiAugDto?.effectiveFrom), iso: uiAugDto?.effectiveFrom });
+  const uiPrevDto = uiRates.data?.find((r) => r.id === setUiPrev.id);
+  ok('UI-path: fmtDate(effectiveFrom kỳ 01/07) === "01/07/2026"', fmtDate(uiPrevDto?.effectiveFrom) === '01/07/2026', { got: fmtDate(uiPrevDto?.effectiveFrom), iso: uiPrevDto?.effectiveFrom });
+
+  // ✦ GD đường UI: txnDate local 2026-08-01 → ăn kỳ 01/08 (margin 4000/3000).
+  const gUiAug = await createTransaction({ tidId: uiTid.id, cardTypeId: uiCard.id, amount: 10_000_000, txnDate: new Date('2026-08-01T00:00:00').toISOString() });
+  ok('UI-path: GD local 2026-08-01 → ok', gUiAug.ok === true, gUiAug);
+  const tUiAug = await db.transaction.findUnique({ where: { id: gUiAug.id! } });
+  ok('UI-path: GD 2026-08-01 ăn kỳ 01/08 (margin 4000/3000)', tUiAug?.partnerMarginMilli === 4000 && tUiAug?.sellMarginMilli === 3000, { p: tUiAug?.partnerMarginMilli, s: tUiAug?.sellMarginMilli });
+  // ✦ GD đường UI: txnDate local 2026-07-31 → KHÔNG ăn kỳ 01/08, ăn kỳ trước 01/07 (margin 2000/1500).
+  const gUiJul = await createTransaction({ tidId: uiTid.id, cardTypeId: uiCard.id, amount: 10_000_000, txnDate: new Date('2026-07-31T00:00:00').toISOString() });
+  ok('UI-path: GD local 2026-07-31 → ok', gUiJul.ok === true, gUiJul);
+  const tUiJul = await db.transaction.findUnique({ where: { id: gUiJul.id! } });
+  ok('UI-path: GD 2026-07-31 KHÔNG ăn kỳ 01/08 — ăn kỳ 01/07 (margin 2000/1500)', tUiJul?.partnerMarginMilli === 2000 && tUiJul?.sellMarginMilli === 1500, { p: tUiJul?.partnerMarginMilli, s: tUiJul?.sellMarginMilli });
 
   // ═══════════ I) PHÂN QUYỀN ═══════════
   await userSvc.createUser({ fullName: 'KH ngoài rev', username: 'custnorev', password: 'Cust@12345', roleCodes: ['CUSTOMER'] }).catch(() => undefined);

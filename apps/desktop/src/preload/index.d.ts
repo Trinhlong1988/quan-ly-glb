@@ -462,6 +462,8 @@ export interface FeeRateDto extends AuditTrail {
   phiBan: number;
   clNcc: number;
   clKh: number;
+  effectiveFrom: string;
+  isCurrent: boolean;
 }
 export interface FeeRateFilter {
   partnerId?: number;
@@ -474,6 +476,7 @@ export interface SetFeeRateInput {
   phiMua: number;
   phiCaiMay: number;
   phiBan: number;
+  effectiveFrom?: string;
 }
 
 // ── G-CFG.4 DTOs (Tài khoản nhận tiền §8) ──

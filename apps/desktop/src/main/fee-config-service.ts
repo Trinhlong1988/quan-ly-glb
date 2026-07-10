@@ -2,7 +2,7 @@
 // soft-delete. Gồm: Loại phí (§C5a) · Biểu phí % theo Đối tác × Loại thẻ (§C5b).
 // Phí lưu Int = phần trăm × 1000 (≤3 số thập phân, chính xác — KHÔNG float). Chênh lệch NCC/KH
 // là cột TÍNH động: CL_NCC = phiMua−phiCaiMay, CL_KH = phiBan−phiCaiMay.
-import { auditSnapshot } from '@glb/business-rules';
+import { auditSnapshot, pickEffectiveRate } from '@glb/business-rules';
 import type { Db } from '@glb/database';
 import { requirePermission, verifyActorPassword } from './guard.js';
 import { writeAudit } from './audit.js';
@@ -57,6 +57,23 @@ function pctToMilli(v: unknown): number | null {
   return milli;
 }
 const milliToPct = (m: number): number => m / SCALE;
+
+/** ISO string / Date → Date hợp lệ, hoặc null. */
+function parseDate(v: unknown): Date | null {
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v;
+  if (typeof v !== 'string' || !v.trim()) return null;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+/**
+ * Chuẩn hóa về nửa đêm 00:00:00.000 LOCAL của NGÀY (P1.1: "1 kỳ / 1 mốc effectiveFrom-ngày").
+ * B16/F1: PHẢI floor theo LOCAL-day — đối xứng với `fmtDate` (getter local) và `txnDate` (UI gửi
+ * `new Date(d+'T00:00:00').toISOString()` = nửa đêm local). Floor theo UTC-day lệch +7h trên máy
+ * UTC+7 (production) → user nhập 01/07 nhưng lưu/hiển thị 30/06. Không dùng UTC getters ở đây.
+ */
+function startOfDayLocal(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
 
 // ═════════════════════════════════════════════════════════════════════════════
 // §C5a — LOẠI PHÍ BÁN
@@ -170,6 +187,8 @@ export interface FeeRateDto extends AuditTrail {
   phiBan: number; // %
   clNcc: number; // % = phiMua − phiCaiMay
   clKh: number; // % = phiBan − phiCaiMay
+  effectiveFrom: string; // ISO — ngày bắt đầu hiệu lực của kỳ giá (P1.1)
+  isCurrent: boolean; // kỳ đang hiệu lực HÔM NAY của tổ hợp (đối tác × loại thẻ)
 }
 export interface FeeRateFilter {
   partnerId?: number;
@@ -182,6 +201,7 @@ export interface SetFeeRateInput {
   phiMua: number; // %
   phiCaiMay: number; // %
   phiBan: number; // %
+  effectiveFrom?: string; // ISO — không truyền = mặc định HÔM NAY (P1.1)
 }
 
 export async function listFeeRates(filter: FeeRateFilter = {}): Promise<{ ok: boolean; data?: FeeRateDto[]; error?: string; message?: string }> {
@@ -190,8 +210,24 @@ export async function listFeeRates(filter: FeeRateFilter = {}): Promise<{ ok: bo
   const db = g.db;
   const rows = await db.feeRate.findMany({
     where: { deletedAt: null, partnerId: filter.partnerId ?? undefined, cardTypeId: filter.cardTypeId ?? undefined },
-    orderBy: [{ partnerId: 'asc' }, { cardTypeId: 'asc' }]
+    orderBy: [{ partnerId: 'asc' }, { cardTypeId: 'asc' }, { effectiveFrom: 'desc' }]
   });
+  // P1.1: kỳ ĐANG HIỆU LỰC hôm nay của MỖI tổ hợp (đối tác × loại thẻ) — pickEffectiveRate(now).
+  const now = new Date();
+  const currentIdByCombo = new Map<string, number>();
+  {
+    const byCombo = new Map<string, typeof rows>();
+    for (const r of rows) {
+      const key = `${r.partnerId}:${r.cardTypeId}`;
+      const arr = byCombo.get(key) ?? [];
+      arr.push(r);
+      byCombo.set(key, arr);
+    }
+    for (const [key, arr] of byCombo) {
+      const cur = pickEffectiveRate(arr, now);
+      if (cur) currentIdByCombo.set(key, cur.id);
+    }
+  }
   const names = await resolveUserNames(db, rows.flatMap((r) => [r.createdBy, r.updatedBy]));
   const partners = new Map((await db.partner.findMany({ where: { id: { in: [...new Set(rows.map((r) => r.partnerId))] } }, select: { id: true, code: true, name: true } })).map((p) => [p.id, p]));
   const cards = new Map((await db.cardType.findMany({ where: { id: { in: [...new Set(rows.map((r) => r.cardTypeId))] } }, select: { id: true, code: true, name: true, bankId: true } })).map((c) => [c.id, c]));
@@ -215,6 +251,8 @@ export async function listFeeRates(filter: FeeRateFilter = {}): Promise<{ ok: bo
       phiBan: milliToPct(r.phiBan),
       clNcc: milliToPct(r.phiMua - r.phiCaiMay),
       clKh: milliToPct(r.phiBan - r.phiCaiMay),
+      effectiveFrom: r.effectiveFrom.toISOString(),
+      isCurrent: currentIdByCombo.get(`${r.partnerId}:${r.cardTypeId}`) === r.id,
       ...trail(r, names)
     };
   });
@@ -223,8 +261,10 @@ export async function listFeeRates(filter: FeeRateFilter = {}): Promise<{ ok: bo
 }
 
 /**
- * Set biểu phí cho 1 tổ hợp (Đối tác × Loại thẻ) — UPSERT: đã có (active) → cập nhật;
- * có bản đã xóa mềm → bật lại + cập nhật; chưa có → tạo mới. Không báo lỗi "trùng".
+ * Set biểu phí cho 1 KỲ của tổ hợp (Đối tác × Loại thẻ) tại mốc `effectiveFrom` (P1.1).
+ * UPSERT theo (partnerId, cardTypeId, effectiveFrom-NGÀY): đã có kỳ CÙNG mốc (kể cả xóa mềm→bật lại)
+ * → cập nhật; khác mốc → TẠO KỲ MỚI (hai kỳ khác effectiveFrom cùng tồn tại). Không báo lỗi "trùng".
+ * Không truyền effectiveFrom → mặc định HÔM NAY.
  */
 export async function setFeeRate(input: SetFeeRateInput): Promise<MutationResult> {
   const g = await requirePermission(MANAGE, { action: 'FEE_RATE_SET', targetType: 'FeeRate' });
@@ -238,6 +278,9 @@ export async function setFeeRate(input: SetFeeRateInput): Promise<MutationResult
   if (phiMua === null) return { ok: false, error: 'VALIDATION', message: 'Phí mua không hợp lệ (≥0, tối đa 3 số thập phân).' };
   if (phiCaiMay === null) return { ok: false, error: 'VALIDATION', message: 'Phí cài máy không hợp lệ (≥0, tối đa 3 số thập phân).' };
   if (phiBan === null) return { ok: false, error: 'VALIDATION', message: 'Phí bán không hợp lệ (≥0, tối đa 3 số thập phân).' };
+  const effRaw = input.effectiveFrom !== undefined ? parseDate(input.effectiveFrom) : new Date();
+  if (!effRaw) return { ok: false, error: 'VALIDATION', message: 'Ngày hiệu lực không hợp lệ.' };
+  const effectiveFrom = startOfDayLocal(effRaw);
 
   const partner = await db.partner.findUnique({ where: { id: input.partnerId } });
   if (!partner || partner.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Đối tác không tồn tại.' };
@@ -247,15 +290,19 @@ export async function setFeeRate(input: SetFeeRateInput): Promise<MutationResult
   const link = await db.partnerBank.findFirst({ where: { partnerId: input.partnerId, bankId: card.bankId, deletedAt: null } });
   if (!link) return { ok: false, error: 'NOT_LINKED', message: 'Ngân hàng của loại thẻ này chưa liên kết với đối tác. Hãy liên kết ở mục Đối tác trước.' };
 
-  const existing = await db.feeRate.findFirst({ where: { partnerId: input.partnerId, cardTypeId: input.cardTypeId } });
+  // Upsert theo KỲ: tìm kỳ cùng mốc (cùng NGÀY effectiveFrom, kể cả bản xóa mềm) → cập nhật; khác mốc → tạo kỳ mới.
+  const dayEnd = new Date(effectiveFrom.getTime() + 86_400_000);
+  const existing = await db.feeRate.findFirst({
+    where: { partnerId: input.partnerId, cardTypeId: input.cardTypeId, effectiveFrom: { gte: effectiveFrom, lt: dayEnd } }
+  });
   if (existing) {
-    const before = auditSnapshot({ phiMua: existing.phiMua, phiCaiMay: existing.phiCaiMay, phiBan: existing.phiBan, deleted: existing.deletedAt !== null });
-    const updated = await db.feeRate.update({ where: { id: existing.id }, data: { phiMua, phiCaiMay, phiBan, deletedAt: null, updatedBy: user.id } });
-    await writeAudit(db, { actorUserId: user.id, action: 'FEE_RATE_SET', targetType: 'FeeRate', targetId: String(updated.id), before, after: auditSnapshot({ phiMua, phiCaiMay, phiBan }) });
+    const before = auditSnapshot({ phiMua: existing.phiMua, phiCaiMay: existing.phiCaiMay, phiBan: existing.phiBan, effectiveFrom: existing.effectiveFrom.toISOString(), deleted: existing.deletedAt !== null });
+    const updated = await db.feeRate.update({ where: { id: existing.id }, data: { phiMua, phiCaiMay, phiBan, effectiveFrom, deletedAt: null, deletedBy: null, updatedBy: user.id } });
+    await writeAudit(db, { actorUserId: user.id, action: 'FEE_RATE_SET', targetType: 'FeeRate', targetId: String(updated.id), before, after: auditSnapshot({ phiMua, phiCaiMay, phiBan, effectiveFrom: effectiveFrom.toISOString() }) });
     return { ok: true, id: updated.id };
   }
-  const created = await db.feeRate.create({ data: { partnerId: input.partnerId, cardTypeId: input.cardTypeId, phiMua, phiCaiMay, phiBan, createdBy: user.id } });
-  await writeAudit(db, { actorUserId: user.id, action: 'FEE_RATE_SET', targetType: 'FeeRate', targetId: String(created.id), after: auditSnapshot({ partnerId: input.partnerId, cardTypeId: input.cardTypeId, phiMua, phiCaiMay, phiBan }) });
+  const created = await db.feeRate.create({ data: { partnerId: input.partnerId, cardTypeId: input.cardTypeId, phiMua, phiCaiMay, phiBan, effectiveFrom, createdBy: user.id } });
+  await writeAudit(db, { actorUserId: user.id, action: 'FEE_RATE_SET', targetType: 'FeeRate', targetId: String(created.id), after: auditSnapshot({ partnerId: input.partnerId, cardTypeId: input.cardTypeId, phiMua, phiCaiMay, phiBan, effectiveFrom: effectiveFrom.toISOString() }) });
   return { ok: true, id: created.id };
 }
 

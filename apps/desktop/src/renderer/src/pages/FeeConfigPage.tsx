@@ -206,7 +206,7 @@ function RateTab({ canManage }: { canManage: boolean }): JSX.Element {
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} biểu phí</div>
         <div className="flex gap-2">
-          <Button variant="neutral" icon={<Percent className="h-4 w-4" />} onClick={() => exportCsv('bieu_phi', ['Đối tác', 'Ngân hàng', 'Loại thẻ', 'Phí mua %', 'Phí cài máy %', 'Phí bán %', 'Chênh lệch với Nhà cung cấp %', 'Chênh lệch với Khách hàng %'], rows.map((r) => [r.partnerName, r.bankCode, r.cardTypeName, r.phiMua, r.phiCaiMay, r.phiBan, r.clNcc, r.clKh]))}>Xuất Excel</Button>
+          <Button variant="neutral" icon={<Percent className="h-4 w-4" />} onClick={() => exportCsv('bieu_phi', ['Đối tác', 'Ngân hàng', 'Loại thẻ', 'Hiệu lực từ', 'Đang hiệu lực', 'Phí mua %', 'Phí cài máy %', 'Phí bán %', 'Chênh lệch với Nhà cung cấp %', 'Chênh lệch với Khách hàng %'], rows.map((r) => [r.partnerName, r.bankCode, r.cardTypeName, fmtDate(r.effectiveFrom), r.isCurrent ? 'x' : '', r.phiMua, r.phiCaiMay, r.phiBan, r.clNcc, r.clKh]))}>Xuất Excel</Button>
           {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => partners.length ? setSetOpen('new') : toast.alert('Cần có đối tác + loại thẻ + liên kết ngân hàng trước khi đặt phí.', 'Thiếu dữ liệu nền')}>Đặt biểu phí</Button>}
         </div>
       </div>
@@ -227,6 +227,7 @@ function RateTab({ canManage }: { canManage: boolean }): JSX.Element {
               <th className="px-4 py-3">Đối tác</th>
               <th className="px-4 py-3">Ngân hàng</th>
               <th className="px-4 py-3">Loại thẻ</th>
+              <th className="px-4 py-3">Hiệu lực từ</th>
               <th className="px-4 py-3 text-right">Phí mua</th>
               <th className="px-4 py-3 text-right">Phí cài máy</th>
               <th className="px-4 py-3 text-right">Phí bán</th>
@@ -236,14 +237,15 @@ function RateTab({ canManage }: { canManage: boolean }): JSX.Element {
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {loading && <tr><td colSpan={canManage ? 10 : 8} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
-            {!loading && rows.length === 0 && <tr><td colSpan={canManage ? 10 : 8} className="px-4 py-10 text-center text-slate-400"><Percent className="mx-auto mb-2 h-6 w-6" /> Chưa có biểu phí.</td></tr>}
+            {loading && <tr><td colSpan={canManage ? 11 : 9} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+            {!loading && rows.length === 0 && <tr><td colSpan={canManage ? 11 : 9} className="px-4 py-10 text-center text-slate-400"><Percent className="mx-auto mb-2 h-6 w-6" /> Chưa có biểu phí.</td></tr>}
             {!loading && rows.map((r) => (
               <tr key={r.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(r.id) ? 'bg-brand-tint/40' : '')}>
                 {canManage && <SelectCell id={r.id} sel={sel} />}
                 <td className="px-4 py-3"><span className="font-mono text-xs font-semibold text-brand">{r.partnerCode}</span> <span className="text-slate-700">{r.partnerName}</span></td>
                 <td className="px-4 py-3 text-slate-600">{r.bankCode ?? '—'}</td>
                 <td className="px-4 py-3"><span className="font-mono text-xs font-semibold text-brand">{r.cardTypeCode}</span> <span className="text-slate-700">{r.cardTypeName}</span></td>
+                <td className="px-4 py-3 text-xs text-slate-600">{fmtDate(r.effectiveFrom)}{r.isCurrent && <span className="ml-2 rounded-full bg-brand-tint px-2 py-0.5 text-[10px] font-semibold text-brand">Đang hiệu lực</span>}</td>
                 <td className="px-4 py-3 text-right text-slate-800">{fmtPct(r.phiMua)}</td>
                 <td className="px-4 py-3 text-right text-slate-800">{fmtPct(r.phiCaiMay)}</td>
                 <td className="px-4 py-3 text-right text-slate-800">{fmtPct(r.phiBan)}</td>
@@ -279,6 +281,7 @@ function RateForm({ existing, partners, banks, onClose, onSaved }: { existing: F
   const [phiMua, setPhiMua] = useState(existing ? String(existing.phiMua) : '');
   const [phiCaiMay, setPhiCaiMay] = useState(existing ? String(existing.phiCaiMay) : '');
   const [phiBan, setPhiBan] = useState(existing ? String(existing.phiBan) : '');
+  const [effectiveFrom, setEffectiveFrom] = useState(existing ? existing.effectiveFrom.slice(0, 10) : new Date().toISOString().slice(0, 10));
   const [busy, setBusy] = useState(false);
 
   // Ngân hàng khả dụng = ngân hàng ĐÃ liên kết với đối tác đang chọn (§C5b).
@@ -307,8 +310,9 @@ function RateForm({ existing, partners, banks, onClose, onSaved }: { existing: F
     for (const [label, v] of [['Phí mua', phiMua], ['Phí cài máy', phiCaiMay], ['Phí bán', phiBan]] as const) {
       if (!validPct(v)) return toast.alert(`${label} không hợp lệ (≥ 0, tối đa 3 số thập phân).`, 'Giá trị không hợp lệ');
     }
+    if (!effectiveFrom) return toast.alert('Vui lòng chọn ngày hiệu lực.', 'Thiếu thông tin');
     setBusy(true);
-    const res = await window.api.feeRateSet({ partnerId: Number(partnerId), cardTypeId: Number(cardTypeId), phiMua: Number(phiMua), phiCaiMay: Number(phiCaiMay), phiBan: Number(phiBan) });
+    const res = await window.api.feeRateSet({ partnerId: Number(partnerId), cardTypeId: Number(cardTypeId), phiMua: Number(phiMua), phiCaiMay: Number(phiCaiMay), phiBan: Number(phiBan), effectiveFrom: new Date(effectiveFrom + 'T00:00:00').toISOString() });
     setBusy(false);
     if (res.ok) { toast.success('Đã lưu biểu phí'); onSaved(); }
     else toast.alert(res.message ?? 'Lưu biểu phí thất bại', 'Không lưu được');
@@ -325,6 +329,9 @@ function RateForm({ existing, partners, banks, onClose, onSaved }: { existing: F
         <Field label="Phí mua (%)" required><input className={inputCls} inputMode="decimal" value={phiMua} onChange={(e) => setPhiMua(e.target.value)} placeholder="1.02" /></Field>
         <Field label="Phí cài máy (%)" required><input className={inputCls} inputMode="decimal" value={phiCaiMay} onChange={(e) => setPhiCaiMay(e.target.value)} placeholder="1.03" /></Field>
         <Field label="Phí bán (%)" required><input className={inputCls} inputMode="decimal" value={phiBan} onChange={(e) => setPhiBan(e.target.value)} placeholder="1.05" /></Field>
+      </div>
+      <div className="mt-4 grid grid-cols-3 gap-4">
+        <Field label="Ngày hiệu lực từ" required hint="Kỳ giá áp dụng cho GD có ngày ≥ mốc này"><input type="date" className={inputCls} value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} /></Field>
       </div>
       <div className="mt-4 flex gap-6 rounded-lg bg-appbg px-4 py-3 text-sm">
         <div>Chênh lệch với Nhà cung cấp: {clNcc === null ? <span className="text-slate-400">—</span> : <CL v={clNcc} />} <span className="text-xs text-slate-400">(phí mua − phí cài máy)</span></div>

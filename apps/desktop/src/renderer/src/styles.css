@@ -35,3 +35,41 @@ body {
   color: #0f172a;
   -webkit-font-smoothing: antialiased;
 }
+
+/* Thanh cuộn mảnh, bo tròn, theo tông UI (R_UI_STANDARD). Firefox + WebKit. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #c3ccda transparent;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #c3ccda;
+  border-radius: 9999px;
+  border: 3px solid transparent; /* tạo padding → thumb trông mảnh ~4px */
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #97a4ba;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Trong sidebar tối: thumb sáng-mờ cho hợp nền #10233f. */
+.bg-sidebar {
+  scrollbar-color: rgba(199, 210, 225, 0.35) transparent;
+}
+.bg-sidebar ::-webkit-scrollbar-thumb {
+  background: rgba(199, 210, 225, 0.35);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+.bg-sidebar ::-webkit-scrollbar-thumb:hover {
+  background: rgba(199, 210, 225, 0.55);
+}

@@ -34,3 +34,27 @@ export function computeRevenue(
   const revenueSell = marginToAmount(amount, sellMarginMilli || 0);
   return { revenuePartner, revenueSell, revenueAmount: revenuePartner + revenueSell };
 }
+
+// ── P1.1 GIÁ THEO KỲ ─────────────────────────────────────────────────────────
+/**
+ * Chọn KỲ giá đang hiệu lực tại mốc `at` trong danh sách kỳ của CÙNG 1 tổ hợp
+ * (đối tác × loại thẻ, đã lọc còn sống). Trả về kỳ có `effectiveFrom` ≤ `at` LỚN NHẤT,
+ * hoặc `null` nếu không có kỳ nào bắt đầu ≤ `at` (KHÔNG lấy đại kỳ tương lai — I-P3).
+ * Hàm THUẦN: không DB, không side-effect. `effectiveFrom` nhận Date hoặc ISO string.
+ */
+export function pickEffectiveRate<T extends { effectiveFrom: Date | string }>(rows: T[], at: Date): T | null {
+  const atMs = at instanceof Date ? at.getTime() : new Date(at).getTime();
+  if (Number.isNaN(atMs)) return null;
+  let best: T | null = null;
+  let bestMs = -Infinity;
+  for (const r of rows) {
+    const ef = r.effectiveFrom instanceof Date ? r.effectiveFrom : new Date(r.effectiveFrom);
+    const efMs = ef.getTime();
+    if (Number.isNaN(efMs)) continue;
+    if (efMs <= atMs && efMs > bestMs) {
+      best = r;
+      bestMs = efMs;
+    }
+  }
+  return best;
+}

@@ -5,7 +5,7 @@
 //   Doanh thu = số tiền × (CL_NCC% + CL_KH%). CẢ 2 khoản = CÔNG NỢ thu về (đối tác + khách).
 // Biểu phí tra theo (Đối tác của TID × Loại thẻ) → snapshot vào giao dịch (×1000) để phí đổi
 // về sau KHÔNG làm sai doanh thu đã ghi. Permission-guarded, audited, soft-delete → thùng rác.
-import { auditSnapshot, computeRevenue } from '@glb/business-rules';
+import { auditSnapshot, computeRevenue, pickEffectiveRate } from '@glb/business-rules';
 import type { Db } from '@glb/database';
 import { requirePermission, verifyActorPassword } from './guard.js';
 import { writeAudit } from './audit.js';
@@ -121,14 +121,15 @@ interface ResolvedFee {
 }
 
 /**
- * Tra biểu phí cho 1 giao dịch trên (TID × Loại thẻ):
- *   Đối tác lấy từ TID → FeeRate(partnerId, cardTypeId) → CL_NCC / CL_KH (milli).
- * Trả về margins đã snapshot, hoặc null + lý do.
+ * Tra biểu phí cho 1 giao dịch trên (TID × Loại thẻ) tại NGÀY GIAO DỊCH `at` (P1.1):
+ *   Đối tác lấy từ TID → các KỲ FeeRate(partnerId, cardTypeId) → chọn kỳ đang hiệu lực tại `at`
+ *   bằng pickEffectiveRate → CL_NCC / CL_KH (milli). Trả về margins đã snapshot, hoặc null + lý do.
  */
 async function resolveFeeForTxn(
   db: Db,
   tidRow: { id: number; partnerId: number | null; bankId: number | null },
-  cardTypeId: number
+  cardTypeId: number,
+  at: Date
 ): Promise<{ ok: true; fee: ResolvedFee } | { ok: false; error: string; message: string }> {
   if (tidRow.partnerId == null)
     return { ok: false, error: 'NO_PARTNER', message: 'TID này chưa gán Đối tác nên không tra được biểu phí. Hãy cấu hình TID trước.' };
@@ -136,12 +137,14 @@ async function resolveFeeForTxn(
   if (!card || card.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Loại thẻ không tồn tại.' };
   if (tidRow.bankId != null && card.bankId !== tidRow.bankId)
     return { ok: false, error: 'CARD_BANK_MISMATCH', message: 'Loại thẻ không thuộc ngân hàng của TID này.' };
-  const rate = await db.feeRate.findFirst({ where: { partnerId: tidRow.partnerId, cardTypeId, deletedAt: null } });
+  // Tất cả KỲ giá còn sống của tổ hợp → chọn kỳ hiệu lực tại ngày GD (không lấy đại kỳ tương lai).
+  const rates = await db.feeRate.findMany({ where: { partnerId: tidRow.partnerId, cardTypeId, deletedAt: null } });
+  const rate = pickEffectiveRate(rates, at);
   if (!rate)
     return {
       ok: false,
       error: 'NO_FEE_RATE',
-      message: 'Chưa có biểu phí cho tổ hợp Đối tác × Loại thẻ này. Hãy cấu hình biểu phí trước.'
+      message: 'Chưa có biểu phí hiệu lực tại ngày giao dịch. Hãy cấu hình biểu phí có ngày hiệu lực ≤ ngày GD.'
     };
   return {
     ok: true,
@@ -177,7 +180,7 @@ export async function createTransaction(input: CreateTransactionInput): Promise<
   const tid = await db.tid.findUnique({ where: { id: input.tidId } });
   if (!tid || tid.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'TID không tồn tại.' };
 
-  const fee = await resolveFeeForTxn(db, tid, input.cardTypeId);
+  const fee = await resolveFeeForTxn(db, tid, input.cardTypeId, txnDate);
   if (!fee.ok) return fee;
 
   const rev = computeRevenue(amount, fee.fee.partnerMarginMilli, fee.fee.sellMarginMilli);
@@ -243,13 +246,14 @@ export async function updateTransaction(id: number, input: UpdateTransactionInpu
 
   // SNAPSHOT phí (LEAD): GIỮ NGUYÊN margin đã lưu — sửa ghi chú/ngày/khách/số tiền KHÔNG tái định giá
   // theo biểu phí hiện tại. CHỈ tra lại phí khi người dùng ĐỔI LOẠI THẺ (phí phụ thuộc loại thẻ).
+  // P1.1: khi đổi loại thẻ, tra lại theo KỲ giá tại `txnDate` của CHÍNH GD (không ăn giá hôm nay — I-P2).
   const cardChanged = input.cardTypeId !== undefined && input.cardTypeId !== row.cardTypeId;
   let partnerMarginMilli = row.partnerMarginMilli;
   let sellMarginMilli = row.sellMarginMilli;
   if (cardChanged) {
     const tid = await db.tid.findUnique({ where: { id: row.tidId } });
     if (!tid || tid.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'TID không tồn tại.' };
-    const fee = await resolveFeeForTxn(db, tid, cardTypeId);
+    const fee = await resolveFeeForTxn(db, tid, cardTypeId, txnDate);
     if (!fee.ok) return fee;
     partnerMarginMilli = fee.fee.partnerMarginMilli;
     sellMarginMilli = fee.fee.sellMarginMilli;
