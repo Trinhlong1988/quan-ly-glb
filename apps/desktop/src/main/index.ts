@@ -188,6 +188,14 @@ app.whenReady().then(async () => {
     app.exit(code);
     return;
   }
+  // G10.C concurrency-correctness self-test (guard-logic tất định): conditional transition +
+  // $transaction cho request/approve/reject (=20 dành cho G10.5 concurrency thật trên Postgres).
+  if (process.env['GLB_SELFTEST'] === '21') {
+    const { runGuardSelfTest } = await import('./selftest-guard.js');
+    const code = await runGuardSelfTest();
+    app.exit(code);
+    return;
+  }
 
   await createWindow();
   startHousekeeping();

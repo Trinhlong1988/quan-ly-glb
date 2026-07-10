@@ -3,7 +3,7 @@
 > Rule: mỗi bug do LEAD/AUDIT phát hiện = **thất bại của quy trình test** → BẮT BUỘC thêm test/rule chặn tái diễn trước khi đóng.
 > Format: `### B<NN> — <mô tả> [FIXED|PENDING]` · Phát hiện bởi · Nguyên nhân · Fix · **Regression** (test/rule chặn tái diễn).
 
-Counter: B = 17. Last audit: 2026-07-10 (Nhóm B doanh thu + Nhóm E bảo trì + 3 agent phản biện song song; P1.1 giá theo kỳ + F1 lệch ngày UTC+7; P1.2 approval + B17 emit-trap/clobber).
+Counter: B = 18. Last audit: 2026-07-10 (… P1.2 approval + B17 emit-trap/clobber + B18 TOCTOU tương tranh approval — phát hiện khi chuẩn bị G10 đa-client Postgres).
 
 ### B16 — Ngày hiệu lực biểu phí LỆCH −1 NGÀY trên máy UTC+7 (production) [FIXED]
 - **Phát hiện bởi:** CMD_AUDIT (audit P1.1 giá theo kỳ) — máy production chạy UTC+7. User nhập "Hiệu lực từ = 01/07/2026" nhưng bảng biểu phí hiển thị/lưu **30/06/2026**.
@@ -142,3 +142,10 @@ Counter: B = 17. Last audit: 2026-07-10 (Nhóm B doanh thu + Nhóm E bảo trì 
   - **Pre-commit hook** `.githooks/pre-commit` + `core.hooksPath=.githooks` → commit file clobber BỊ CHẶN (đã test).
   - **Đã tái hiện độc lập neutralize:** `tsc -p` trần → 0 rác trong `src/` (emit rơi `out/`), index.d.ts nguyên 1147.
 - **Đề xuất quy trình (bug class "emit-trap" + "false-PASS"):** MỌI verify typecheck dùng `--noEmit`/`npm run typecheck`, **CẤM `tsc -p` trần**. AUDIT không tin số agent — rerun 100% gate từ trạng thái sạch. File hand-maintained vào registry được bảo vệ, chỉ Edit không Write. Chi tiết `docs/CMD_BUILD_DISPATCH_PROTOCOL.md`. Áp global mọi project TS đa-agent.
+
+### B18 — TOCTOU/lost-update tương tranh trong approval (2 client duyệt/tạo cùng 1 yêu cầu hủy → duyệt 2 lần, audit+notify nhân đôi) [FIXED — G10.C]
+- **Phát hiện bởi:** re-QA vòng 2 (chuẩn bị G10 đa-client Postgres). SQLite single-writer che được nên selftest cũ (18/19) KHÔNG bắt — điểm mù: test tuần tự không tạo race.
+- **Nguyên nhân:** service layer `approval-service` đọc-rồi-ghi (read tx POSTED → tạo request + set CANCEL_PENDING; approveOne set CANCELLED) KHÔNG dùng `$transaction` + KHÔNG guard trạng thái. Lên nhiều-client (Postgres) → 2 client tạo 2 request cho 1 bill / duyệt request stale 2 lần → hỏng dữ liệu THẦM LẶNG (không crash). Storage-Guard cũng chết-lặng khi DB thành postgresql:// (CRITICAL-B, để G10.2).
+- **Fix (mở lại P1.2 freeze — Mr.Long duyệt vượt tier 10/7):** bọc `requestCancelBill`/`approveOne`/`rejectOne` trong `db.$transaction` interactive + **conditional transition** `updateMany({where:{id,status:<kỳ vọng>}})` → `count===0` = thua race → `TxGuardError` (INVALID_STATE/ALREADY_DECIDED) rollback, KHÔNG ghi audit/notify. request: POSTED→CANCEL_PENDING; approve: request PENDING→APPROVED + bill CANCEL_PENDING→CANCELLED; reject: request PENDING→REJECTED + bill hoàn POSTED. Audit/notify CHỈ ở nhánh thắng. + seed pre-tạo dòng code_counter mọi prefix (chống race insert-đầu). Mã bill GD dựa SERIAL id (an toàn).
+- **Regression:** selftest=18 giữ 31/0 + selftest=19 giữ 26/0 (happy-path không vỡ) + **selftest MỚI =21 guard-logic 19/0** (tạo request khi CANCEL_PENDING→INVALID_STATE không tạo request 2; duyệt 2 lần→lần 2 ALREADY_DECIDED không nhân đôi; từ chối→bill về POSTED). **Stress-race THẬT** để G10.5 trên Postgres (selftest=20).
+- **Đề xuất quy trình (bug class "concurrency-masked-by-single-writer"):** mọi flow đa-ghi (đọc-rồi-ghi trạng thái) PHẢI conditional-transition + `$transaction` TRƯỚC khi lên DB đa-client. Rà toàn service layer khi migrate SQLite→Postgres. Test tuần tự KHÔNG đủ — cần stress-race trên DB đa-writer.

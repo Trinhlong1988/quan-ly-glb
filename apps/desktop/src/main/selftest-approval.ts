@@ -128,7 +128,7 @@ export async function runApprovalSelfTest(): Promise<number> {
   // reqAudit vừa được duyệt ở trên → duyệt lại lần 2 = INVALID_STATE (nhánh từ chối)
   const denyInvalid = await approveCancelBill(reqAudit.id!);
   const auditAfter = await db.auditLog.count();
-  ok('I-A5: duyệt lại yêu cầu đã xử lý → INVALID_STATE', denyInvalid.ok === false && denyInvalid.error === 'INVALID_STATE', denyInvalid);
+  ok('I-A5: duyệt lại yêu cầu đã xử lý → ALREADY_DECIDED', denyInvalid.ok === false && denyInvalid.error === 'ALREADY_DECIDED', denyInvalid);
   ok('I-A5: nhánh từ chối GHI audit (audit_logs tăng)', auditAfter > auditBefore, { before: auditBefore, after: auditAfter, firstOk: denyState.ok });
 
   // ═══ 8) PHÂN QUYỀN: CUSTOMER không có BILL_CANCEL_REQUEST ═══

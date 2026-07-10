@@ -12,6 +12,22 @@ const REQUEST = 'BILL_CANCEL_REQUEST';
 const APPROVE = 'BILL_CANCEL_APPROVE';
 const ELEVATED = 'BILL_CANCEL_APPROVE_ELEVATED';
 
+/**
+ * G10.C — gia cố tương tranh (concurrency-correctness). Ném BÊN TRONG `db.$transaction`
+ * để (a) rollback nguyên tử khi conditional transition THUA (updateMany count===0), và
+ * (b) mang mã lỗi ra ngoài để trả về cho client. KHÔNG audit/notify ở nhánh thua.
+ * SQLite serialize nên đây là logic tất định; race thật kiểm ở G10.5 trên Postgres.
+ */
+class TxGuardError extends Error {
+  constructor(
+    public readonly code: string,
+    public readonly userMessage: string
+  ) {
+    super(code);
+    this.name = 'TxGuardError';
+  }
+}
+
 export interface MutationResult {
   ok: boolean;
   error?: string;
@@ -106,10 +122,28 @@ export async function requestCancelBill(transactionId: number, reason: string): 
   if (!tx || tx.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Giao dịch không tồn tại.' };
   if (tx.status !== 'POSTED')
     return { ok: false, error: 'INVALID_STATE', message: 'Chỉ bill đang hiệu lực mới tạo được yêu cầu hủy (đang chờ duyệt hoặc đã hủy).' };
-  const req = await db.approvalRequest.create({
-    data: { entityType: 'Transaction', entityId: tx.id, action: 'CANCEL', reason: r, requestedBy: user.id }
-  });
-  await db.transaction.update({ where: { id: tx.id }, data: { status: 'CANCEL_PENDING', updatedBy: user.id } });
+  // CRITICAL-A: bọc chuyển-trạng-thái + tạo yêu cầu trong 1 interactive $transaction với
+  // conditional transition (chống TOCTOU). 2 client cùng lúc → chỉ 1 chuyển được POSTED→CANCEL_PENDING;
+  // client thua nhận count===0 → INVALID_STATE, KHÔNG tạo ApprovalRequest thứ 2.
+  let req: { id: number };
+  try {
+    req = await db.$transaction(async (txc) => {
+      const moved = await txc.transaction.updateMany({
+        where: { id: transactionId, status: 'POSTED', deletedAt: null },
+        data: { status: 'CANCEL_PENDING', updatedBy: user.id }
+      });
+      if (moved.count === 0)
+        throw new TxGuardError('INVALID_STATE', 'Chỉ bill đang hiệu lực mới tạo được yêu cầu hủy (đang chờ duyệt hoặc đã hủy).');
+      // Chỉ tạo yêu cầu KHI transition THẮNG — cùng transaction (nguyên tử).
+      return txc.approvalRequest.create({
+        data: { entityType: 'Transaction', entityId: transactionId, action: 'CANCEL', reason: r, requestedBy: user.id }
+      });
+    });
+  } catch (e) {
+    if (e instanceof TxGuardError) return { ok: false, error: e.code, message: e.userMessage };
+    throw e;
+  }
+  // THẮNG → audit + notify (SAU khi transition thành công; nhánh thua đã return ở trên).
   await writeAudit(db, {
     actorUserId: user.id,
     action: 'BILL_CANCEL_REQUESTED',
@@ -143,10 +177,8 @@ async function approveOne(db: Db, user: AuthUser, requestId: number, decisionNot
   const req = await db.approvalRequest.findUnique({ where: { id: requestId } });
   if (!req || req.action !== 'CANCEL' || req.entityType !== 'Transaction')
     return { ok: false, error: 'NOT_FOUND', message: 'Yêu cầu hủy không tồn tại.' };
-  if (req.status !== 'PENDING') {
-    await writeAudit(db, { actorUserId: user.id, action: 'BILL_CANCEL_APPROVED', targetType: 'ApprovalRequest', targetId: String(req.id), after: { denied: true, reason: 'INVALID_STATE', status: req.status } });
-    return { ok: false, error: 'INVALID_STATE', message: 'Yêu cầu đã được xử lý (không còn chờ duyệt).' };
-  }
+  // Phân vai (permission-based). Nhánh TỪ CHỐI CHÍNH SÁCH (self/elevated) VẪN ghi audit (R_AUDIT_003).
+  // KHÁC với "đã xử lý/race thua" (ALREADY_DECIDED) — đó là no-op tương tranh, không ghi audit.
   const requesterPerms = await userPermSet(db, req.requestedBy);
   const requesterIsApprover = requesterPerms.has(APPROVE); // requester là Manager/Admin
   const approverElevated = hasPermission(user, ELEVATED); // approver là Admin
@@ -170,11 +202,30 @@ async function approveOne(db: Db, user: AuthUser, requestId: number, decisionNot
   const tx = await db.transaction.findUnique({ where: { id: req.entityId } });
   if (!tx || tx.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Bill không tồn tại.' };
   const note = [decisionNote?.trim() || null, selfNote].filter(Boolean).join(' · ') || null;
-  await db.transaction.update({
-    where: { id: tx.id },
-    data: { status: 'CANCELLED', cancelledAt: new Date(), cancelReason: req.reason, cancelRequestId: req.id, updatedBy: user.id }
-  });
-  await db.approvalRequest.update({ where: { id: req.id }, data: { status: 'APPROVED', decidedBy: user.id, decidedAt: new Date(), decisionNote: note } });
+  const decidedAt = new Date();
+  // CRITICAL-A: conditional transition trong 1 interactive $transaction (chống TOCTOU / duyệt 2 lần).
+  //  (a) ApprovalRequest PENDING→APPROVED (count===0 → ALREADY_DECIDED, đã bị xử lý);
+  //  (b) Transaction CANCEL_PENDING→CANCELLED (count===0 → INVALID_STATE).
+  // Cả 2 cùng transaction → chỉ NGƯỜI THẮNG mới ghi audit + notify (nhánh thua rollback, return trước).
+  try {
+    await db.$transaction(async (txc) => {
+      const reqMoved = await txc.approvalRequest.updateMany({
+        where: { id: req.id, status: 'PENDING' },
+        data: { status: 'APPROVED', decidedBy: user.id, decidedAt, decisionNote: note }
+      });
+      if (reqMoved.count === 0)
+        throw new TxGuardError('ALREADY_DECIDED', 'Yêu cầu đã được xử lý (không còn chờ duyệt).');
+      const billMoved = await txc.transaction.updateMany({
+        where: { id: tx.id, status: 'CANCEL_PENDING', deletedAt: null },
+        data: { status: 'CANCELLED', cancelledAt: decidedAt, cancelReason: req.reason, cancelRequestId: req.id, updatedBy: user.id }
+      });
+      if (billMoved.count === 0)
+        throw new TxGuardError('INVALID_STATE', 'Bill không ở trạng thái chờ hủy (có thể đã đổi trạng thái).');
+    });
+  } catch (e) {
+    if (e instanceof TxGuardError) return { ok: false, error: e.code, message: e.userMessage };
+    throw e;
+  }
   await writeAudit(db, { actorUserId: user.id, action: 'BILL_CANCEL_APPROVED', targetType: 'Transaction', targetId: String(tx.id), before: auditSnapshot({ status: tx.status, revenueAmount: tx.revenueAmount }), after: auditSnapshot({ status: 'CANCELLED', requestId: req.id, note }) });
   // F-NOTIF: báo kết quả cho người tạo yêu cầu (§②b) — chỉ chạy ở nhánh thành công.
   try {
@@ -194,14 +245,29 @@ async function approveOne(db: Db, user: AuthUser, requestId: number, decisionNot
 async function rejectOne(db: Db, user: AuthUser, requestId: number, decisionNote: string): Promise<OneResult> {
   const req = await db.approvalRequest.findUnique({ where: { id: requestId } });
   if (!req || req.action !== 'CANCEL' || req.entityType !== 'Transaction') return { ok: false, error: 'NOT_FOUND', message: 'Yêu cầu hủy không tồn tại.' };
-  if (req.status !== 'PENDING') {
-    await writeAudit(db, { actorUserId: user.id, action: 'BILL_CANCEL_REJECTED', targetType: 'ApprovalRequest', targetId: String(req.id), after: { denied: true, reason: 'INVALID_STATE', status: req.status } });
-    return { ok: false, error: 'INVALID_STATE', message: 'Yêu cầu đã được xử lý.' };
-  }
   const note = (decisionNote ?? '').trim();
   if (!note) return { ok: false, error: 'VALIDATION', message: 'Vui lòng nhập lý do từ chối.' };
-  await db.approvalRequest.update({ where: { id: req.id }, data: { status: 'REJECTED', decidedBy: user.id, decidedAt: new Date(), decisionNote: note } });
-  await db.transaction.update({ where: { id: req.entityId }, data: { status: 'POSTED', updatedBy: user.id } });
+  const decidedAt = new Date();
+  // CRITICAL-A: conditional transition trong 1 interactive $transaction (chống TOCTOU / từ chối 2 lần).
+  // ApprovalRequest PENDING→REJECTED (count===0 → INVALID_STATE, đã bị xử lý) + HOÀN bill CANCEL_PENDING→POSTED.
+  // Chỉ NGƯỜI THẮNG mới ghi audit + notify (nhánh thua rollback, return trước).
+  try {
+    await db.$transaction(async (txc) => {
+      const reqMoved = await txc.approvalRequest.updateMany({
+        where: { id: req.id, status: 'PENDING' },
+        data: { status: 'REJECTED', decidedBy: user.id, decidedAt, decisionNote: note }
+      });
+      if (reqMoved.count === 0) throw new TxGuardError('INVALID_STATE', 'Yêu cầu đã được xử lý.');
+      // Hoàn bill về POSTED — chỉ khi đang chờ hủy (guard theo trạng thái, không ép trạng thái khác).
+      await txc.transaction.updateMany({
+        where: { id: req.entityId, status: 'CANCEL_PENDING' },
+        data: { status: 'POSTED', updatedBy: user.id }
+      });
+    });
+  } catch (e) {
+    if (e instanceof TxGuardError) return { ok: false, error: e.code, message: e.userMessage };
+    throw e;
+  }
   await writeAudit(db, { actorUserId: user.id, action: 'BILL_CANCEL_REJECTED', targetType: 'Transaction', targetId: String(req.entityId), after: auditSnapshot({ requestId: req.id, note }) });
   // F-NOTIF: báo kết quả cho người tạo yêu cầu (§②b) — chỉ chạy ở nhánh thành công.
   try {

@@ -112,7 +112,7 @@ export async function runNotifySelfTest(): Promise<number> {
 
   // ═══ 6) IDEMPOTENT: duyệt lại yêu cầu đã xử lý → INVALID_STATE, KHÔNG đẩy thêm ═══
   const apvAgain = await approveCancelBill(reqAcc.id!);
-  ok('6) duyệt lại → INVALID_STATE', apvAgain.ok === false && apvAgain.error === 'INVALID_STATE', apvAgain);
+  ok('6) duyệt lại → ALREADY_DECIDED', apvAgain.ok === false && apvAgain.error === 'ALREADY_DECIDED', apvAgain);
   ok('6) acc VẪN chỉ có 1 thông báo ĐÃ DUYỆT (không nhân đôi)', (await cnt(accId, APV)) === 1);
 
   // ═══ 5) TỪ CHỐI yêu cầu của mgrA (adminX từ chối) → mgrA nhận REJECTED (=1) ═══

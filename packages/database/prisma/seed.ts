@@ -43,6 +43,21 @@ async function main() {
     }
   }
 
+  // 3b) code_counters — HIGH-E (G10.C): pre-tạo sẵn dòng đếm cho MỌI prefix đang dùng
+  //   • NV = mã nhân viên (user-service + backfillEmployeeCodes)
+  //   • KH = mã khách hàng (customer-service)
+  // Loại race "insert-đầu 2 client → P2002" khi nhiều client nối chung 1 DB (Postgres/G10).
+  // lastValue=0 → nextCode() đầu tiên increment lên 1 → NV01 / KH01 (khớp formatCode ≥2 chữ số).
+  // upsert update:{} → IDEMPOTENT: KHÔNG bao giờ reset counter đã tồn tại.
+  const CODE_COUNTER_PREFIXES = ["NV", "KH"] as const;
+  for (const prefix of CODE_COUNTER_PREFIXES) {
+    await prisma.codeCounter.upsert({
+      where: { prefix },
+      update: {},
+      create: { prefix, lastValue: 0 },
+    });
+  }
+
   // 4) Admin mặc định — R001 (chỉ khi CHƯA có Admin nào), R002 (hash), R003 (force change)
   const adminRole = await prisma.role.findUniqueOrThrow({ where: { code: "ADMIN" } });
   const existingAdmin = await prisma.user.findFirst({

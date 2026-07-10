@@ -148,3 +148,19 @@ Thứ tự cuốn chiếu, mỗi mục có gate ở §5:
 - [MED-11] ② G10 thêm lớp bug: `type-mirror-drift`, `test-orphan`, `db-evolution-gap`.
 - [MED-12] Runway thiếu cấu hình server: `postgresql.conf listen_addresses` + `pg_hba.conf host` (điều kiện client LAN nối được) — thêm sub-task + gate kết nối từ máy B.
 - [LOW-13] Gỡ câu "nhiều mục TENTATIVE" tồn dư ở §1 (đã chốt §2); ghi rõ read-list trong prompt.
+
+## §9b. RE-QA VÒNG 2 (Postgres approach) — rủi ro #1 = CONCURRENCY, không phải squash
+> Bài học: mục tiêu G10 (nhiều client ghi đồng thời) phơi bày nợ kỹ thuật "service layer chưa dùng `$transaction`+guard" mà SQLite single-writer che giấu. Đây là nguồn hỏng dữ liệu thầm lặng nhất khi lên LAN.
+
+- **[CRITICAL-A] Race TOCTOU rộng hơn I-G3.** `requestCancelBill` đọc tx POSTED → tạo request + set CANCEL_PENDING KHÔNG guard/`$transaction` → 2 client tạo 2 request PENDING cho 1 bill; `approveOne` KHÔNG kiểm `tx.status==='CANCEL_PENDING'` → request stale thứ 2 vẫn "duyệt", audit+notify 2 lần. **Sửa: bọc request/approve/reject trong interactive `$transaction` + conditional transition ở CẢ 2 chỗ** (`updateMany transaction WHERE status='POSTED'` count=0→thua; approve = `updateMany approvalRequest WHERE status='PENDING'` VÀ `updateMany transaction WHERE status='CANCEL_PENDING'`). ⚠️ **Chạm code P1.2 đã freeze/tag → CẦN Mr.Long duyệt vượt ranh giới tier.**
+- **[CRITICAL-B] `resolveDatabaseUrl().replace(/^file:/)` vỡ ÂM THẦM 3 nơi.** Mô hình A trả `postgresql://` → `statSync/readFileSync` fail → **Storage-Guard tắt lặng** (dbBytes=0, diskInfo=null, threshold/alert/cleanup vô hiệu, KHÔNG crash → không ai biết) + backup fail. Spec I-G6 chỉ vá backup, sót storage-service. **Sửa: bỏ khái niệm "db file path" khi provider=pg; đo bằng `pg_database_size()`; gate "feature không im lặng chết trên pg".**
+- **[HIGH-C] I-G2 nhắm sai:** mã bill `GD00001` dẫn xuất SERIAL id (tự-unique trên pg), KHÔNG dùng code_counter. Race trùng mã thật ở **Customer/User `nextCode`**. Test concurrency trên tạo KH/NV.
+- **[HIGH-D] Server/client-init:** `initDb` LUÔN seed mỗi boot; Prisma 7 `prisma-client` KHÔNG kèm migrate engine → **server migrate bằng prisma CLI trong repo dev, KHÔNG từ .exe**. `GLB_ROLE` mặc định = **client** (fail-safe); chỉ server seed+migrate 1 lần.
+- **[HIGH-E] code_counter:** upsert increment atomic-ish nhưng **insert-đầu 2 client → P2002**. Seed pre-tạo sẵn dòng counter mọi prefix; verify SQL là `INSERT..ON CONFLICT..RETURNING`.
+- **[MED-F] Backup/restore SQLite-file-coupled sâu:** `restoreBackup` swap-on-restart + `writeBackupArchive` readFileSync(db) + VACUUM/wal_checkpoint qua rawUnsafe → redesign toàn luồng sang `pg_dump/pg_restore`; bỏ/map VACUUM (không chạy trong transaction).
+- **[MED-G] Timestamptz:** KHÔNG có Json/enum Prisma (portable, bỏ lo jsonb). Field instant → `@db.Timestamptz(3)`; field date-only (`txnDate/effectiveFrom/birthDate/...`) khớp `startOfDayLocal` (F1) — gate REV15-on-pg bắt lệch.
+- **[MED-H] Squash: 15/15 (không phải 13/15) migration SQLite-only.** Trình tự BẮT BUỘC: đổi `datasource provider=postgresql` + thêm `@db.Timestamptz` vào schema **TRƯỚC** → rồi `migrate diff --from-empty --to-schema-datamodel` → đổi `migration_lock` provider. Backfill nhúng vô nghĩa trên DB rỗng (seed cấp giá trị).
+- **[MED-I] better-sqlite3 còn sót:** gỡ dep ở **cả 2** `package.json` (database + desktop) + `electron.vite.config.ts` externals + `electron-builder.yml` asarUnpack + `seed.ts` import + `prisma.config.ts` DATABASE_URL(pg).
+- **[MED-J] Test-harness pg:** mỗi selftest createdb→migrate deploy→**seed**→chạy→drop (selftest giả định DB đã seed). Tách biến env selftest-pg vs client-config.
+
+> **Kết luận re-QA:** approach = SỬA rồi mới chạy (khả thi, hướng đúng). Nhưng **CRITICAL-A + CRITICAL-B phải vào spec + có quyết định của Mr.Long (vì A chạm P1.2 freeze) TRƯỚC khi dispatch G10.2**. Concurrency-correctness là frame con riêng, không phải "phụ phẩm của swap DB".
