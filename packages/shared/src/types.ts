@@ -148,6 +148,10 @@ export type AuditAction =
   | 'CASH_ENTRY_CANCELLED'
   | 'CASH_DEBT_RECEIPT_CREATED'
   | 'CASHFLOW_PERMS_GRANTED'
+  // ── H2b — phân loại chất lượng công nợ + ghi giảm nợ xấu ──
+  | 'DEBT_CLASSIFIED'
+  | 'DEBT_WRITTEN_OFF'
+  | 'DEBT_QUALITY_PERMS_GRANTED'
   // ── Nhóm A — Bảo mật & tài khoản ──
   | 'USER_AUTO_LOCKED'
   | 'PASSWORD_RESET_BY_ADMIN'

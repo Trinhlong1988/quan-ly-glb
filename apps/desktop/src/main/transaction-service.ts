@@ -9,11 +9,17 @@ import { auditSnapshot, computeRevenue, pickEffectiveRate } from '@glb/business-
 import type { Db } from '@glb/database';
 import { requirePermission, verifyActorPassword } from './guard.js';
 import { writeAudit } from './audit.js';
+import { nextCode } from './code-service.js';
 
 const VIEW = 'REVENUE_VIEW';
 const MANAGE = 'REVENUE_MANAGE';
 const DEBT_VIEW = 'DEBT_VIEW';
 // H5: DEBT_SETTLE (toggle tay) đã vô hiệu — settled chỉ đổi qua phiếu Thu công nợ.
+// H2b — phân loại chất lượng công nợ + ghi giảm nợ xấu.
+const DEBT_CLASSIFY = 'DEBT_CLASSIFY';
+const DEBT_WRITEOFF = 'DEBT_WRITEOFF';
+/** 3 mức chất lượng công nợ: GOOD Dễ thu hồi | HARD Khó thu hồi | BAD Không thu hồi. */
+const DEBT_QUALITIES = new Set(['GOOD', 'HARD', 'BAD']);
 
 export interface MutationResult {
   ok: boolean;
@@ -128,6 +134,7 @@ export interface DebtOpenTxnDto {
   remainingPartner: number; // còn nợ đối tác = revenuePartner − Σ settle(PARTNER)
   remainingSell: number; // còn nợ khách = revenueSell − Σ settle(SELL)
   settled: boolean;
+  debtQuality: string | null; // H2b: GOOD | HARD | BAD | null(chưa phân loại)
 }
 
 export interface DebtOpenResult {
@@ -479,6 +486,7 @@ export async function debtSummary(filter: TransactionFilter = {}): Promise<{ ok:
   const where = await buildWhere(db, filter); // KHÔNG ép settled — tính theo net
   if (where === null) return { ok: true, data: { count: 0, debtPartner: 0, debtSell: 0, debtTotal: 0 } };
   where.status = { not: 'CANCELLED' }; // P1.2: bill đã hủy không còn là công nợ
+  where.writtenOffAt = null; // H2b: GD đã ghi giảm nợ xấu rớt khỏi công nợ
   const txns = await db.transaction.findMany({ where, select: { id: true, revenuePartner: true, revenueSell: true } });
   const paid = await settledByTxnSide(db, txns.map((t) => t.id));
   let debtPartner = 0, debtSell = 0, count = 0;
@@ -502,6 +510,7 @@ export async function debtOpenTransactions(filter: TransactionFilter = {}): Prom
   const where = await buildWhere(db, filter);
   if (where === null) return { ok: true, data: [] };
   where.status = { not: 'CANCELLED' };
+  where.writtenOffAt = null; // H2b: GD đã ghi giảm nợ xấu rớt khỏi công nợ
   const rows = await db.transaction.findMany({ where, orderBy: [{ txnDate: 'asc' }, { id: 'asc' }] });
   const paid = await settledByTxnSide(db, rows.map((r) => r.id));
 
@@ -536,8 +545,232 @@ export async function debtOpenTransactions(filter: TransactionFilter = {}): Prom
       revenueSell: r.revenueSell,
       remainingPartner,
       remainingSell,
-      settled: r.settled
+      settled: r.settled,
+      debtQuality: r.debtQuality
     });
   }
   return { ok: true, data };
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// H2b — PHÂN LOẠI CHẤT LƯỢNG CÔNG NỢ + GHI GIẢM NỢ XẤU (§2.8/§5b/§0 Q-C/Q-F)
+// ═════════════════════════════════════════════════════════════════════════════
+
+/** Chuyển trạng thái nguyên tử THUA trong $transaction → ném ra ngoài (mẫu cash-entry-service). */
+class TxGuardError extends Error {
+  constructor(public readonly code: string, public readonly userMessage: string) {
+    super(code);
+    this.name = 'TxGuardError';
+  }
+}
+
+/** Nợ CÒN LẠI net từng side của 1 GD (revenue − Σ settlement), dùng cho classify/write-off. */
+function netRemaining(t: { revenuePartner: number; revenueSell: number }, paid: Map<string, number>, id: number): { partner: number; sell: number; total: number } {
+  const partner = Math.max(0, t.revenuePartner - (paid.get(`${id}:PARTNER`) ?? 0));
+  const sell = Math.max(0, t.revenueSell - (paid.get(`${id}:SELL`) ?? 0));
+  return { partner, sell, total: partner + sell };
+}
+
+export interface DebtQualityStat {
+  count: number;
+  debtPartner: number;
+  debtSell: number;
+  debtTotal: number;
+}
+export interface DebtByQualityResult {
+  GOOD: DebtQualityStat;
+  HARD: DebtQualityStat;
+  BAD: DebtQualityStat;
+  UNCLASSIFIED: DebtQualityStat;
+}
+function emptyQualityStat(): DebtQualityStat {
+  return { count: 0, debtPartner: 0, debtSell: 0, debtTotal: 0 };
+}
+
+/** DebtQualityLog DTO cho lịch sử phân loại. */
+export interface DebtQualityLogDto {
+  id: number;
+  fromQuality: string | null;
+  toQuality: string;
+  reason: string | null;
+  actorUserId: number;
+  actorName: string | null;
+  createdAt: string;
+}
+
+/**
+ * DEBT_CLASSIFY — đổi phân loại chất lượng công nợ của 1 GD (GOOD|HARD|BAD). CHỈ cho GD CÒN NỢ net
+ * (revenue − settlement > 0 ở ≥1 side, H4 — KHÔNG dùng cờ settled) và CHƯA ghi giảm. Ghi DebtQualityLog
+ * (from→to + reason + actor) + writeAudit + cập nhật Transaction.debtQuality. GD thu đủ (net=0) →
+ * DEBT_FULLY_PAID. GD đã ghi giảm → ALREADY_WRITTEN_OFF.
+ */
+export async function classifyDebt(transactionId: number, quality: string, reason?: string): Promise<MutationResult> {
+  const g = await requirePermission(DEBT_CLASSIFY, { action: 'DEBT_CLASSIFIED', targetType: 'Transaction', targetId: String(transactionId) });
+  if (!g.ok) return g;
+  const { db, user } = g;
+
+  const q = (quality ?? '').trim().toUpperCase();
+  if (!DEBT_QUALITIES.has(q)) return { ok: false, error: 'VALIDATION', message: 'Mức chất lượng công nợ phải là GOOD (Dễ), HARD (Khó) hoặc BAD (Không thu hồi).' };
+
+  const t = await db.transaction.findUnique({ where: { id: transactionId }, select: { id: true, deletedAt: true, status: true, revenuePartner: true, revenueSell: true, debtQuality: true, writtenOffAt: true } });
+  if (!t || t.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Giao dịch không tồn tại.' };
+  if (t.status === 'CANCELLED') return { ok: false, error: 'TXN_CANCELLED', message: 'Giao dịch đã hủy — không phải công nợ.' };
+  if (t.writtenOffAt) return { ok: false, error: 'ALREADY_WRITTEN_OFF', message: 'Giao dịch đã ghi giảm nợ xấu — không phân loại lại.' };
+
+  const paid = await settledByTxnSide(db, [transactionId]);
+  const net = netRemaining(t, paid, transactionId);
+  if (net.total <= 0) return { ok: false, error: 'DEBT_FULLY_PAID', message: 'Giao dịch đã thu đủ — không còn là công nợ để phân loại.' };
+
+  const from = t.debtQuality;
+  if (from === q) return { ok: true, id: transactionId, message: 'Mức phân loại không đổi.' };
+
+  await db.$transaction(async (tx) => {
+    await tx.debtQualityLog.create({ data: { transactionId, fromQuality: from, toQuality: q, reason: reason?.trim() || null, actorUserId: user.id } });
+    await tx.transaction.update({ where: { id: transactionId }, data: { debtQuality: q, updatedBy: user.id } });
+  });
+  await writeAudit(db, {
+    actorUserId: user.id,
+    action: 'DEBT_CLASSIFIED',
+    targetType: 'Transaction',
+    targetId: String(transactionId),
+    before: auditSnapshot({ debtQuality: from }),
+    after: auditSnapshot({ debtQuality: q, reason: reason?.trim() || null, remainingNet: net.total })
+  });
+  return { ok: true, id: transactionId };
+}
+
+/** DEBT_VIEW — lịch sử đổi phân loại của 1 GD (mới nhất trước). */
+export async function debtQualityHistory(transactionId: number): Promise<{ ok: boolean; error?: string; message?: string; data?: DebtQualityLogDto[] }> {
+  const g = await requirePermission(DEBT_VIEW, { action: DEBT_VIEW });
+  if (!g.ok) return g;
+  const db = g.db;
+  const rows = await db.debtQualityLog.findMany({ where: { transactionId }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] });
+  const names = await resolveUserNames(db, rows.map((r) => r.actorUserId));
+  const data: DebtQualityLogDto[] = rows.map((r) => ({
+    id: r.id,
+    fromQuality: r.fromQuality,
+    toQuality: r.toQuality,
+    reason: r.reason,
+    actorUserId: r.actorUserId,
+    actorName: names.get(r.actorUserId) ?? null,
+    createdAt: r.createdAt.toISOString()
+  }));
+  return { ok: true, data };
+}
+
+/**
+ * DEBT_VIEW — tổng công nợ CÒN LẠI net theo TỪNG mức chất lượng (GOOD/HARD/BAD/UNCLASSIFIED) trong
+ * phạm vi lọc. Loại GD đã hủy + đã ghi giảm nợ xấu. Chỉ tính GD net > 0.
+ */
+export async function debtByQuality(filter: TransactionFilter = {}): Promise<{ ok: boolean; error?: string; message?: string; data?: DebtByQualityResult }> {
+  const g = await requirePermission(DEBT_VIEW, { action: DEBT_VIEW });
+  if (!g.ok) return g;
+  const db = g.db;
+  const empty: DebtByQualityResult = { GOOD: emptyQualityStat(), HARD: emptyQualityStat(), BAD: emptyQualityStat(), UNCLASSIFIED: emptyQualityStat() };
+  const where = await buildWhere(db, filter);
+  if (where === null) return { ok: true, data: empty };
+  where.status = { not: 'CANCELLED' };
+  where.writtenOffAt = null;
+  const txns = await db.transaction.findMany({ where, select: { id: true, revenuePartner: true, revenueSell: true, debtQuality: true } });
+  const paid = await settledByTxnSide(db, txns.map((t) => t.id));
+  for (const t of txns) {
+    const net = netRemaining(t, paid, t.id);
+    if (net.total <= 0) continue;
+    const bucket = t.debtQuality && DEBT_QUALITIES.has(t.debtQuality) ? (t.debtQuality as 'GOOD' | 'HARD' | 'BAD') : 'UNCLASSIFIED';
+    const s = empty[bucket];
+    s.count++;
+    s.debtPartner += net.partner;
+    s.debtSell += net.sell;
+    s.debtTotal += net.total;
+  }
+  return { ok: true, data: empty };
+}
+
+/**
+ * DEBT_WRITEOFF — Ghi giảm nợ xấu (write-off, Q-F=B). Perm CAO + verifyActorPassword. CHỈ áp GD
+ * debtQuality=BAD, còn nợ net > 0, CHƯA ghi giảm (idempotent → ALREADY_WRITTEN_OFF). Trong 1 $transaction:
+ *  • sinh 1 CashEntry CHI danh mục hệ thống "Chi phí nợ xấu" (sourceKind=BAD_DEBT, affectsPnl=true),
+ *    amount = nợ còn lại net (tổng 2 side), fundId=null (bút toán PHI TIỀN MẶT — không trừ số dư quỹ),
+ *    sourceType=BAD_DEBT + sourceId=transactionId (truy vết), payerUserId=actor, entryDate=now (local);
+ *  • set Transaction.writtenOffAt/By → GD rớt khỏi công nợ (debtSummary/debtOpen loại writtenOff).
+ * Vì affectsPnl=true → getMonthlyProfit tự trừ vào lợi nhuận (KHÔNG cần sửa dashboard-service).
+ * Sai mật khẩu → WRONG_ACTOR_PASSWORD + audit denied.
+ */
+export async function writeOffBadDebt(transactionId: number, actorPassword: string): Promise<MutationResult> {
+  const g = await requirePermission(DEBT_WRITEOFF, { action: 'DEBT_WRITTEN_OFF', targetType: 'Transaction', targetId: String(transactionId) });
+  if (!g.ok) return g;
+  const { db, user } = g;
+
+  if (!(await verifyActorPassword(user, actorPassword))) {
+    await writeAudit(db, { actorUserId: user.id, action: 'DEBT_WRITTEN_OFF', targetType: 'Transaction', targetId: String(transactionId), after: { denied: true, reason: 'WRONG_ACTOR_PASSWORD' } });
+    return { ok: false, error: 'WRONG_ACTOR_PASSWORD', message: 'Mật khẩu xác nhận không đúng.' };
+  }
+
+  // Pre-check NHANH ngoài khóa (fail sớm) — nhưng KHÔNG tính số tiền ở đây: net + kiểm net>0 tính TRONG
+  // khóa (FIX 1 TOCTOU) để phản ánh settlement đã COMMIT của phiếu thu song song.
+  const pre = await db.transaction.findUnique({ where: { id: transactionId }, select: { id: true, deletedAt: true, status: true, debtQuality: true, writtenOffAt: true } });
+  if (!pre || pre.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Giao dịch không tồn tại.' };
+  if (pre.status === 'CANCELLED') return { ok: false, error: 'TXN_CANCELLED', message: 'Giao dịch đã hủy — không phải công nợ.' };
+  if (pre.writtenOffAt) return { ok: false, error: 'ALREADY_WRITTEN_OFF', message: 'Giao dịch này đã được ghi giảm nợ xấu rồi.' };
+  if (pre.debtQuality !== 'BAD') return { ok: false, error: 'NOT_BAD_DEBT', message: 'Chỉ ghi giảm được công nợ đã phân loại "Không thu hồi (BAD)".' };
+
+  const badCat = await db.cashCategory.findFirst({ where: { kind: 'CHI', sourceKind: 'BAD_DEBT', deletedAt: null }, select: { id: true } });
+  if (!badCat) return { ok: false, error: 'BAD_DEBT_CATEGORY_MISSING', message: 'Chưa có danh mục hệ thống "Chi phí nợ xấu". Khởi động lại máy chủ để seed danh mục.' };
+
+  const now = new Date();
+  let result: { entryId: number; net: { partner: number; sell: number; total: number } };
+  try {
+    result = await db.$transaction(async (tx) => {
+      // ── FIX 1 (TOCTOU write-off ⨯ thu công nợ) — KHÓA HÀNG GD cha TRƯỚC khi đọc settlement/tính net.
+      // $transaction mặc định READ COMMITTED. Trước đây net được đọc + kiểm NGOÀI $transaction rồi mới mở
+      // tx ghi giảm: giữa đọc-net và ghi, 1 createDebtReceipt (cũng FOR UPDATE hàng này) có thể thu ĐỦ GD
+      // → write-off vẫn chạy với net cũ → GD vừa vào quỹ vừa bị ghi giảm (trừ oan lợi nhuận). Khóa FOR
+      // UPDATE tại đây serialize 2 luồng: nếu phiếu thu commit trước → net đọc TRONG khóa = 0 →
+      // DEBT_FULLY_PAID (rollback, không ghi giảm oan). Nếu write-off commit trước → phiếu thu thấy
+      // writtenOffAt (statement mới, READ COMMITTED) → TXN_WRITTEN_OFF (FIX 2). Không thể vừa thu vừa giảm.
+      await tx.$queryRawUnsafe('SELECT id FROM transactions WHERE id = $1 FOR UPDATE', transactionId);
+
+      // Đọc GD + settlement + tính net TRONG khóa (giá trị authoritative — dùng cho amount write-off).
+      const t = await tx.transaction.findUnique({ where: { id: transactionId }, select: { id: true, deletedAt: true, status: true, revenuePartner: true, revenueSell: true, debtQuality: true, writtenOffAt: true } });
+      if (!t || t.deletedAt) throw new TxGuardError('NOT_FOUND', 'Giao dịch không tồn tại.');
+      if (t.status === 'CANCELLED') throw new TxGuardError('TXN_CANCELLED', 'Giao dịch đã hủy — không phải công nợ.');
+      if (t.writtenOffAt) throw new TxGuardError('ALREADY_WRITTEN_OFF', 'Giao dịch này đã được ghi giảm nợ xấu rồi.');
+      if (t.debtQuality !== 'BAD') throw new TxGuardError('NOT_BAD_DEBT', 'Chỉ ghi giảm được công nợ đã phân loại "Không thu hồi (BAD)".');
+
+      const agg = await tx.cashDebtSettlement.groupBy({ by: ['side'], where: { transactionId }, _sum: { amount: true } });
+      const paid = new Map<string, number>();
+      for (const a of agg) paid.set(`${transactionId}:${a.side}`, a._sum.amount ?? 0);
+      const net = netRemaining(t, paid, transactionId);
+      // Kiểm net>0 TRONG khóa: nếu phiếu thu song song vừa thu đủ (commit trước) → net=0 → rollback.
+      if (net.total <= 0) throw new TxGuardError('DEBT_FULLY_PAID', 'Giao dịch đã thu đủ — không còn nợ để ghi giảm.');
+
+      // Idempotent nguyên tử: chỉ ghi giảm khi CHƯA writtenOff (đã khóa hàng nên moved luôn = 1; giữ như phòng vệ).
+      const moved = await tx.transaction.updateMany({
+        where: { id: transactionId, writtenOffAt: null, deletedAt: null, status: { not: 'CANCELLED' } },
+        data: { writtenOffAt: now, writtenOffBy: user.id, updatedBy: user.id }
+      });
+      if (moved.count === 0) throw new TxGuardError('ALREADY_WRITTEN_OFF', 'Giao dịch này đã được ghi giảm nợ xấu rồi.');
+      const code = await nextCode('PC', tx);
+      const entry = await tx.cashEntry.create({
+        data: {
+          code, kind: 'CHI', categoryId: badCat.id, fundId: null, amount: net.total, method: 'CASH', entryDate: now,
+          payerUserId: user.id, sourceType: 'BAD_DEBT', sourceId: transactionId,
+          note: `Ghi giảm nợ xấu GD #${transactionId} (nợ còn lại net ${net.total}đ)`, status: 'POSTED', createdBy: user.id
+        }
+      });
+      return { entryId: entry.id, net };
+    });
+  } catch (e) {
+    if (e instanceof TxGuardError) return { ok: false, error: e.code, message: e.userMessage };
+    throw e;
+  }
+
+  await writeAudit(db, {
+    actorUserId: user.id,
+    action: 'DEBT_WRITTEN_OFF',
+    targetType: 'Transaction',
+    targetId: String(transactionId),
+    after: auditSnapshot({ cashEntryId: result.entryId, amountNet: result.net.total, partner: result.net.partner, sell: result.net.sell, categoryId: badCat.id })
+  });
+  return { ok: true, id: result.entryId };
 }

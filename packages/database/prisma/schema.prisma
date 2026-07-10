@@ -281,6 +281,13 @@ model Transaction {
   cancelReason       String?   @map("cancel_reason")
   cancelledAt        DateTime? @map("cancelled_at") @db.Timestamptz(3)
   cancelRequestId    Int?      @map("cancel_request_id")
+  // H2b — Phân loại chất lượng công nợ: GOOD (Dễ thu hồi) | HARD (Khó thu hồi) | BAD (Không thu hồi).
+  // null = CHƯA phân loại. Đổi qua classifyDebt (perm DEBT_CLASSIFY) + ghi DebtQualityLog + audit.
+  debtQuality        String?   @map("debt_quality")
+  // H2b — Ghi giảm nợ xấu (write-off, Q-F): đánh dấu GD BAD đã ghi giảm → RỚT khỏi công nợ, CẤM ghi
+  // giảm 2 lần (idempotent). Sinh 1 CashEntry CHI "Chi phí nợ xấu" affectsPnl=true = nợ net còn lại.
+  writtenOffAt       DateTime? @map("written_off_at") @db.Timestamptz(3)
+  writtenOffBy       Int?      @map("written_off_by")
   createdBy          Int?      @map("created_by")
   updatedBy          Int?      @map("updated_by")
   createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -292,6 +299,7 @@ model Transaction {
   @@index([customerId])
   @@index([txnDate])
   @@index([status])
+  @@index([debtQuality])
   @@map("transactions")
 }
 
@@ -796,7 +804,10 @@ model CashEntry {
   code           String?   @unique // PT##### (THU) / PC##### (CHI)
   kind           String // THU | CHI
   categoryId     Int       @map("category_id")
-  fundId         Int       @map("fund_id") // quỹ tiền vào/ra (mục J liên thông)
+  // fundId NULLABLE (H2b): phần lớn phiếu gắn quỹ (thu/chi tiền thật). Riêng phiếu CHI "Chi phí nợ xấu"
+  // (ghi giảm nợ xấu, sourceType=BAD_DEBT) là bút toán KHÔNG-tiền-mặt (tiền chưa từng vào quỹ) → fundId=null,
+  // KHÔNG trừ số dư quỹ nào (số dư = Σ CashEntry theo fundId), nhưng VẪN vào chi phí lợi nhuận theo categoryId.
+  fundId         Int?      @map("fund_id") // quỹ tiền vào/ra (mục J liên thông) — null cho bút toán phi tiền mặt
   amount         Int // VND nguyên, > 0
   method         String // CK | CASH
   entryDate      DateTime  @map("entry_date") @db.Timestamptz(3) // ngày thu/chi (local) — M6
@@ -844,4 +855,19 @@ model CashDebtSettlement {
   @@index([cashEntryId])
   @@index([transactionId])
   @@map("cash_debt_settlements")
+}
+
+// PHASE H2b — Lịch sử đổi phân loại chất lượng công nợ (§2.8, LEAD 10/7). Mỗi lần classifyDebt ghi 1 dòng
+// (from→to + lý do + người đổi). toQuality ∈ GOOD|HARD|BAD; fromQuality null nếu trước đó CHƯA phân loại.
+model DebtQualityLog {
+  id            Int      @id @default(autoincrement())
+  transactionId Int      @map("transaction_id")
+  fromQuality   String?  @map("from_quality")
+  toQuality     String   @map("to_quality")
+  reason        String?
+  actorUserId   Int      @map("actor_user_id")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([transactionId])
+  @@map("debt_quality_logs")
 }

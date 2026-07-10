@@ -90,6 +90,9 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: 'REVENUE_MANAGE', name: 'Ghi nhận / sửa / xóa giao dịch doanh thu', group: 'Doanh thu & Công nợ' },
   { code: 'DEBT_VIEW', name: 'Xem công nợ thu về', group: 'Doanh thu & Công nợ' },
   { code: 'DEBT_SETTLE', name: 'Đối soát / đánh dấu đã thu công nợ', group: 'Doanh thu & Công nợ' },
+  // ── PHASE H2b — Phân loại chất lượng công nợ + Ghi giảm nợ xấu ──
+  { code: 'DEBT_CLASSIFY', name: 'Phân loại chất lượng công nợ (Dễ / Khó / Không thu hồi)', group: 'Doanh thu & Công nợ' },
+  { code: 'DEBT_WRITEOFF', name: 'Ghi giảm nợ xấu (write-off — trừ thẳng lợi nhuận)', group: 'Doanh thu & Công nợ' },
   // ── P1.2 — Duyệt hủy bill (chứng từ bất biến) ──
   { code: 'BILL_CANCEL_REQUEST', name: 'Tạo yêu cầu hủy bill (kèm lý do)', group: 'Doanh thu & Công nợ' },
   { code: 'BILL_CANCEL_APPROVE', name: 'Duyệt / từ chối yêu cầu hủy bill', group: 'Doanh thu & Công nợ' },
@@ -170,6 +173,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'REVENUE_MANAGE',
     'DEBT_VIEW',
     'DEBT_SETTLE',
+    // PHASE H2b: managers phân loại chất lượng công nợ + ghi giảm nợ xấu (quyền cao).
+    'DEBT_CLASSIFY',
+    'DEBT_WRITEOFF',
     // P1.2: managers tạo yêu cầu hủy + duyệt hủy bill (KHÔNG có ELEVATED — cấp Admin mới duyệt yêu cầu của Manager/Admin).
     'BILL_CANCEL_REQUEST',
     'BILL_CANCEL_APPROVE',
@@ -178,7 +184,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'STORAGE_CLEANUP'
   ],
   D_MANAGER: ['DASHBOARD_VIEW', 'USER_READ', 'ROLE_READ', 'CUSTOMER_VIEW', 'POS_VIEW', 'TID_VIEW', 'CONFIG_BANK_VIEW'],
-  ACCOUNTANT: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW', 'CONFIG_BANK_VIEW', 'CONFIG_FEE_VIEW', 'CONFIG_FEE_MANAGE', 'CONFIG_RCV_ACCT_VIEW', 'CONFIG_RCV_ACCT_MANAGE', 'CONFIG_DOSSIER_VIEW', 'CONFIG_DOSSIER_MANAGE', 'REVENUE_VIEW', 'REVENUE_MANAGE', 'DEBT_VIEW', 'DEBT_SETTLE', 'BILL_CANCEL_REQUEST',
+  ACCOUNTANT: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW', 'CONFIG_BANK_VIEW', 'CONFIG_FEE_VIEW', 'CONFIG_FEE_MANAGE', 'CONFIG_RCV_ACCT_VIEW', 'CONFIG_RCV_ACCT_MANAGE', 'CONFIG_DOSSIER_VIEW', 'CONFIG_DOSSIER_MANAGE', 'REVENUE_VIEW', 'REVENUE_MANAGE', 'DEBT_VIEW', 'DEBT_SETTLE', 'DEBT_CLASSIFY', 'BILL_CANCEL_REQUEST',
     // PHASE H2-core: kế toán = vai chính thu-chi (quỹ + phiếu thu/chi + báo cáo dòng tiền).
     'FUND_VIEW', 'FUND_CREATE', 'FUND_UPDATE', 'FUND_DELETE', 'CASHENTRY_VIEW', 'CASHENTRY_CREATE', 'CASHENTRY_CANCEL'],
   TECHNICIAN: ['DASHBOARD_VIEW', 'POS_VIEW'],

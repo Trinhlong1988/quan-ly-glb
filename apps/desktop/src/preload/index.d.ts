@@ -811,7 +811,7 @@ export interface CashEntryDto {
   categoryId: number;
   categoryName: string | null;
   sourceKind: string | null;
-  fundId: number;
+  fundId: number | null; // H2b: null cho bút toán phi tiền mặt (write-off nợ xấu)
   fundCode: string | null;
   fundName: string | null;
   amount: number;
@@ -897,6 +897,7 @@ export interface DebtOpenTxnDto {
   remainingPartner: number;
   remainingSell: number;
   settled: boolean;
+  debtQuality: string | null; // H2b: GOOD | HARD | BAD | null(chưa phân loại)
 }
 export interface DebtOpenResult {
   ok: boolean;
@@ -1198,6 +1199,11 @@ export interface GlbApi {
   // FIX 2 — transactionSettle đã GỠ (H5): handler 'transaction:settle' không còn; settled chỉ đổi qua phiếu Thu công nợ.
   debtSummary(filter: TransactionFilter): Promise<{ ok: boolean; data?: DebtSummary; error?: string; message?: string }>;
   debtOpenTransactions(filter: TransactionFilter): Promise<DebtOpenResult>;
+  // H2b — phân loại chất lượng công nợ + ghi giảm nợ xấu
+  debtByQuality(filter: TransactionFilter): Promise<{ ok: boolean; data?: DebtByQualityResult; error?: string; message?: string }>;
+  debtClassify(transactionId: number, quality: string, reason?: string): Promise<MutationOutcome>;
+  debtQualityHistory(transactionId: number): Promise<{ ok: boolean; data?: DebtQualityLogDto[]; error?: string; message?: string }>;
+  debtWriteOff(transactionId: number, actorPassword: string): Promise<MutationOutcome>;
 
   // ── P1.2 Approval Engine (hủy bill có duyệt) ──
   cancelRequest(transactionId: number, reason: string): Promise<MutationOutcome>;
@@ -1371,6 +1377,29 @@ export interface DebtSummary {
   debtPartner: number;
   debtSell: number;
   debtTotal: number;
+}
+
+// H2b — phân loại chất lượng công nợ (Dễ/Khó/Không thu hồi) + lịch sử đổi.
+export interface DebtQualityStat {
+  count: number;
+  debtPartner: number;
+  debtSell: number;
+  debtTotal: number;
+}
+export interface DebtByQualityResult {
+  GOOD: DebtQualityStat;
+  HARD: DebtQualityStat;
+  BAD: DebtQualityStat;
+  UNCLASSIFIED: DebtQualityStat;
+}
+export interface DebtQualityLogDto {
+  id: number;
+  fromQuality: string | null;
+  toQuality: string;
+  reason: string | null;
+  actorUserId: number;
+  actorName: string | null;
+  createdAt: string;
 }
 
 export interface ListTransactionsResult {

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Loader2, Coins, Handshake, Users, CheckCircle2, Download, FilterX, HandCoins } from 'lucide-react';
+import { Loader2, Coins, Handshake, Users, CheckCircle2, Download, FilterX, HandCoins, Tag, ShieldAlert, ThumbsUp, AlertTriangle } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate } from '@glb/shared';
-import type { DebtSummary, DebtOpenTxnDto, ConfigTidDto, CustomerDto, LiteRef, FundDto, EntryCategoryLite, CreateDebtReceiptInput } from '../../../preload/index.d';
+import type { DebtSummary, DebtOpenTxnDto, ConfigTidDto, CustomerDto, LiteRef, FundDto, EntryCategoryLite, CreateDebtReceiptInput, DebtByQualityResult } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
 import { inputCls, Field } from '../components/Field.js';
 import { Button } from '../components/Button.js';
@@ -18,13 +18,31 @@ function money(n: number): string {
 }
 
 const emptyDebt: DebtSummary = { count: 0, debtPartner: 0, debtSell: 0, debtTotal: 0 };
+const emptyByQuality: DebtByQualityResult = {
+  GOOD: { count: 0, debtPartner: 0, debtSell: 0, debtTotal: 0 },
+  HARD: { count: 0, debtPartner: 0, debtSell: 0, debtTotal: 0 },
+  BAD: { count: 0, debtPartner: 0, debtSell: 0, debtTotal: 0 },
+  UNCLASSIFIED: { count: 0, debtPartner: 0, debtSell: 0, debtTotal: 0 }
+};
+
+/** Badge màu cho 3 mức chất lượng công nợ (BAD = ĐỎ cảnh báo). */
+function qualityBadge(q: string | null): JSX.Element {
+  if (q === 'GOOD') return <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-600">Dễ thu hồi</span>;
+  if (q === 'HARD') return <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-600">Khó thu hồi</span>;
+  if (q === 'BAD') return <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-700"><AlertTriangle className="h-3 w-3" /> Không thu hồi</span>;
+  return <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-400">Chưa phân loại</span>;
+}
 
 export function DebtPage({ user }: { user: AuthUser }): JSX.Element {
   const toast = useToast();
   // H5 — KHÔNG còn toggle "đã thu" thủ công; thu công nợ = lập phiếu Thu công nợ (CASHENTRY_CREATE).
   const canReceipt = hasPermission(user, 'CASHENTRY_CREATE');
+  // H2b — phân loại chất lượng công nợ + ghi giảm nợ xấu.
+  const canClassify = hasPermission(user, 'DEBT_CLASSIFY');
+  const canWriteOff = hasPermission(user, 'DEBT_WRITEOFF');
   const [rows, setRows] = useState<DebtOpenTxnDto[]>([]);
   const [debt, setDebt] = useState<DebtSummary>(emptyDebt);
+  const [byQuality, setByQuality] = useState<DebtByQualityResult>(emptyByQuality);
   const [loading, setLoading] = useState(true);
 
   const [fBank, setFBank] = useState('');
@@ -33,6 +51,11 @@ export function DebtPage({ user }: { user: AuthUser }): JSX.Element {
   const [fTid, setFTid] = useState('');
   const [fFrom, setFFrom] = useState('');
   const [fTo, setFTo] = useState('');
+  const [fQuality, setFQuality] = useState(''); // '' | GOOD | HARD | BAD | NONE(chưa phân loại)
+
+  // Modal phân loại / ghi giảm.
+  const [classifyGd, setClassifyGd] = useState<DebtOpenTxnDto | null>(null);
+  const [writeOffGd, setWriteOffGd] = useState<DebtOpenTxnDto | null>(null);
 
   const [tids, setTids] = useState<ConfigTidDto[]>([]);
   const [customers, setCustomers] = useState<CustomerDto[]>([]);
@@ -76,14 +99,16 @@ export function DebtPage({ user }: { user: AuthUser }): JSX.Element {
 
   async function reload(): Promise<void> {
     setLoading(true);
-    const [list, ds] = await Promise.all([
+    const [list, ds, bq] = await Promise.all([
       window.api.debtOpenTransactions(baseFilter()),
-      window.api.debtSummary(baseFilter())
+      window.api.debtSummary(baseFilter()),
+      window.api.debtByQuality(baseFilter())
     ]);
     if (list.ok) setRows(list.data ?? []);
     else if (list.message) toast.alert(list.message);
     if (ds.ok && ds.data) setDebt(ds.data);
     else if (ds.message) toast.alert(ds.message);
+    if (bq.ok && bq.data) setByQuality(bq.data);
     setLoading(false);
   }
 
@@ -91,9 +116,18 @@ export function DebtPage({ user }: { user: AuthUser }): JSX.Element {
   useEffect(() => { void reload(); /* eslint-disable-next-line */ }, []);
 
   function resetFilter(): void {
-    setFBank(''); setFPartner(''); setFCustomer(''); setFTid(''); setFFrom(''); setFTo('');
+    setFBank(''); setFPartner(''); setFCustomer(''); setFTid(''); setFFrom(''); setFTo(''); setFQuality('');
     setTimeout(() => void reload(), 0);
   }
+
+  // Lọc client-side theo mức chất lượng (backend đã tính StatBar/summary theo các bộ lọc khác).
+  const visibleRows = fQuality === ''
+    ? rows
+    : fQuality === 'NONE'
+      ? rows.filter((r) => r.debtQuality == null)
+      : rows.filter((r) => r.debtQuality === fQuality);
+  const hasActions = canReceipt || canClassify || canWriteOff;
+  const colSpan = 9 + (hasActions ? 1 : 0); // 8 cột gốc + Chất lượng (+ Thao tác)
 
   return (
     <div>
@@ -111,6 +145,27 @@ export function DebtPage({ user }: { user: AuthUser }): JSX.Element {
           { icon: <HandCoins className="h-4 w-4" />, tone: 'bg-slate-100 text-slate-500', label: 'Thu công nợ', value: canReceipt ? 'Lập phiếu' : 'Chỉ xem', sub: canReceipt ? 'Bấm “Thu” ở từng dòng' : undefined }
         ]}
       />
+
+      {/* H2b — StatBar chất lượng công nợ (đếm net theo mức). BAD = cảnh báo ĐỎ. */}
+      <StatBar
+        items={[
+          { icon: <ThumbsUp className="h-4 w-4" />, tone: 'bg-emerald-50 text-emerald-500', label: 'Dễ thu hồi', value: money(byQuality.GOOD.debtTotal), sub: `${byQuality.GOOD.count} GD` },
+          { icon: <Tag className="h-4 w-4" />, tone: 'bg-amber-50 text-amber-500', label: 'Khó thu hồi', value: money(byQuality.HARD.debtTotal), sub: `${byQuality.HARD.count} GD` },
+          { icon: <ShieldAlert className="h-4 w-4" />, tone: 'bg-rose-100 text-rose-600', label: 'Không thu hồi (BAD)', value: money(byQuality.BAD.debtTotal), sub: `${byQuality.BAD.count} GD` },
+          { icon: <Coins className="h-4 w-4" />, tone: 'bg-slate-100 text-slate-500', label: 'Chưa phân loại', value: money(byQuality.UNCLASSIFIED.debtTotal), sub: `${byQuality.UNCLASSIFIED.count} GD` }
+        ]}
+      />
+
+      {/* Dashboard cảnh báo: nợ BAD phồng lợi nhuận accrual (M1). */}
+      {byQuality.BAD.debtTotal > 0 && (
+        <div className="mb-3 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            <b>Cảnh báo nợ xấu: {money(byQuality.BAD.debtTotal)}</b> ({byQuality.BAD.count} giao dịch “Không thu hồi”).
+            Lợi nhuận accrual ĐÃ gồm doanh thu các khoản này (ghi nhận theo ngày GD, chưa trích lập){canWriteOff ? ' — có thể “Ghi giảm nợ xấu” để trừ thẳng lợi nhuận (không hoàn tác)' : ''}.
+          </div>
+        </div>
+      )}
 
       <div className="mb-3 rounded-xl border border-line bg-white p-3 shadow-sm">
         <div className="flex flex-wrap items-end gap-2">
@@ -132,6 +187,15 @@ export function DebtPage({ user }: { user: AuthUser }): JSX.Element {
           <label className="flex flex-col text-xs text-slate-500">Đến ngày
             <input type="date" className={inputCls} value={fTo} onChange={(e) => setFTo(e.target.value)} />
           </label>
+          <label className="flex flex-col text-xs text-slate-500">Chất lượng
+            <select className={inputCls + ' w-40'} value={fQuality} onChange={(e) => setFQuality(e.target.value)}>
+              <option value="">Tất cả mức</option>
+              <option value="GOOD">Dễ thu hồi</option>
+              <option value="HARD">Khó thu hồi</option>
+              <option value="BAD">Không thu hồi (BAD)</option>
+              <option value="NONE">Chưa phân loại</option>
+            </select>
+          </label>
           <button onClick={() => void reload()} className="rounded-md bg-brand px-3 py-2 text-sm font-medium text-white hover:bg-brand-hover">Lọc</button>
           <button onClick={resetFilter} title="Xóa toàn bộ bộ lọc, đưa về mặc định" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-brand/10 text-brand hover:bg-brand/20"><FilterX className="h-4 w-4" /> Xóa lọc</button>
           <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('cong_no', ['Mã GD', 'Ngày', 'TID', 'HKD', 'Khách', 'Nợ đối tác còn lại', 'Nợ bán còn lại'], rows.map((r) => [r.code ?? '', fmtDate(r.txnDate), r.tid ?? '', r.hkdName ?? '', r.customerName ?? '', String(r.remainingPartner), String(r.remainingSell)]))}>Xuất Excel</Button>
@@ -150,14 +214,15 @@ export function DebtPage({ user }: { user: AuthUser }): JSX.Element {
               <th className="px-3 py-3 text-right">Nợ đối tác còn lại</th>
               <th className="px-3 py-3 text-right">Nợ khách/bán còn lại</th>
               <th className="px-3 py-3 text-right">Tổng còn lại</th>
-              {canReceipt && <th className="px-3 py-3 text-right">Thu</th>}
+              <th className="px-3 py-3">Chất lượng</th>
+              {hasActions && <th className="px-3 py-3 text-right">Thao tác</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {loading && <tr><td colSpan={canReceipt ? 9 : 8} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
-            {!loading && rows.length === 0 && <tr><td colSpan={canReceipt ? 9 : 8} className="px-4 py-10 text-center text-slate-400"><CheckCircle2 className="mx-auto mb-2 h-6 w-6 text-emerald-400" /> Không còn công nợ nào — đã thu hết.</td></tr>}
-            {!loading && rows.map((r) => (
-              <tr key={r.id} className="hover:bg-appbg/60">
+            {loading && <tr><td colSpan={colSpan} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+            {!loading && visibleRows.length === 0 && <tr><td colSpan={colSpan} className="px-4 py-10 text-center text-slate-400"><CheckCircle2 className="mx-auto mb-2 h-6 w-6 text-emerald-400" /> Không còn công nợ nào — đã thu hết.</td></tr>}
+            {!loading && visibleRows.map((r) => (
+              <tr key={r.id} className={'hover:bg-appbg/60' + (r.debtQuality === 'BAD' ? ' bg-rose-50/40' : '')}>
                 <td className="px-3 py-3 font-mono text-xs font-medium text-slate-700">{r.code ?? '—'}</td>
                 <td className="px-3 py-3 text-xs text-slate-500">{fmtDate(r.txnDate)}</td>
                 <td className="px-3 py-3 text-slate-700">{r.tid ?? '—'}{r.mid ? <span className="block text-xs text-slate-400">{r.mid}</span> : null}</td>
@@ -166,22 +231,34 @@ export function DebtPage({ user }: { user: AuthUser }): JSX.Element {
                 <td className="px-3 py-3 text-right tabular-nums text-indigo-600">{money(r.remainingPartner)}</td>
                 <td className="px-3 py-3 text-right tabular-nums text-emerald-600">{money(r.remainingSell)}</td>
                 <td className="px-3 py-3 text-right font-semibold tabular-nums text-slate-800">{money(r.remainingPartner + r.remainingSell)}</td>
-                {canReceipt && (
-                  <td className="px-3 py-3 text-right">
-                    <button onClick={() => setReceiptGd(r)} className="inline-flex items-center gap-1 rounded-md bg-brand/10 px-2.5 py-1.5 text-xs font-medium text-brand hover:bg-brand/20"><HandCoins className="h-3.5 w-3.5" /> Thu</button>
+                <td className="px-3 py-3">{qualityBadge(r.debtQuality)}</td>
+                {hasActions && (
+                  <td className="px-3 py-3">
+                    <div className="flex items-center justify-end gap-1.5">
+                      {canReceipt && (
+                        <button onClick={() => setReceiptGd(r)} className="inline-flex items-center gap-1 rounded-md bg-brand/10 px-2.5 py-1.5 text-xs font-medium text-brand hover:bg-brand/20"><HandCoins className="h-3.5 w-3.5" /> Thu</button>
+                      )}
+                      {canClassify && (
+                        <button onClick={() => setClassifyGd(r)} className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-200"><Tag className="h-3.5 w-3.5" /> Phân loại</button>
+                      )}
+                      {canWriteOff && r.debtQuality === 'BAD' && (
+                        <button onClick={() => setWriteOffGd(r)} className="inline-flex items-center gap-1 rounded-md bg-rose-100 px-2.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-200"><ShieldAlert className="h-3.5 w-3.5" /> Ghi giảm</button>
+                      )}
+                    </div>
                   </td>
                 )}
               </tr>
             ))}
           </tbody>
-          {!loading && rows.length > 0 && (
+          {!loading && visibleRows.length > 0 && (
             <tfoot>
               <tr className="border-t-2 border-line bg-[#F8FAFC] font-semibold text-slate-800">
                 <td colSpan={5} className="px-3 py-3 text-right">Tổng cộng ({debt.count} giao dịch)</td>
                 <td className="px-3 py-3 text-right tabular-nums text-indigo-700">{money(debt.debtPartner)}</td>
                 <td className="px-3 py-3 text-right tabular-nums text-emerald-700">{money(debt.debtSell)}</td>
                 <td className="px-3 py-3 text-right tabular-nums">{money(debt.debtTotal)}</td>
-                {canReceipt && <td />}
+                <td />
+                {hasActions && <td />}
               </tr>
             </tfoot>
           )}
@@ -197,7 +274,107 @@ export function DebtPage({ user }: { user: AuthUser }): JSX.Element {
           onDone={() => { setReceiptGd(null); void reload(); }}
         />
       )}
+
+      {classifyGd && (
+        <ClassifyModal
+          gd={classifyGd}
+          onClose={() => setClassifyGd(null)}
+          onDone={() => { setClassifyGd(null); void reload(); }}
+        />
+      )}
+
+      {writeOffGd && (
+        <WriteOffModal
+          gd={writeOffGd}
+          onClose={() => setWriteOffGd(null)}
+          onDone={() => { setWriteOffGd(null); void reload(); }}
+        />
+      )}
     </div>
+  );
+}
+
+/** H2b — Modal phân loại chất lượng công nợ (Dễ / Khó / Không thu hồi) + lý do. */
+function ClassifyModal({ gd, onClose, onDone }: { gd: DebtOpenTxnDto; onClose: () => void; onDone: () => void }): JSX.Element {
+  const toast = useToast();
+  const [quality, setQuality] = useState(gd.debtQuality ?? 'GOOD');
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function submit(): Promise<void> {
+    setBusy(true);
+    const res = await window.api.debtClassify(gd.id, quality, reason.trim() || undefined);
+    setBusy(false);
+    if (res.ok) { toast.success('Đã cập nhật phân loại công nợ'); onDone(); }
+    else toast.alert(res.message ?? 'Phân loại thất bại', 'Không phân loại được');
+  }
+
+  return (
+    <Modal title={`Phân loại công nợ · GD ${gd.code ?? '#' + gd.id}`} onClose={onClose}>
+      <div className="space-y-4">
+        <div className="rounded-lg bg-appbg/60 px-3 py-2 text-sm text-slate-600">
+          Đối tượng: <b>{gd.customerName ?? gd.partnerName ?? '—'}</b> · Tổng còn nợ: <b>{money(gd.remainingPartner + gd.remainingSell)}</b>
+        </div>
+        <Field label="Mức chất lượng" required>
+          <select className={inputCls} value={quality} onChange={(e) => setQuality(e.target.value)}>
+            <option value="GOOD">Dễ thu hồi</option>
+            <option value="HARD">Khó thu hồi</option>
+            <option value="BAD">Không thu hồi (BAD — cảnh báo đỏ)</option>
+          </select>
+        </Field>
+        <Field label="Lý do" hint="Vì sao xếp mức này (khuyến nghị)">
+          <input className={inputCls} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="VD: khách mất liên lạc, hẹn trả chậm…" />
+        </Field>
+        {quality === 'BAD' && (
+          <div className="flex items-start gap-2 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> Đánh dấu “Không thu hồi” chỉ gắn CỜ ĐỎ, KHÔNG tự ghi giảm. Muốn trừ vào lợi nhuận, dùng nút “Ghi giảm nợ xấu”.
+          </div>
+        )}
+        <div className="flex justify-end gap-2 pt-1">
+          <Button variant="neutral" onClick={onClose}>Hủy</Button>
+          <Button variant="confirm" icon={<Tag className="h-4 w-4" />} onClick={submit} disabled={busy}>{busy ? 'Đang lưu…' : 'Lưu phân loại'}</Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/** H2b — Modal ghi giảm nợ xấu (write-off): xác nhận mật khẩu + cảnh báo trừ thẳng lợi nhuận, không hoàn tác. */
+function WriteOffModal({ gd, onClose, onDone }: { gd: DebtOpenTxnDto; onClose: () => void; onDone: () => void }): JSX.Element {
+  const toast = useToast();
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const netTotal = gd.remainingPartner + gd.remainingSell;
+
+  async function submit(): Promise<void> {
+    if (!password) { toast.alert('Nhập mật khẩu đăng nhập của bạn để xác nhận.'); return; }
+    setBusy(true);
+    const res = await window.api.debtWriteOff(gd.id, password);
+    setBusy(false);
+    if (res.ok) { toast.success('Đã ghi giảm nợ xấu — trừ vào lợi nhuận'); onDone(); }
+    else toast.alert(res.message ?? 'Ghi giảm thất bại', 'Không ghi giảm được');
+  }
+
+  return (
+    <Modal title={`Ghi giảm nợ xấu · GD ${gd.code ?? '#' + gd.id}`} onClose={onClose}>
+      <div className="space-y-4">
+        <div className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-3 text-sm text-rose-700">
+          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            Ghi giảm <b>{money(netTotal)}</b> công nợ “Không thu hồi” của <b>{gd.customerName ?? gd.partnerName ?? '—'}</b>.
+            Hệ thống sinh 1 phiếu chi “Chi phí nợ xấu” và <b>TRỪ THẲNG vào lợi nhuận</b>. Giao dịch sẽ rớt khỏi công nợ.
+            <b> Thao tác KHÔNG hoàn tác.</b>
+          </div>
+        </div>
+        <Field label="Mật khẩu đăng nhập (xác nhận)" required>
+          <input type="password" className={inputCls} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Nhập mật khẩu của bạn" autoComplete="off" />
+        </Field>
+        <div className="flex justify-end gap-2 pt-1">
+          <Button variant="neutral" onClick={onClose}>Hủy</Button>
+          <Button variant="danger" icon={<ShieldAlert className="h-4 w-4" />} onClick={submit} disabled={busy}>{busy ? 'Đang xử lý…' : 'Xác nhận ghi giảm'}</Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

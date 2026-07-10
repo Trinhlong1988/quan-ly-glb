@@ -227,6 +227,11 @@ const api = {
   // FIX 2 — GỠ transactionSettle (H5): handler 'transaction:settle' đã gỡ → gọi sẽ reject "No handler". API chết.
   debtSummary: (filter: unknown) => ipcRenderer.invoke('debt:summary', filter),
   debtOpenTransactions: (filter: unknown) => ipcRenderer.invoke('debt:openTransactions', filter),
+  // H2b — phân loại chất lượng công nợ + ghi giảm nợ xấu
+  debtByQuality: (filter: unknown) => ipcRenderer.invoke('debt:byQuality', filter),
+  debtClassify: (transactionId: number, quality: string, reason?: string) => ipcRenderer.invoke('debt:classify', { transactionId, quality, reason }),
+  debtQualityHistory: (transactionId: number) => ipcRenderer.invoke('debt:qualityHistory', transactionId),
+  debtWriteOff: (transactionId: number, actorPassword: string) => ipcRenderer.invoke('debt:writeOff', { transactionId, actorPassword }),
 
   // Duyệt hủy bill (P1.2 Approval Engine)
   cancelRequest: (transactionId: number, reason: string) => ipcRenderer.invoke('approval:requestCancel', { transactionId, reason }),

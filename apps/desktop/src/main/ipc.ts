@@ -313,6 +313,11 @@ export function registerIpc(): void {
   //       phiếu Thu công nợ (cashEntry:createDebtReceipt) / hủy phiếu thu.
   ipcMain.handle('debt:summary', async (_e, filter: txnSvc.TransactionFilter) => txnSvc.debtSummary(filter));
   ipcMain.handle('debt:openTransactions', async (_e, filter: txnSvc.TransactionFilter) => txnSvc.debtOpenTransactions(filter));
+  // H2b — phân loại chất lượng công nợ + ghi giảm nợ xấu.
+  ipcMain.handle('debt:byQuality', async (_e, filter: txnSvc.TransactionFilter) => txnSvc.debtByQuality(filter));
+  ipcMain.handle('debt:classify', async (_e, args: { transactionId: number; quality: string; reason?: string }) => txnSvc.classifyDebt(args.transactionId, args.quality, args.reason));
+  ipcMain.handle('debt:qualityHistory', async (_e, transactionId: number) => txnSvc.debtQualityHistory(transactionId));
+  ipcMain.handle('debt:writeOff', async (_e, args: { transactionId: number; actorPassword: string }) => txnSvc.writeOffBadDebt(args.transactionId, args.actorPassword));
 
   // ── P1.2 Approval Engine — hủy bill có duyệt (phân vai trong service) ──
   ipcMain.handle('approval:requestCancel', async (_e, args: { transactionId: number; reason: string }) => approvalSvc.requestCancelBill(args.transactionId, args.reason));

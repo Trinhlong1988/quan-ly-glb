@@ -276,6 +276,18 @@ app.whenReady().then(async () => {
     return;
   }
 
+  // PHASE H2b Phân loại chất lượng công nợ + Ghi giảm nợ xấu self-test (=28): classify ghi log+audit,
+  // chặn classify GD thu đủ (DEBT_FULLY_PAID), history, debtByQuality tổng net theo mức, write-off BAD →
+  // CashEntry CHI "Chi phí nợ xấu" affectsPnl=true = nợ net, GD rớt khỏi công nợ, lợi nhuận GIẢM đúng,
+  // idempotent (ALREADY_WRITTEN_OFF), sai mk (WRONG_ACTOR_PASSWORD), non-BAD chặn, SALES FORBIDDEN,
+  // DB-evolution grant idempotent.
+  if (process.env['GLB_SELFTEST'] === '28') {
+    const { runDebtQualitySelfTest } = await import('./selftest-debtquality.js');
+    const code = await runDebtQualitySelfTest();
+    app.exit(code);
+    return;
+  }
+
   await createWindow();
   startHousekeeping();
 

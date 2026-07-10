@@ -84,9 +84,12 @@ const SOURCE_KINDS = new Set([
   'DEPOSIT_REFUND',
   'DEVICE_DEPOSIT',
   'FUND_TRANSFER',
-  'SALARY'
+  'SALARY',
+  // H2b — "Chi phí nợ xấu" (ghi giảm nợ xấu). LÀ chi phí thật → affectsPnl=true (KHÔNG nằm trong
+  // PNL_FORBIDDEN_SOURCE). Danh mục seed hệ thống, sinh khi write-off (writeOffBadDebt).
+  'BAD_DEBT'
 ]);
-/** sourceKind nội bộ — CẤM affectsPnl=true (I#12). */
+/** sourceKind nội bộ — CẤM affectsPnl=true (I#12). BAD_DEBT KHÔNG nằm đây (nó là chi phí thật). */
 const PNL_FORBIDDEN_SOURCE = new Set([
   'DEBT_CUSTOMER',
   'DEBT_PARTNER',
@@ -253,6 +256,11 @@ export async function updateCashCategory(id: number, input: UpdateCashCategoryIn
     periodType = next;
   }
 
+  // FIX 4 — danh mục HỆ THỐNG: KHÓA affectsPnl (như đã khóa sourceKind). Nếu không, user CASHCAT_UPDATE có
+  // thể lật BAD_DEBT.affectsPnl=false → write-off ngừng trừ lợi nhuận (nợ xấu biến mất khỏi P&L).
+  if (row.isSystem && input.affectsPnl !== undefined && input.affectsPnl !== row.affectsPnl) {
+    return { ok: false, error: 'SYSTEM_LOCKED', message: 'Không đổi được cờ tính lợi nhuận của danh mục hệ thống.' };
+  }
   const affectsPnl = input.affectsPnl !== undefined ? input.affectsPnl : row.affectsPnl;
   const pnlErr = checkPnlInvariant(sourceKind, affectsPnl);
   if (pnlErr) return { ok: false, error: 'PNL_FLAG_FORBIDDEN', message: pnlErr };

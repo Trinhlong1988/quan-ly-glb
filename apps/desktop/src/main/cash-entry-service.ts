@@ -46,7 +46,7 @@ export interface CashEntryDto {
   categoryId: number;
   categoryName: string | null;
   sourceKind: string | null;
-  fundId: number;
+  fundId: number | null; // H2b: null cho bút toán phi tiền mặt (write-off nợ xấu — không gắn quỹ)
   fundCode: string | null;
   fundName: string | null;
   amount: number;
@@ -181,7 +181,7 @@ function buildWhere(filter: CashEntryFilter): Record<string, unknown> {
 /** Ánh xạ rows → DTO + join tên (category/fund/customer/partner/user). */
 async function toDtos(db: Db, rows: Awaited<ReturnType<Db['cashEntry']['findMany']>>): Promise<CashEntryDto[]> {
   const catIds = [...new Set(rows.map((r) => r.categoryId))];
-  const fundIds = [...new Set(rows.map((r) => r.fundId))];
+  const fundIds = [...new Set(rows.map((r) => r.fundId).filter((x): x is number => x != null))];
   const custIds = [...new Set(rows.map((r) => r.customerId).filter((x): x is number => x != null))];
   const partIds = [...new Set(rows.map((r) => r.partnerId).filter((x): x is number => x != null))];
   const [cats, funds, custs, parts] = await Promise.all([
@@ -197,7 +197,7 @@ async function toDtos(db: Db, rows: Awaited<ReturnType<Db['cashEntry']['findMany
   const userNames = await resolveUserNames(db, rows.flatMap((r) => [r.payerUserId, r.receiverUserId, r.createdBy]));
   return rows.map((r) => {
     const cat = catMap.get(r.categoryId);
-    const fund = fundMap.get(r.fundId);
+    const fund = r.fundId != null ? fundMap.get(r.fundId) : undefined;
     return {
       id: r.id,
       code: r.code,
@@ -230,11 +230,18 @@ async function toDtos(db: Db, rows: Awaited<ReturnType<Db['cashEntry']['findMany
   });
 }
 
-/** Tổng THU/CHI (POSTED) từ danh sách DTO. */
+/**
+ * Tổng THU/CHI (POSTED) từ danh sách DTO — DÒNG TIỀN thực vào/ra quỹ.
+ * FIX 3 — LOẠI bút toán PHI TIỀN MẶT (fundId=null, vd write-off nợ xấu sourceType=BAD_DEBT): không đồng
+ * nào rời quỹ nên KHÔNG được cộng vào totalChi (nếu cộng → net dòng tiền lệch số dư quỹ). Đây là phòng vệ
+ * chung (kể cả listCashEntries hiển thị nguyên bút toán vẫn có summary dòng tiền đúng). KHÔNG ảnh hưởng
+ * getMonthlyProfit (accrual) — hàm đó tính riêng theo affectsPnl, không qua summarize.
+ */
 function summarize(dtos: CashEntryDto[]): CashflowSummary {
   let totalThu = 0, totalChi = 0, count = 0;
   for (const d of dtos) {
     if (d.status !== 'POSTED') continue;
+    if (d.fundId == null) continue; // phi tiền mặt — không tính vào dòng tiền
     count++;
     if (d.kind === 'THU') totalThu += d.amount; else totalChi += d.amount;
   }
@@ -250,11 +257,19 @@ export async function listCashEntries(filter: CashEntryFilter = {}): Promise<Cas
   return { ok: true, data, summary: summarize(data) };
 }
 
-/** CASHENTRY_VIEW — báo cáo dòng tiền (§F): CHỈ phiếu POSTED trong khoảng ngày + danh mục/quỹ/đối tượng. */
+/**
+ * CASHENTRY_VIEW — báo cáo dòng tiền (§F): CHỈ phiếu POSTED trong khoảng ngày + danh mục/quỹ/đối tượng.
+ * FIX 3 — LOẠI bút toán PHI TIỀN MẶT (fundId=null, vd ghi giảm nợ xấu): báo cáo DÒNG TIỀN = tiền THỰC
+ * vào/ra quỹ, write-off không chuyển tiền quỹ nào. Nếu người dùng lọc theo 1 quỹ cụ thể (filter.fundId)
+ * thì where.fundId đã là số ⇒ đương nhiên loại phi-tiền-mặt; nếu không lọc quỹ, ép fundId ≠ null.
+ * Chi phí nợ xấu vẫn vào lợi nhuận qua getMonthlyProfit (accrual, không dùng report này).
+ */
 export async function cashflowReport(filter: CashEntryFilter = {}): Promise<CashflowReportResult> {
   const g = await requirePermission('CASHENTRY_VIEW', { action: 'CASHENTRY_VIEW' });
   if (!g.ok) return g;
-  const rows = await g.db.cashEntry.findMany({ where: { ...buildWhere(filter), status: 'POSTED' }, orderBy: [{ entryDate: 'asc' }, { id: 'asc' }] });
+  const where: Record<string, unknown> = { ...buildWhere(filter), status: 'POSTED' };
+  if (where['fundId'] == null) where['fundId'] = { not: null };
+  const rows = await g.db.cashEntry.findMany({ where, orderBy: [{ entryDate: 'asc' }, { id: 'asc' }] });
   const data = await toDtos(g.db, rows);
   return { ok: true, data, summary: summarize(data) };
 }
@@ -272,6 +287,10 @@ export async function createCashEntry(input: CreateCashEntryInput): Promise<Muta
   const g = await requirePermission('CASHENTRY_CREATE', { action: 'CASH_ENTRY_CREATED', targetType: 'CashEntry' });
   if (!g.ok) return g;
   const { db, user } = g;
+
+  // FIX 5 — chốt quỹ tường minh (thay vì dựa side-effect findUnique(null) → NOT_FOUND khó hiểu). Bút toán
+  // phi tiền mặt (fundId=null) CHỈ do hệ thống sinh (write-off), KHÔNG qua API tạo phiếu này.
+  if (input.fundId == null) return { ok: false, error: 'VALIDATION', message: 'Vui lòng chọn quỹ.' };
 
   const kind = (input.kind ?? '').trim().toUpperCase();
   if (!KINDS.has(kind)) return { ok: false, error: 'VALIDATION', message: 'Loại phiếu phải là THU hoặc CHI.' };
@@ -366,6 +385,9 @@ export async function createDebtReceipt(input: CreateDebtReceiptInput): Promise<
   if (!g.ok) return g;
   const { db, user } = g;
 
+  // FIX 5 — chốt quỹ tường minh (thu công nợ luôn phải vào 1 quỹ; fundId=null chỉ dành bút toán hệ thống).
+  if (input.fundId == null) return { ok: false, error: 'VALIDATION', message: 'Vui lòng chọn quỹ.' };
+
   const method = (input.method ?? '').trim().toUpperCase();
   if (!METHODS.has(method)) return { ok: false, error: 'VALIDATION', message: 'Hình thức phải là Chuyển khoản (CK) hoặc Tiền mặt (CASH).' };
 
@@ -445,7 +467,7 @@ export async function createDebtReceipt(input: CreateDebtReceiptInput): Promise<
       // FIX 4 — batch đọc GD + tid (1 query mỗi loại, KHÔNG N+1 findUnique trong vòng lặp).
       const txnRows = await tx.transaction.findMany({
         where: { id: { in: txnIds } },
-        select: { id: true, revenuePartner: true, revenueSell: true, customerId: true, tidId: true, status: true, deletedAt: true, settled: true }
+        select: { id: true, revenuePartner: true, revenueSell: true, customerId: true, tidId: true, status: true, deletedAt: true, settled: true, writtenOffAt: true }
       });
       const txnMap = new Map(txnRows.map((t) => [t.id, t]));
       let tidPartnerMap = new Map<number, number | null>();
@@ -464,6 +486,10 @@ export async function createDebtReceipt(input: CreateDebtReceiptInput): Promise<
         const t = txnMap.get(txnId);
         if (!t || t.deletedAt) throw new TxGuardError('TXN_INVALID', `Giao dịch #${txnId} không tồn tại.`);
         if (t.status === 'CANCELLED') throw new TxGuardError('TXN_INVALID', `Giao dịch #${txnId} đã hủy, không thu công nợ được.`);
+        // FIX 2 — GD đã ghi giảm nợ xấu (write-off) KHÔNG còn là công nợ → cấm thu (nếu không sẽ vừa ghi
+        // giảm lợi nhuận vừa thu tiền vào quỹ cùng 1 khoản). Khóa FOR UPDATE ở trên đảm bảo thấy writtenOffAt
+        // ĐÃ COMMIT của write-off song song → chống race cả 2 chiều (mẫu FIX 1).
+        if (t.writtenOffAt != null) throw new TxGuardError('TXN_WRITTEN_OFF', `Giao dịch #${txnId} đã ghi giảm nợ xấu — không thu công nợ.`);
         // Khớp đối tượng.
         if (input.customerId != null && t.customerId !== input.customerId) throw new TxGuardError('TXN_OBJECT_MISMATCH', `Giao dịch #${txnId} không thuộc khách hàng đã chọn.`);
         if (input.partnerId != null) {
@@ -564,6 +590,15 @@ export async function cancelCashEntry(id: number, reason: string, password: stri
       const settlements = await txc.cashDebtSettlement.findMany({ where: { cashEntryId: id }, select: { transactionId: true } });
       if (settlements.length > 0) {
         const affected = [...new Set(settlements.map((s) => s.transactionId))];
+        // FIX 2 — GD đã ghi giảm nợ xấu (write-off) là ĐÃ ĐÓNG: số write-off = net TẠI thời điểm ghi giảm
+        // (revenue − Σ settlement lúc đó). Nếu cho hủy phiếu thu này → xóa 1 settlement từng nằm trong net
+        // đó → write-off bị hụt số (nợ xấu ghi giảm ít hơn thực). HÀNH VI: CHẶN hủy — GD written-off KHÔNG
+        // bị settle lại. (createDebtReceipt đã cấm tạo settlement mới trên GD write-off nên settlement này
+        // chắc chắn tạo TRƯỚC write-off.)
+        const woRows = await txc.transaction.findMany({ where: { id: { in: affected }, writtenOffAt: { not: null } }, select: { id: true } });
+        if (woRows.length > 0) {
+          throw new TxGuardError('TXN_WRITTEN_OFF', `Không thể hủy: phiếu thu này tất toán giao dịch đã ghi giảm nợ xấu (GD #${woRows.map((r) => r.id).join(', #')}).`);
+        }
         await txc.cashDebtSettlement.deleteMany({ where: { cashEntryId: id } });
         for (const txnId of affected) {
           const t = await txc.transaction.findUnique({ where: { id: txnId }, select: { revenuePartner: true, revenueSell: true, settled: true } });

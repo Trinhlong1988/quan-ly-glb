@@ -114,11 +114,12 @@ function trail(
 async function postedNetByFund(db: Db): Promise<Map<number, number>> {
   const rows = await db.cashEntry.groupBy({
     by: ['fundId', 'kind'],
-    where: { status: 'POSTED', deletedAt: null },
+    where: { status: 'POSTED', deletedAt: null, fundId: { not: null } },
     _sum: { amount: true }
   });
   const net = new Map<number, number>();
   for (const r of rows) {
+    if (r.fundId == null) continue; // H2b: bút toán phi tiền mặt (write-off) không gắn quỹ
     const sum = r._sum.amount ?? 0;
     const delta = r.kind === 'THU' ? sum : -sum;
     net.set(r.fundId, (net.get(r.fundId) ?? 0) + delta);
