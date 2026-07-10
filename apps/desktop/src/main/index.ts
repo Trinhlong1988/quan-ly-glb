@@ -215,6 +215,14 @@ app.whenReady().then(async () => {
     app.exit(code);
     return;
   }
+  // G10.3 Cấu hình máy chủ self-test: testServerConfig (pg OK/lỗi) + validate gating +
+  // saveServerConfig (ghi file round-trip + reinit) + getServerConfig phân loại trạng thái.
+  if (process.env['GLB_SELFTEST'] === '22') {
+    const { runServerConfigSelfTest } = await import('./selftest-servercfg.js');
+    const code = await runServerConfigSelfTest();
+    app.exit(code);
+    return;
+  }
 
   await createWindow();
   startHousekeeping();
