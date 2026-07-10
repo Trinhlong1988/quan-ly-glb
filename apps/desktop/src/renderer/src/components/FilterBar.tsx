@@ -77,7 +77,7 @@ export function FilterBar({
       <button
         onClick={onReset}
         title="Xóa toàn bộ bộ lọc, đưa về mặc định"
-        className="flex items-center gap-1 rounded-md border border-line px-3 py-2 text-sm text-slate-600 hover:bg-appbg"
+        className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-brand/10 text-brand hover:bg-brand/20"
       >
         <FilterX className="h-4 w-4" /> Xóa lọc
       </button>

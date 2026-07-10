@@ -131,7 +131,7 @@ export function DebtPage({ user }: { user: AuthUser }): JSX.Element {
             <input type="date" className={inputCls} value={fTo} onChange={(e) => setFTo(e.target.value)} />
           </label>
           <button onClick={() => void reload(1)} className="rounded-md bg-brand px-3 py-2 text-sm font-medium text-white hover:bg-brand-hover">Lọc</button>
-          <button onClick={resetFilter} title="Xóa toàn bộ bộ lọc, đưa về mặc định" className="flex items-center gap-1 rounded-md border border-line px-3 py-2 text-sm text-slate-600 hover:bg-appbg"><FilterX className="h-4 w-4" /> Xóa lọc</button>
+          <button onClick={resetFilter} title="Xóa toàn bộ bộ lọc, đưa về mặc định" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-brand/10 text-brand hover:bg-brand/20"><FilterX className="h-4 w-4" /> Xóa lọc</button>
           <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('cong_no', ['Mã GD', 'Ngày', 'TID', 'HKD', 'Khách', 'Nợ đối tác', 'Nợ bán', 'Tổng nợ'], rows.map((r) => [r.code ?? '', fmtDate(r.txnDate), r.tid ?? '', r.hkdName ?? '', r.customerName ?? '', String(r.revenuePartner), String(r.revenueSell), String(r.revenueAmount)]))}>Xuất Excel</Button>
         </div>
       </div>

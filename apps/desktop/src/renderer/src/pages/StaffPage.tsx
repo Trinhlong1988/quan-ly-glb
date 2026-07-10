@@ -158,7 +158,7 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
         <button onClick={reload} className="rounded-md bg-brand px-3 py-2 text-sm font-medium text-white hover:bg-brand-hover">
           Lọc
         </button>
-        <button onClick={resetFilters} title="Xóa toàn bộ bộ lọc, đưa về mặc định" className="flex items-center gap-1 rounded-md border border-line px-3 py-2 text-sm text-slate-600 hover:bg-appbg">
+        <button onClick={resetFilters} title="Xóa toàn bộ bộ lọc, đưa về mặc định" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-brand/10 text-brand hover:bg-brand/20">
           <FilterX className="h-4 w-4" /> Xóa lọc
         </button>
       </div>
