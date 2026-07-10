@@ -26,8 +26,15 @@ import * as approvalSvc from './approval-service.js';
 import * as storageSvc from './storage-service.js';
 import * as healthSvc from './health-scan.js';
 import { getRemembered, saveRemembered, clearRemembered } from './remember.js';
+import { getServerConfig, testServerConfig, saveServerConfig } from './db.js';
+import type { ServerConfigInput } from '@glb/shared';
 
 export function registerIpc(): void {
+  // ---- Cấu hình máy chủ (G10.3 — client first-run) ----------------------
+  ipcMain.handle('serverConfig:get', async () => getServerConfig());
+  ipcMain.handle('serverConfig:test', async (_e, input: ServerConfigInput) => testServerConfig(input ?? {}));
+  ipcMain.handle('serverConfig:save', async (_e, input: ServerConfigInput) => saveServerConfig(input ?? {}));
+
   // ---- Auth (Phase A) ----------------------------------------------------
   ipcMain.handle('auth:login', async (_e, args: { username: string; password: string; remember?: boolean }) => {
     const { username, password, remember } = args ?? ({} as never);

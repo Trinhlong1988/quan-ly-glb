@@ -22,6 +22,11 @@ const api = {
     ipcRenderer.invoke('auth:saveRemembered', { username, password }),
   clearRemembered: () => ipcRenderer.invoke('auth:clearRemembered'),
 
+  // Cấu hình máy chủ (G10.3 — client first-run)
+  serverConfigGet: () => ipcRenderer.invoke('serverConfig:get'),
+  serverConfigTest: (input: unknown) => ipcRenderer.invoke('serverConfig:test', input),
+  serverConfigSave: (input: unknown) => ipcRenderer.invoke('serverConfig:save', input),
+
   // Roles
   roleList: () => ipcRenderer.invoke('role:list'),
   rolePermissions: () => ipcRenderer.invoke('role:permissions'),

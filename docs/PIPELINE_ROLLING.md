@@ -11,8 +11,10 @@
 | G10.1 | Đóng gói .exe electron-builder | `PHASE_G10…§8` | packaging + login packaged | ✅ done, commit `e7efba0` (WIP, chưa tag tier) |
 | **G10.C** | **Gia cố tương tranh** (transaction+guard cho request/approve/reject hủy bill + code_counter) — CHẠM P1.2 freeze, **Mr.Long duyệt 10/7** | `PHASE_G10…§9b CRITICAL-A/HIGH-C/E` | selftest18/19 giữ xanh + selftest race-logic mới + guard | 🔄 **ĐANG** — làm trên SQLite hiện tại, TRƯỚC swap pg |
 | G10.2 | **Full-switch Postgres** (B): schema→pg + squash baseline (35 bảng/97 timestamptz) + PrismaPg + gỡ better-sqlite3 + storage/backup pg + harness pg | `PHASE_G10…§8 B` | migrate deploy 0 lỗi + selftest 18/21 trên pg thật | ✅ **done + verify độc lập** (18=31/0, 21=19/0 trên Postgres). WIP toward g10 |
-| G10.3+ | Cấu hình LAN (`listen_addresses`/`pg_hba`/firewall) + migrate `glb` prod + UI "Cấu hình máy chủ" | `PHASE_G10…§8` | máy B nối được | ⛔ kế tiếp |
-| G10.5 | Stress-race thật (selftest=20) + code_counter atomic (KH/NV) | `PHASE_G10…§9b HIGH-C/E` | N-client trùng mã=0 | ⛔ chưa làm |
+| G10.3 server | LAN config + migrate/seed `glb` prod | `PHASE_G10…§8` | máy B nối được | ✅ **done** — listen `*` + pg_hba `192.168.1.0/24 scram` + firewall LAN + `glb` migrated(36 bảng)+seeded(adminroot). Kết nối LAN 192.168.1.6:5432 verified |
+| G10.3 UI | Màn "Cấu hình máy chủ" (client nhập IP:port lần đầu) | — | first-run không crash | 🔄 CMD_BUILD đang build |
+| G10.6 | Máy B thật nối LAN nhập realtime | — | Prod accept | ⏳ Anh — cần máy thứ 2. Server: `192.168.1.6:5432` db `glb` user `postgres` pw `Glb@Pg2026` |
+| G10.5 | Stress-race thật (selftest=20) + code_counter atomic (KH/NV) | `PHASE_G10…§9b HIGH-C/E` | N-client trùng mã=0 | ✅ **done + verify độc lập** (selftest=20 23/0 trên pg: 1-win/9-loser mọi ca, mã distinct=20). Commit 341f50b. upsert=native ON CONFLICT atomic |
 | F-NOTIF | **Trung tâm Thông báo** (chuông + hòm thư): đẩy sự kiện yêu cầu/duyệt/từ chối hủy bill + user khóa + backup lỗi + công nợ đến hạn | (viết khi tới) | 🆕 Mr.Long chốt 10/7 **TÁCH RIÊNG** khỏi P1.2 — không nối trong F1 |
 | ~~F3~~ | ~~Backlog Nhóm 1 (ngày dd/mm/yyyy, thùng rác UI, màu button)~~ | — | — | ✅ **ĐÃ XONG (verify 10/7)** — KHÔNG cần build frame. Xem "Reality-check F3" dưới. Chỉ còn (tùy chọn) 1 pass QA đồng bộ UI |
 | F4 | **Nền móng Nhóm 2** (multi-branch, mã CT 6 số, master data kho/sản phẩm/ĐVT/nhóm hàng) — **frame build THẬT kế tiếp sau G10** | `SPEC_V2_GAP_AND_BACKLOG.md` §B + §E Nhóm 2 | (viết khi tới) | ⛔ chờ Mr.Long duyệt scope |

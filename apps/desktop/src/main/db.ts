@@ -4,11 +4,22 @@
 // - Role split (G10 model A): CHỈ máy chủ (GLB_ROLE=server) chạy seed. Client (mặc định) chỉ connect.
 //   Prisma 7 `prisma-client` KHÔNG kèm migrate engine → migrate chạy bằng prisma CLI phía server,
 //   KHÔNG từ .exe.
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { app } from 'electron';
+import { Client } from 'pg';
 import { createPrisma, type Db } from '@glb/database';
-import { PERMISSIONS, ROLES, DEFAULT_ROLE_PERMISSIONS } from '@glb/shared';
+import {
+  PERMISSIONS,
+  ROLES,
+  DEFAULT_ROLE_PERMISSIONS,
+  validateServerConfig,
+  DEFAULT_SERVER_PORT,
+  DEFAULT_SERVER_DATABASE,
+  DEFAULT_SERVER_USER,
+  type ServerConfigInput,
+  type NormalizedServerConfig
+} from '@glb/shared';
 import { hashPassword } from '@glb/business-rules';
 import { backfillEmployeeCodes } from './code-service.js';
 
@@ -168,4 +179,133 @@ export async function initDb(): Promise<Db> {
     await seedIfEmpty(prisma);
   }
   return prisma;
+}
+
+// ── G10.3 Cấu hình máy chủ (client first-run) ────────────────────────────────
+
+/**
+ * True nếu tiến trình này PHẢI dựa vào file server-config.json để biết máy chủ (→ có thể cần màn cấu hình).
+ * Máy chủ (GLB_ROLE=server), selftest (GLB_DB_URL) và dev có DATABASE_URL đều KHÔNG dùng màn này.
+ */
+function isClientConfigMode(): boolean {
+  if (isServerRole()) return false;
+  if (process.env['GLB_DB_URL']) return false;
+  if (!app.isPackaged && process.env['DATABASE_URL']) return false;
+  return true;
+}
+
+/** Kiểm tra kết nối SỐNG bằng 1 truy vấn nhẹ. Trả false nếu chưa init hoặc mất kết nối. */
+async function probeConnection(): Promise<boolean> {
+  if (!prisma) return false;
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Trạng thái CSDL cho renderer quyết định luồng khởi động:
+ * - `ready`: đã kết nối được (SELECT 1 OK) → vào đăng nhập.
+ * - `needsConfig`: client dựa server-config nhưng CHƯA kết nối được → hiện màn "Cấu hình máy chủ".
+ * - `serverRole`: máy chủ KHÔNG bao giờ hiện màn cấu hình.
+ */
+export async function getDbStatus(): Promise<{ ready: boolean; needsConfig: boolean; serverRole: boolean }> {
+  const serverRole = isServerRole();
+  const ready = await probeConnection();
+  const needsConfig = isClientConfigMode() && !ready;
+  return { ready, needsConfig, serverRole };
+}
+
+/** Cấu hình hiện tại (để đổ vào form). Thiếu → trả giá trị mặc định để form gợi ý sẵn. */
+function currentServerConfig(): NormalizedServerConfig {
+  const cfg = readServerConfig();
+  if (cfg) return { host: cfg.host, port: cfg.port ?? DEFAULT_SERVER_PORT, database: cfg.database, user: cfg.user, password: cfg.password };
+  return { host: '', port: DEFAULT_SERVER_PORT, database: DEFAULT_SERVER_DATABASE, user: DEFAULT_SERVER_USER, password: '' };
+}
+
+/** IPC `serverConfig:get` — trạng thái CSDL + cấu hình hiện có (đổ form). */
+export async function getServerConfig(): Promise<{
+  ready: boolean;
+  needsConfig: boolean;
+  serverRole: boolean;
+  configured: boolean;
+  config: NormalizedServerConfig;
+}> {
+  const status = await getDbStatus();
+  return { ...status, configured: readServerConfig() != null, config: currentServerConfig() };
+}
+
+/** Gói lỗi pg thành thông điệp tiếng Việt dễ hiểu (giữ nguyên chi tiết gốc phía sau). */
+function friendlyPgError(err: unknown): string {
+  const e = err as { code?: string; message?: string };
+  const raw = e?.message ?? String(err);
+  if (e?.code === 'ECONNREFUSED') return `Máy chủ từ chối kết nối (kiểm tra IP/cổng + PostgreSQL đang chạy). ${raw}`;
+  if (e?.code === 'ETIMEDOUT' || /timeout/i.test(raw)) return `Hết thời gian chờ kết nối tới máy chủ (kiểm tra IP/mạng LAN/tường lửa). ${raw}`;
+  if (e?.code === 'ENOTFOUND' || e?.code === 'EAI_AGAIN') return `Không tìm thấy máy chủ theo địa chỉ đã nhập. ${raw}`;
+  if (e?.code === '28P01' || e?.code === '28000') return `Sai tài khoản hoặc mật khẩu PostgreSQL. ${raw}`;
+  if (e?.code === '3D000') return `Cơ sở dữ liệu không tồn tại trên máy chủ. ${raw}`;
+  return raw;
+}
+
+/** IPC `serverConfig:test` — thử `new Client(...).connect()` (pg) với timeout, KHÔNG ghi file. */
+export async function testServerConfig(input: ServerConfigInput): Promise<{ ok: boolean; error?: string }> {
+  const v = validateServerConfig(input);
+  if (!v.valid || !v.config) return { ok: false, error: v.error ?? 'Cấu hình không hợp lệ.' };
+  const c = v.config;
+  const client = new Client({
+    host: c.host,
+    port: c.port,
+    database: c.database,
+    user: c.user,
+    password: c.password,
+    connectionTimeoutMillis: 6000
+  });
+  try {
+    await client.connect();
+    await client.query('SELECT 1');
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: friendlyPgError(err) };
+  } finally {
+    try {
+      await client.end();
+    } catch {
+      /* ignore cleanup error */
+    }
+  }
+}
+
+/** Đóng kết nối cũ + init lại theo cấu hình mới, rồi xác nhận kết nối sống. */
+async function reinitDb(): Promise<{ ok: boolean; error?: string }> {
+  try {
+    if (prisma) {
+      try {
+        await prisma.$disconnect();
+      } catch {
+        /* ignore */
+      }
+      prisma = undefined;
+    }
+    await initDb();
+    if (!(await probeConnection())) {
+      return { ok: false, error: 'Đã lưu cấu hình nhưng không kết nối được tới máy chủ. Kiểm tra lại thông tin.' };
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: friendlyPgError(err) };
+  }
+}
+
+/** IPC `serverConfig:save` — validate → ghi server-config.json → init lại kết nối. */
+export async function saveServerConfig(input: ServerConfigInput): Promise<{ ok: boolean; error?: string }> {
+  const v = validateServerConfig(input);
+  if (!v.valid || !v.config) return { ok: false, error: v.error ?? 'Cấu hình không hợp lệ.' };
+  try {
+    writeFileSync(serverConfigPath(), JSON.stringify(v.config, null, 2), 'utf8');
+  } catch (err) {
+    return { ok: false, error: 'Không ghi được file cấu hình máy chủ: ' + (err as Error).message };
+  }
+  return reinitDb();
 }

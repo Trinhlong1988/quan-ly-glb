@@ -19,6 +19,29 @@ export interface RememberedCreds {
   password: string;
 }
 
+// G10.3 Cấu hình máy chủ (client first-run) — DTO cho màn "Cấu hình máy chủ".
+export interface ServerConfigDto {
+  host: string;
+  port: number;
+  database: string;
+  user: string;
+  password: string;
+}
+export interface ServerConfigInputDto {
+  host?: string;
+  port?: number | string;
+  database?: string;
+  user?: string;
+  password?: string;
+}
+export interface ServerConfigStatus {
+  ready: boolean;
+  needsConfig: boolean;
+  serverRole: boolean;
+  configured: boolean;
+  config: ServerConfigDto;
+}
+
 export interface RoleDto {
   id: number;
   name: string;
@@ -752,6 +775,11 @@ export interface GlbApi {
   getRemembered(): Promise<RememberedCreds | null>;
   saveRemembered(username: string, password: string): Promise<{ ok: boolean }>;
   clearRemembered(): Promise<{ ok: boolean }>;
+
+  // Cấu hình máy chủ (G10.3 — client first-run)
+  serverConfigGet(): Promise<ServerConfigStatus>;
+  serverConfigTest(input: ServerConfigInputDto): Promise<{ ok: boolean; error?: string }>;
+  serverConfigSave(input: ServerConfigInputDto): Promise<{ ok: boolean; error?: string }>;
 
   roleList(): Promise<ListResult<RoleDto>>;
   rolePermissions(): Promise<ListResult<PermissionDto>>;

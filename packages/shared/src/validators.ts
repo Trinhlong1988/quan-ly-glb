@@ -58,3 +58,66 @@ export const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export function isValidEmail(email: string): boolean {
   return typeof email === 'string' && EMAIL_REGEX.test(email);
 }
+
+/**
+ * Cấu hình kết nối máy chủ PostgreSQL (client nhập ở màn "Cấu hình máy chủ", G10 model A).
+ * Validate + chuẩn hóa THUẦN LOGIC (không I/O) → dùng chung cho cả main (ghi/kiểm) lẫn renderer (form).
+ */
+export const DEFAULT_SERVER_PORT = 5432;
+export const DEFAULT_SERVER_DATABASE = 'glb';
+export const DEFAULT_SERVER_USER = 'postgres';
+
+export interface ServerConfigInput {
+  host?: string;
+  port?: number | string;
+  database?: string;
+  user?: string;
+  password?: string;
+}
+
+export interface NormalizedServerConfig {
+  host: string;
+  port: number;
+  database: string;
+  user: string;
+  password: string;
+}
+
+export interface ServerConfigValidation {
+  valid: boolean;
+  error?: string;
+  config?: NormalizedServerConfig;
+}
+
+/**
+ * Kiểm tra + chuẩn hóa cấu hình máy chủ. Cổng/CSDL/tài khoản trống → về mặc định (5432/glb/postgres).
+ * Host + mật khẩu là BẮT BUỘC. Trả `config` đã chuẩn hóa khi hợp lệ.
+ */
+export function validateServerConfig(input: ServerConfigInput): ServerConfigValidation {
+  const host = (input.host ?? '').trim();
+  if (!host) {
+    return { valid: false, error: 'Vui lòng nhập địa chỉ máy chủ (IP hoặc tên miền).' };
+  }
+  if (/\s/.test(host)) {
+    return { valid: false, error: 'Địa chỉ máy chủ không được chứa khoảng trắng.' };
+  }
+
+  let port = DEFAULT_SERVER_PORT;
+  const rawPort = input.port;
+  if (rawPort !== undefined && rawPort !== null && `${rawPort}`.trim() !== '') {
+    const p = Number(rawPort);
+    if (!Number.isInteger(p) || p < 1 || p > 65535) {
+      return { valid: false, error: 'Cổng phải là số nguyên trong khoảng 1–65535.' };
+    }
+    port = p;
+  }
+
+  const database = (input.database ?? '').trim() || DEFAULT_SERVER_DATABASE;
+  const user = (input.user ?? '').trim() || DEFAULT_SERVER_USER;
+  const password = input.password ?? '';
+  if (!password) {
+    return { valid: false, error: 'Vui lòng nhập mật khẩu tài khoản PostgreSQL.' };
+  }
+
+  return { valid: true, config: { host, port, database, user, password } };
+}
