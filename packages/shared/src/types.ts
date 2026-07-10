@@ -146,6 +146,7 @@ export type AuditAction =
   | 'FUND_DELETED'
   | 'CASH_ENTRY_CREATED'
   | 'CASH_ENTRY_CANCELLED'
+  | 'CASH_DEBT_RECEIPT_CREATED'
   | 'CASHFLOW_PERMS_GRANTED'
   // ── Nhóm A — Bảo mật & tài khoản ──
   | 'USER_AUTO_LOCKED'

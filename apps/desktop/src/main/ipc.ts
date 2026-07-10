@@ -287,6 +287,7 @@ export function registerIpc(): void {
   ipcMain.handle('cashEntry:report', async (_e, filter: cashEntrySvc.CashEntryFilter) => cashEntrySvc.cashflowReport(filter));
   ipcMain.handle('cashEntry:categoryLite', async () => cashEntrySvc.listEntryCategoriesLite());
   ipcMain.handle('cashEntry:create', async (_e, input: cashEntrySvc.CreateCashEntryInput) => cashEntrySvc.createCashEntry(input));
+  ipcMain.handle('cashEntry:createDebtReceipt', async (_e, input: cashEntrySvc.CreateDebtReceiptInput) => cashEntrySvc.createDebtReceipt(input));
   ipcMain.handle('cashEntry:cancel', async (_e, args: { id: number; reason: string; password: string }) => cashEntrySvc.cancelCashEntry(args.id, args.reason, args.password));
 
   // ── E4 Thùng rác ──
@@ -308,8 +309,10 @@ export function registerIpc(): void {
   ipcMain.handle('transaction:create', async (_e, input: txnSvc.CreateTransactionInput) => txnSvc.createTransaction(input));
   ipcMain.handle('transaction:update', async (_e, args: { id: number; input: txnSvc.UpdateTransactionInput }) => txnSvc.updateTransaction(args.id, args.input));
   ipcMain.handle('transaction:delete', async (_e, args: { ids: number[]; password: string }) => txnSvc.deleteTransactions(args.ids, args.password));
-  ipcMain.handle('transaction:settle', async (_e, args: { ids: number[]; settled: boolean }) => txnSvc.settleTransactions(args.ids, args.settled));
+  // H5 — GỠ handler 'transaction:settle' (toggle settled thủ công vô hiệu hóa). settled chỉ đổi qua
+  //       phiếu Thu công nợ (cashEntry:createDebtReceipt) / hủy phiếu thu.
   ipcMain.handle('debt:summary', async (_e, filter: txnSvc.TransactionFilter) => txnSvc.debtSummary(filter));
+  ipcMain.handle('debt:openTransactions', async (_e, filter: txnSvc.TransactionFilter) => txnSvc.debtOpenTransactions(filter));
 
   // ── P1.2 Approval Engine — hủy bill có duyệt (phân vai trong service) ──
   ipcMain.handle('approval:requestCancel', async (_e, args: { transactionId: number; reason: string }) => approvalSvc.requestCancelBill(args.transactionId, args.reason));

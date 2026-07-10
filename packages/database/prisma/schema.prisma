@@ -827,3 +827,21 @@ model CashEntry {
   @@index([partnerId])
   @@map("cash_entries")
 }
+
+// PHASE H2-debt — Nối phiếu thu công nợ (CashEntry kind=THU, category DEBT_*) ↔ Transaction được tất
+// toán (§2.4). CHỐNG ĐẾM TRÙNG (net-of-settlement, H4): công nợ còn lại từng side =
+//   revenue(side) − Σ CashDebtSettlement.amount(side, GD). Transaction.settled chỉ là HỆ QUẢ, set=true
+// KHI VÀ CHỈ KHI cả 2 side net=0 (trong cùng $transaction tạo phiếu). Hủy phiếu thu công nợ → xóa các
+// dòng settlement + tính lại settled (M3). KHÔNG dùng cờ settled làm nguồn tính nợ.
+model CashDebtSettlement {
+  id            Int      @id @default(autoincrement())
+  cashEntryId   Int      @map("cash_entry_id") // phiếu thu (kind=THU, category DEBT_*)
+  transactionId Int      @map("transaction_id") // GD được tất toán
+  side          String // PARTNER | SELL (CL_NCC — chênh đối tác / CL_KH — chênh bán)
+  amount        Int // VND áp vào GD này (> 0)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([cashEntryId])
+  @@index([transactionId])
+  @@map("cash_debt_settlements")
+}

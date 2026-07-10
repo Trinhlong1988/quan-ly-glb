@@ -17,8 +17,10 @@ import { nextCode } from './code-service.js';
 
 const KINDS = new Set(['THU', 'CHI']);
 const METHODS = new Set(['CK', 'CASH']);
-/** sourceKind công nợ — H2-core CHẶN lập phiếu thu (chờ chức năng Thu công nợ pha H2-debt). */
+/** sourceKind công nợ — create THƯỜNG CHẶN (DEBT_RECEIPT_DEFERRED); thu công nợ đi qua createDebtReceipt. */
 const DEBT_SOURCE = new Set(['DEBT_CUSTOMER', 'DEBT_PARTNER']);
+/** Khoản nợ của 1 GD: PARTNER (CL_NCC — chênh đối tác) | SELL (CL_KH — chênh bán). */
+const SIDES = new Set(['PARTNER', 'SELL']);
 /** Trần an toàn số tiền (R5 — chống tràn Number). */
 const AMOUNT_MAX = 1e15;
 
@@ -97,6 +99,27 @@ export interface CashflowSummary {
   totalThu: number; // Σ THU POSTED
   totalChi: number; // Σ CHI POSTED
   net: number; // THU − CHI
+}
+
+/** 1 dòng tất toán: áp `amount` vào 1 side (PARTNER|SELL) của 1 Transaction (§2.4). */
+export interface DebtReceiptLine {
+  transactionId: number;
+  side: string; // PARTNER | SELL
+  amount: number; // VND > 0
+}
+
+/** Input Thu công nợ (createDebtReceipt): 1 phiếu THU (category DEBT_*) tất toán ≥1 GD qua các line. */
+export interface CreateDebtReceiptInput {
+  categoryId: number; // danh mục DEBT_CUSTOMER | DEBT_PARTNER
+  fundId: number;
+  method: string; // CK | CASH
+  entryDate: string; // YYYY-MM-DD (local) hoặc ISO
+  customerId?: number | null; // đối tượng thu (KH) — GD phải khớp customerId
+  partnerId?: number | null; // đối tượng thu (đối tác của TID) — GD phải khớp partnerId
+  note?: string | null;
+  docPath?: string | null;
+  docName?: string | null;
+  lines: DebtReceiptLine[];
 }
 
 export interface CashflowReportResult {
@@ -329,8 +352,186 @@ export async function createCashEntry(input: CreateCashEntryInput): Promise<Muta
 }
 
 /**
+ * CASHENTRY_CREATE — Thu công nợ (H2-debt §2.4): 1 phiếu THU (category DEBT_*) TẤT TOÁN ≥1 Transaction
+ * qua các CashDebtSettlement, theo NET-OF-SETTLEMENT (I#2). Trong 1 $transaction:
+ *  • mỗi line: amount ≤ nợ CÒN LẠI net của (GD, side) = revenue(side) − Σ settle(side) đã có → vượt = DEBT_OVERPAY (rollback);
+ *  • GD tồn tại, chưa xóa, status ≠ CANCELLED, khớp đối tượng (customerId/partnerId);
+ *  • tạo CashEntry (sourceType=null) + N dòng settlement; tổng line = amount phiếu;
+ *  • HỆ QUẢ: GD nào cả 2 side net=0 → settled=true (KHÔNG toggle tay — H5).
+ * Audit CASH_DEBT_RECEIPT_CREATED (+ PERMISSION_DENIED ở guard). Doanh thu KHÔNG double-count:
+ * category DEBT_* affectsPnl=false (đã có trong Transaction.revenueAmount accrual).
+ */
+export async function createDebtReceipt(input: CreateDebtReceiptInput): Promise<MutationResult> {
+  const g = await requirePermission('CASHENTRY_CREATE', { action: 'CASH_DEBT_RECEIPT_CREATED', targetType: 'CashEntry' });
+  if (!g.ok) return g;
+  const { db, user } = g;
+
+  const method = (input.method ?? '').trim().toUpperCase();
+  if (!METHODS.has(method)) return { ok: false, error: 'VALIDATION', message: 'Hình thức phải là Chuyển khoản (CK) hoặc Tiền mặt (CASH).' };
+
+  const entryDate = parseLocalDate(input.entryDate);
+  if (!entryDate) return { ok: false, error: 'VALIDATION', message: 'Ngày thu không hợp lệ.' };
+
+  // Quỹ hợp lệ.
+  const fund = await db.fund.findUnique({ where: { id: input.fundId }, select: { id: true, deletedAt: true } });
+  if (!fund || fund.deletedAt) return { ok: false, error: 'VALIDATION', message: 'Quỹ không hợp lệ.' };
+
+  // Danh mục: THU + DEBT_* + active + chưa xóa (thu công nợ CHỈ dùng danh mục công nợ).
+  const cat = await db.cashCategory.findUnique({ where: { id: input.categoryId }, select: { id: true, kind: true, active: true, deletedAt: true, sourceKind: true } });
+  if (!cat || cat.deletedAt) return { ok: false, error: 'VALIDATION', message: 'Danh mục không hợp lệ.' };
+  if (!cat.active) return { ok: false, error: 'VALIDATION', message: 'Danh mục đã ngừng dùng, không lập phiếu được.' };
+  if (cat.kind !== 'THU' || !DEBT_SOURCE.has(cat.sourceKind)) {
+    return { ok: false, error: 'VALIDATION', message: 'Thu công nợ phải dùng danh mục Công nợ (khách hàng / đối tác).' };
+  }
+
+  // Đối tượng: cần ≥1 chiều (KH hoặc đối tác) để ràng buộc GD.
+  if (input.customerId == null && input.partnerId == null) {
+    return { ok: false, error: 'VALIDATION', message: 'Chọn đối tượng thu (khách hàng hoặc đối tác).' };
+  }
+  // FIX 3 — RÀNG side ↔ danh mục ↔ đối tượng: DEBT_CUSTOMER ⇒ side SELL + có KH; DEBT_PARTNER ⇒ side
+  // PARTNER + có đối tác. Chống dùng danh mục lệch (net đúng nhưng nhãn dòng tiền sai). Đối tượng khớp
+  // danh mục để settlement luôn đi đúng side (kiểm side từng line ở vòng dưới).
+  if (cat.sourceKind === 'DEBT_CUSTOMER' && input.customerId == null) {
+    return { ok: false, error: 'DEBT_SIDE_CATEGORY_MISMATCH', message: 'Thu công nợ theo danh mục Công nợ khách hàng cần chọn khách hàng.' };
+  }
+  if (cat.sourceKind === 'DEBT_PARTNER' && input.partnerId == null) {
+    return { ok: false, error: 'DEBT_SIDE_CATEGORY_MISMATCH', message: 'Thu công nợ theo danh mục Công nợ đối tác cần chọn đối tác.' };
+  }
+  if (input.customerId != null) {
+    const c = await db.customer.findUnique({ where: { id: input.customerId }, select: { id: true, deletedAt: true } });
+    if (!c || c.deletedAt) return { ok: false, error: 'VALIDATION', message: 'Khách hàng không hợp lệ.' };
+  }
+  if (input.partnerId != null) {
+    const p = await db.partner.findUnique({ where: { id: input.partnerId }, select: { id: true, deletedAt: true } });
+    if (!p || p.deletedAt) return { ok: false, error: 'VALIDATION', message: 'Đối tác không hợp lệ.' };
+  }
+
+  // Lines: không rỗng, side hợp lệ, amount nguyên > 0; gộp amount mới theo (GD, side).
+  const lines = input.lines ?? [];
+  if (!Array.isArray(lines) || lines.length === 0) return { ok: false, error: 'VALIDATION', message: 'Chưa nhập khoản thu nào.' };
+  const addBySide = new Map<string, number>(); // `${txnId}:${side}` → Σ amount mới
+  // FIX 3 — side hợp lệ theo danh mục: DEBT_CUSTOMER ⇒ chỉ SELL; DEBT_PARTNER ⇒ chỉ PARTNER.
+  const wantSide = cat.sourceKind === 'DEBT_CUSTOMER' ? 'SELL' : 'PARTNER';
+  let total = 0;
+  for (const ln of lines) {
+    const side = (ln.side ?? '').trim().toUpperCase();
+    if (!SIDES.has(side)) return { ok: false, error: 'VALIDATION', message: 'Khoản nợ phải là đối tác (PARTNER) hoặc khách/bán (SELL).' };
+    if (side !== wantSide) {
+      return { ok: false, error: 'DEBT_SIDE_CATEGORY_MISMATCH', message: `Danh mục ${cat.sourceKind === 'DEBT_CUSTOMER' ? 'Công nợ khách hàng' : 'Công nợ đối tác'} chỉ tất toán khoản ${wantSide === 'SELL' ? 'khách/bán (SELL)' : 'đối tác (PARTNER)'}, không dùng cho khoản ${side === 'SELL' ? 'khách/bán' : 'đối tác'}.` };
+    }
+    const amt = parseAmount(ln.amount);
+    if (amt === null) return { ok: false, error: 'VALIDATION', message: 'Số tiền thu mỗi khoản phải là số nguyên dương (VND).' };
+    if (!Number.isInteger(ln.transactionId) || ln.transactionId <= 0) return { ok: false, error: 'VALIDATION', message: 'Giao dịch không hợp lệ.' };
+    const key = `${ln.transactionId}:${side}`;
+    addBySide.set(key, (addBySide.get(key) ?? 0) + amt);
+    total += amt;
+  }
+  if (total <= 0 || total > AMOUNT_MAX) return { ok: false, error: 'VALIDATION', message: 'Tổng tiền thu không hợp lệ.' };
+  const txnIds = [...new Set(lines.map((l) => l.transactionId))];
+  // FIX 1 — khóa GD cha theo id TĂNG DẦN (thứ tự nhất quán → chống deadlock chéo).
+  const lockIds = [...txnIds].sort((a, b) => a - b);
+
+  let created;
+  try {
+    created = await db.$transaction(async (tx) => {
+      // ── FIX 1 (TOCTOU race) — KHÓA HÀNG Transaction cha TRƯỚC khi đọc settlement/tính remaining.
+      // $transaction mặc định READ COMMITTED: 2 phiếu thu SONG SONG cùng (GD, side) đọc cùng `remaining`
+      // cũ → cùng qua check → thu VƯỢT nợ (quỹ +2×, over-settlement). SELECT ... FOR UPDATE trên hàng
+      // `transactions` giữ khóa tới khi phiếu 1 COMMIT; phiếu 2 BLOCK tại đây → khi resume, groupBy dưới
+      // (statement mới, READ COMMITTED) đọc settlement ĐÃ COMMIT của phiếu 1 → remaining mới → DEBT_OVERPAY.
+      const lockPlaceholders = lockIds.map((_, i) => `$${i + 1}`).join(', ');
+      await tx.$queryRawUnsafe(`SELECT id FROM transactions WHERE id IN (${lockPlaceholders}) FOR UPDATE`, ...lockIds);
+
+      // FIX 4 — batch đọc GD + tid (1 query mỗi loại, KHÔNG N+1 findUnique trong vòng lặp).
+      const txnRows = await tx.transaction.findMany({
+        where: { id: { in: txnIds } },
+        select: { id: true, revenuePartner: true, revenueSell: true, customerId: true, tidId: true, status: true, deletedAt: true, settled: true }
+      });
+      const txnMap = new Map(txnRows.map((t) => [t.id, t]));
+      let tidPartnerMap = new Map<number, number | null>();
+      if (input.partnerId != null) {
+        const tidIds = [...new Set(txnRows.map((t) => t.tidId))];
+        const tidRows = await tx.tid.findMany({ where: { id: { in: tidIds } }, select: { id: true, partnerId: true } });
+        tidPartnerMap = new Map(tidRows.map((t) => [t.id, t.partnerId]));
+      }
+      // Σ settlement ĐÃ CÓ theo (GD, side) — batch 1 groupBy (đọc SAU khi đã khóa hàng cha).
+      const prevAgg = await tx.cashDebtSettlement.groupBy({ by: ['transactionId', 'side'], where: { transactionId: { in: txnIds } }, _sum: { amount: true } });
+      const paidBySide = new Map<string, number>();
+      for (const p of prevAgg) paidBySide.set(`${p.transactionId}:${p.side}`, p._sum.amount ?? 0);
+
+      // Kiểm + tính net cho TỪNG GD (đọc trong tx + đã khóa → chống race I#2).
+      for (const txnId of txnIds) {
+        const t = txnMap.get(txnId);
+        if (!t || t.deletedAt) throw new TxGuardError('TXN_INVALID', `Giao dịch #${txnId} không tồn tại.`);
+        if (t.status === 'CANCELLED') throw new TxGuardError('TXN_INVALID', `Giao dịch #${txnId} đã hủy, không thu công nợ được.`);
+        // Khớp đối tượng.
+        if (input.customerId != null && t.customerId !== input.customerId) throw new TxGuardError('TXN_OBJECT_MISMATCH', `Giao dịch #${txnId} không thuộc khách hàng đã chọn.`);
+        if (input.partnerId != null) {
+          const tp = tidPartnerMap.get(t.tidId);
+          if (tp == null || tp !== input.partnerId) throw new TxGuardError('TXN_OBJECT_MISMATCH', `Giao dịch #${txnId} không thuộc đối tác đã chọn.`);
+        }
+        const revBySide: Record<string, number> = { PARTNER: t.revenuePartner, SELL: t.revenueSell };
+        for (const side of ['PARTNER', 'SELL']) {
+          const adding = addBySide.get(`${txnId}:${side}`) ?? 0;
+          if (adding <= 0) continue;
+          const remaining = revBySide[side] - (paidBySide.get(`${txnId}:${side}`) ?? 0);
+          if (adding > remaining) {
+            const label = side === 'PARTNER' ? 'đối tác' : 'khách/bán';
+            throw new TxGuardError('DEBT_OVERPAY', `Số thu khoản ${label} của GD #${txnId} vượt công nợ còn lại (còn ${Math.max(0, remaining)} đ).`);
+          }
+        }
+      }
+
+      // Tạo phiếu thu (PT) + các dòng settlement.
+      const code = await nextCode('PT', tx);
+      const entry = await tx.cashEntry.create({
+        data: {
+          code, kind: 'THU', categoryId: input.categoryId, fundId: input.fundId, amount: total, method, entryDate,
+          customerId: input.customerId ?? null, partnerId: input.partnerId ?? null,
+          docPath: input.docPath?.trim() || null, docName: input.docName?.trim() || null,
+          sourceType: null, note: input.note?.trim() || null, status: 'POSTED', createdBy: user.id
+        }
+      });
+      for (const ln of lines) {
+        await tx.cashDebtSettlement.create({ data: { cashEntryId: entry.id, transactionId: ln.transactionId, side: (ln.side ?? '').trim().toUpperCase(), amount: parseAmount(ln.amount)! } });
+      }
+
+      // HỆ QUẢ: GD nào cả 2 side net=0 → settled=true; chưa đủ → settled=false. Batch 1 groupBy sau insert.
+      const postAgg = await tx.cashDebtSettlement.groupBy({ by: ['transactionId', 'side'], where: { transactionId: { in: txnIds } }, _sum: { amount: true } });
+      const paidPost = new Map<string, number>();
+      for (const a of postAgg) paidPost.set(`${a.transactionId}:${a.side}`, a._sum.amount ?? 0);
+      for (const txnId of txnIds) {
+        const t = txnMap.get(txnId);
+        if (!t) continue;
+        const remainingPartner = t.revenuePartner - (paidPost.get(`${txnId}:PARTNER`) ?? 0);
+        const remainingSell = t.revenueSell - (paidPost.get(`${txnId}:SELL`) ?? 0);
+        const fullySettled = remainingPartner <= 0 && remainingSell <= 0;
+        if (fullySettled !== t.settled) {
+          await tx.transaction.update({ where: { id: txnId }, data: { settled: fullySettled, settledAt: fullySettled ? new Date() : null, updatedBy: user.id } });
+        }
+      }
+      return entry;
+    });
+  } catch (e) {
+    if (e instanceof TxGuardError) return { ok: false, error: e.code, message: e.userMessage };
+    throw e;
+  }
+
+  await writeAudit(db, {
+    actorUserId: user.id,
+    action: 'CASH_DEBT_RECEIPT_CREATED',
+    targetType: 'CashEntry',
+    targetId: String(created.id),
+    after: auditSnapshot({ code: created.code, amount: total, categoryId: input.categoryId, fundId: input.fundId, method, entryDate: entryDate.toISOString(), customerId: input.customerId ?? null, partnerId: input.partnerId ?? null, lines: lines.length, transactions: txnIds })
+  });
+  return { ok: true, id: created.id };
+}
+
+/**
  * CASHENTRY_CANCEL — hủy phiếu (POSTED→CANCELLED) nguyên tử + nhập lại mật khẩu (§14) + lý do.
  * Conditional updateMany trong $transaction (chống hủy 2 lần / race). Từ chối cũng ghi audit.
+ * M3 — nếu là phiếu THU công nợ (có CashDebtSettlement): trong CÙNG $transaction xóa các dòng
+ * settlement + TÍNH LẠI settled của các GD liên quan (nợ còn lại > 0 → settled=false).
  */
 export async function cancelCashEntry(id: number, reason: string, password: string): Promise<MutationResult> {
   const g = await requirePermission('CASHENTRY_CANCEL', { action: 'CASH_ENTRY_CANCELLED', targetType: 'CashEntry', targetId: String(id) });
@@ -356,6 +557,26 @@ export async function cancelCashEntry(id: number, reason: string, password: stri
         data: { status: 'CANCELLED', cancelReason: r, cancelledAt, updatedBy: user.id }
       });
       if (moved.count === 0) throw new TxGuardError('INVALID_STATE', 'Chỉ phiếu đang hiệu lực (đã ghi) mới hủy được.');
+
+      // M3 — phiếu THU công nợ: gỡ các dòng settlement + TÍNH LẠI settled của GD liên quan (net > 0
+      // → settled=false). Chỉ chạy khi hủy THÀNH CÔNG (moved.count===1) nên chống hủy 2 lần (lần 2
+      // đã CANCELLED → moved.count===0 → throw trước khi tới đây, settlement không bị gỡ lần nữa).
+      const settlements = await txc.cashDebtSettlement.findMany({ where: { cashEntryId: id }, select: { transactionId: true } });
+      if (settlements.length > 0) {
+        const affected = [...new Set(settlements.map((s) => s.transactionId))];
+        await txc.cashDebtSettlement.deleteMany({ where: { cashEntryId: id } });
+        for (const txnId of affected) {
+          const t = await txc.transaction.findUnique({ where: { id: txnId }, select: { revenuePartner: true, revenueSell: true, settled: true } });
+          if (!t) continue;
+          const agg = await txc.cashDebtSettlement.groupBy({ by: ['side'], where: { transactionId: txnId }, _sum: { amount: true } });
+          const paid = new Map<string, number>();
+          for (const a of agg) paid.set(a.side, a._sum.amount ?? 0);
+          const fullySettled = t.revenuePartner - (paid.get('PARTNER') ?? 0) <= 0 && t.revenueSell - (paid.get('SELL') ?? 0) <= 0;
+          if (fullySettled !== t.settled) {
+            await txc.transaction.update({ where: { id: txnId }, data: { settled: fullySettled, settledAt: fullySettled ? new Date() : null, updatedBy: user.id } });
+          }
+        }
+      }
     });
   } catch (e) {
     if (e instanceof TxGuardError) return { ok: false, error: e.code, message: e.userMessage };

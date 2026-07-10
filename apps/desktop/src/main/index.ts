@@ -267,6 +267,15 @@ app.whenReady().then(async () => {
     return;
   }
 
+  // PHASE H2-debt Thu công nợ: net-of-settlement (I#2) + DEBT_OVERPAY + settled hệ quả + quỹ (I#1)
+  // + lợi nhuận không đổi (I#13) + hủy hoàn settlement + create thường chặn DEBT_* + H5 toggle vô hiệu.
+  if (process.env['GLB_SELFTEST'] === '27') {
+    const { runDebtReceiptSelfTest } = await import('./selftest-debtreceipt.js');
+    const code = await runDebtReceiptSelfTest();
+    app.exit(code);
+    return;
+  }
+
   await createWindow();
   startHousekeeping();
 

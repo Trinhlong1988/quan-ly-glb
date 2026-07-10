@@ -198,6 +198,7 @@ const api = {
   cashEntryReport: (filter: unknown) => ipcRenderer.invoke('cashEntry:report', filter),
   cashEntryCategoryLite: () => ipcRenderer.invoke('cashEntry:categoryLite'),
   cashEntryCreate: (input: unknown) => ipcRenderer.invoke('cashEntry:create', input),
+  cashEntryCreateDebtReceipt: (input: unknown) => ipcRenderer.invoke('cashEntry:createDebtReceipt', input),
   cashEntryCancel: (id: number, reason: string, password: string) => ipcRenderer.invoke('cashEntry:cancel', { id, reason, password }),
 
   // Thùng rác (E4)
@@ -223,8 +224,9 @@ const api = {
   transactionCreate: (input: unknown) => ipcRenderer.invoke('transaction:create', input),
   transactionUpdate: (id: number, input: unknown) => ipcRenderer.invoke('transaction:update', { id, input }),
   transactionDelete: (ids: number[], password: string) => ipcRenderer.invoke('transaction:delete', { ids, password }),
-  transactionSettle: (ids: number[], settled: boolean) => ipcRenderer.invoke('transaction:settle', { ids, settled }),
+  // FIX 2 — GỠ transactionSettle (H5): handler 'transaction:settle' đã gỡ → gọi sẽ reject "No handler". API chết.
   debtSummary: (filter: unknown) => ipcRenderer.invoke('debt:summary', filter),
+  debtOpenTransactions: (filter: unknown) => ipcRenderer.invoke('debt:openTransactions', filter),
 
   // Duyệt hủy bill (P1.2 Approval Engine)
   cancelRequest: (transactionId: number, reason: string) => ipcRenderer.invoke('approval:requestCancel', { transactionId, reason }),

@@ -862,6 +862,48 @@ export interface CashflowSummary {
   totalChi: number;
   net: number;
 }
+// H2-debt — Thu công nợ (createDebtReceipt): 1 phiếu THU (category DEBT_*) tất toán ≥1 GD.
+export interface DebtReceiptLine {
+  transactionId: number;
+  side: string; // PARTNER | SELL
+  amount: number;
+}
+export interface CreateDebtReceiptInput {
+  categoryId: number; // DEBT_CUSTOMER | DEBT_PARTNER
+  fundId: number;
+  method: string; // CK | CASH
+  entryDate: string;
+  customerId?: number | null;
+  partnerId?: number | null;
+  note?: string | null;
+  docPath?: string | null;
+  docName?: string | null;
+  lines: DebtReceiptLine[];
+}
+// H2-debt — 1 GD còn nợ net (per-side remaining) cho DebtPage + màn Thu công nợ.
+export interface DebtOpenTxnDto {
+  id: number;
+  code: string | null;
+  txnDate: string;
+  tid: string | null;
+  mid: string | null;
+  hkdName: string | null;
+  customerId: number | null;
+  customerName: string | null;
+  partnerId: number | null;
+  partnerName: string | null;
+  revenuePartner: number;
+  revenueSell: number;
+  remainingPartner: number;
+  remainingSell: number;
+  settled: boolean;
+}
+export interface DebtOpenResult {
+  ok: boolean;
+  error?: string;
+  message?: string;
+  data?: DebtOpenTxnDto[];
+}
 export interface CashEntryListResult {
   ok: boolean;
   error?: string;
@@ -1127,6 +1169,7 @@ export interface GlbApi {
   cashEntryReport(filter: CashEntryFilter): Promise<CashEntryListResult>;
   cashEntryCategoryLite(): Promise<ListResult<EntryCategoryLite>>;
   cashEntryCreate(input: CreateCashEntryInput): Promise<MutationOutcome>;
+  cashEntryCreateDebtReceipt(input: CreateDebtReceiptInput): Promise<MutationOutcome>;
   cashEntryCancel(id: number, reason: string, password: string): Promise<MutationOutcome>;
 
   // Thùng rác (E4)
@@ -1152,8 +1195,9 @@ export interface GlbApi {
   transactionCreate(input: CreateTransactionInput): Promise<MutationOutcome>;
   transactionUpdate(id: number, input: UpdateTransactionInput): Promise<MutationOutcome>;
   transactionDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
-  transactionSettle(ids: number[], settled: boolean): Promise<{ ok: boolean; changed?: number; error?: string; message?: string }>;
+  // FIX 2 — transactionSettle đã GỠ (H5): handler 'transaction:settle' không còn; settled chỉ đổi qua phiếu Thu công nợ.
   debtSummary(filter: TransactionFilter): Promise<{ ok: boolean; data?: DebtSummary; error?: string; message?: string }>;
+  debtOpenTransactions(filter: TransactionFilter): Promise<DebtOpenResult>;
 
   // ── P1.2 Approval Engine (hủy bill có duyệt) ──
   cancelRequest(transactionId: number, reason: string): Promise<MutationOutcome>;

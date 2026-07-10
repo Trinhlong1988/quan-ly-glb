@@ -13,7 +13,7 @@ import { writeAudit } from './audit.js';
 const VIEW = 'REVENUE_VIEW';
 const MANAGE = 'REVENUE_MANAGE';
 const DEBT_VIEW = 'DEBT_VIEW';
-const DEBT_SETTLE = 'DEBT_SETTLE';
+// H5: DEBT_SETTLE (toggle tay) đã vô hiệu — settled chỉ đổi qua phiếu Thu công nợ.
 
 export interface MutationResult {
   ok: boolean;
@@ -105,10 +105,36 @@ export interface RevenueSummary {
 }
 
 export interface DebtSummary {
-  count: number; // số giao dịch CHƯA đối soát
-  debtPartner: number; // công nợ phía đối tác
-  debtSell: number; // công nợ phía khách
-  debtTotal: number; // tổng công nợ thu về
+  count: number; // số giao dịch CÒN NỢ (net > 0)
+  debtPartner: number; // công nợ phía đối tác (net)
+  debtSell: number; // công nợ phía khách (net)
+  debtTotal: number; // tổng công nợ thu về (net)
+}
+
+// H2-debt — 1 GD còn nợ (net-of-settlement) để hiển thị DebtPage + chọn khi Thu công nợ.
+export interface DebtOpenTxnDto {
+  id: number;
+  code: string | null;
+  txnDate: string;
+  tid: string | null;
+  mid: string | null;
+  hkdName: string | null;
+  customerId: number | null;
+  customerName: string | null;
+  partnerId: number | null; // đối tác của TID (đối tượng nợ side PARTNER)
+  partnerName: string | null;
+  revenuePartner: number; // tổng chênh đối tác (gốc)
+  revenueSell: number; // tổng chênh bán (gốc)
+  remainingPartner: number; // còn nợ đối tác = revenuePartner − Σ settle(PARTNER)
+  remainingSell: number; // còn nợ khách = revenueSell − Σ settle(SELL)
+  settled: boolean;
+}
+
+export interface DebtOpenResult {
+  ok: boolean;
+  error?: string;
+  message?: string;
+  data?: DebtOpenTxnDto[];
 }
 
 const SCALE = 1000;
@@ -255,21 +281,19 @@ export async function deleteTransactions(ids: number[], password: string): Promi
   return { ok: true, deleted };
 }
 
-/** Đối soát: đánh dấu (các) giao dịch đã thu công nợ. */
-export async function settleTransactions(ids: number[], settled: boolean): Promise<MutationResult & { changed?: number }> {
-  const g = await requirePermission(DEBT_SETTLE, { action: 'DEBT_SETTLED', targetType: 'Transaction' });
-  if (!g.ok) return g;
-  const { db, user } = g;
-  if (!ids || ids.length === 0) return { ok: false, error: 'VALIDATION', message: 'Chưa chọn giao dịch để đối soát.' };
-  let changed = 0;
-  for (const id of ids) {
-    const row = await db.transaction.findUnique({ where: { id } });
-    if (!row || row.deletedAt || row.settled === settled) continue;
-    await db.transaction.update({ where: { id }, data: { settled, settledAt: settled ? new Date() : null, updatedBy: user.id } });
-    changed++;
-  }
-  await writeAudit(db, { actorUserId: user.id, action: 'DEBT_SETTLED', targetType: 'Transaction', after: auditSnapshot({ ids, settled, changed }) });
-  return { ok: true, changed };
+/**
+ * H5 — VÔ HIỆU HÓA toggle `settled` thủ công (spec §2.4/§3/§6.1, invariant I#9).
+ * `settled` chỉ còn được đổi qua phiếu Thu công nợ (createDebtReceipt) / hủy phiếu thu (cùng
+ * $transaction, tính theo net-of-settlement). Hai cơ chế song song (toggle tay + phiếu thu) sẽ mâu
+ * thuẫn: toggle tay set settled=true mà KHÔNG có tiền vào quỹ, hoặc đảo ngược net-of-settlement.
+ * Giữ chữ ký để không vỡ import cũ; IPC handler `transaction:settle` đã GỠ (không expose renderer).
+ */
+export async function settleTransactions(_ids: number[], _settled: boolean): Promise<MutationResult & { changed?: number }> {
+  return {
+    ok: false,
+    error: 'DEBT_SETTLE_DISABLED',
+    message: 'Đối soát công nợ nay thực hiện qua phiếu Thu công nợ (chọn số tiền thu từng khoản). Không đánh dấu đã thu thủ công.'
+  };
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -424,22 +448,96 @@ function emptySummary(): RevenueSummary {
   return { count: 0, totalAmount: 0, totalRevenuePartner: 0, totalRevenueSell: 0, totalRevenue: 0 };
 }
 
-/** Công nợ thu về = tổng hợp các giao dịch CHƯA đối soát (settled=false) trong phạm vi lọc. */
+/**
+ * H4 — Σ số tiền ĐÃ tất toán theo (transactionId, side) từ CashDebtSettlement (net-of-settlement).
+ * 1 group-by (KHÔNG N+1). key = `${transactionId}:${side}`. Chỉ tính các GD trong `txnIds`.
+ * Settlement bị xóa cứng khi hủy phiếu thu (M3) nên các dòng còn lại luôn hiệu lực.
+ */
+async function settledByTxnSide(db: Db, txnIds: number[]): Promise<Map<string, number>> {
+  const paid = new Map<string, number>();
+  if (txnIds.length === 0) return paid;
+  const rows = await db.cashDebtSettlement.groupBy({
+    by: ['transactionId', 'side'],
+    where: { transactionId: { in: txnIds } },
+    _sum: { amount: true }
+  });
+  for (const r of rows) paid.set(`${r.transactionId}:${r.side}`, r._sum.amount ?? 0);
+  return paid;
+}
+
+/**
+ * Công nợ thu về = tổng công nợ CÒN LẠI (NET-OF-SETTLEMENT, H4/I#2) trong phạm vi lọc.
+ * KHÔNG dùng cờ `settled` (sai khi thu TỪNG PHẦN: GD chưa settled sẽ tính TOÀN BỘ revenue là nợ, bỏ
+ * qua phần đã thu qua CashDebtSettlement → thu trùng). Với TỪNG side:
+ *   còn nợ(side) = revenue(side) − Σ CashDebtSettlement.amount(side); chỉ tính phần > 0.
+ * count = số GD còn nợ (net PARTNER > 0 hoặc net SELL > 0).
+ */
 export async function debtSummary(filter: TransactionFilter = {}): Promise<{ ok: boolean; error?: string; message?: string; data?: DebtSummary }> {
   const g = await requirePermission(DEBT_VIEW, { action: DEBT_VIEW });
   if (!g.ok) return g;
   const db = g.db;
-  const where = await buildWhere(db, { ...filter, settled: false });
+  const where = await buildWhere(db, filter); // KHÔNG ép settled — tính theo net
   if (where === null) return { ok: true, data: { count: 0, debtPartner: 0, debtSell: 0, debtTotal: 0 } };
   where.status = { not: 'CANCELLED' }; // P1.2: bill đã hủy không còn là công nợ
-  const agg = await db.transaction.aggregate({ where, _sum: { revenuePartner: true, revenueSell: true, revenueAmount: true }, _count: true });
-  return {
-    ok: true,
-    data: {
-      count: agg._count,
-      debtPartner: agg._sum.revenuePartner ?? 0,
-      debtSell: agg._sum.revenueSell ?? 0,
-      debtTotal: agg._sum.revenueAmount ?? 0
-    }
-  };
+  const txns = await db.transaction.findMany({ where, select: { id: true, revenuePartner: true, revenueSell: true } });
+  const paid = await settledByTxnSide(db, txns.map((t) => t.id));
+  let debtPartner = 0, debtSell = 0, count = 0;
+  for (const t of txns) {
+    const rp = Math.max(0, t.revenuePartner - (paid.get(`${t.id}:PARTNER`) ?? 0));
+    const rs = Math.max(0, t.revenueSell - (paid.get(`${t.id}:SELL`) ?? 0));
+    if (rp > 0 || rs > 0) { count++; debtPartner += rp; debtSell += rs; }
+  }
+  return { ok: true, data: { count, debtPartner, debtSell, debtTotal: debtPartner + debtSell } };
+}
+
+/**
+ * DEBT_VIEW — danh sách GD CÒN NỢ net (per-side remaining) trong phạm vi lọc — nguồn cho DebtPage
+ * (hiển thị nợ còn lại từng khoản) + màn "Thu công nợ" (chọn GD → nhập số thu ≤ còn lại). Chỉ GD
+ * còn nợ (remainingPartner > 0 hoặc remainingSell > 0), chưa xóa, status ≠ CANCELLED.
+ */
+export async function debtOpenTransactions(filter: TransactionFilter = {}): Promise<DebtOpenResult> {
+  const g = await requirePermission(DEBT_VIEW, { action: DEBT_VIEW });
+  if (!g.ok) return g;
+  const db = g.db;
+  const where = await buildWhere(db, filter);
+  if (where === null) return { ok: true, data: [] };
+  where.status = { not: 'CANCELLED' };
+  const rows = await db.transaction.findMany({ where, orderBy: [{ txnDate: 'asc' }, { id: 'asc' }] });
+  const paid = await settledByTxnSide(db, rows.map((r) => r.id));
+
+  // Nhãn hiển thị: TID (→ MID/HKD/partner) + khách.
+  const tidIds = [...new Set(rows.map((r) => r.tidId))];
+  const tidMap = new Map(
+    (await db.tid.findMany({ where: { id: { in: tidIds } }, select: { id: true, tid: true, mid: true, hkdName: true, partnerId: true } })).map((t) => [t.id, t])
+  );
+  const partnerIds = [...new Set([...tidMap.values()].map((t) => t.partnerId).filter((x): x is number => x != null))];
+  const custIds = [...new Set(rows.map((r) => r.customerId).filter((x): x is number => x != null))];
+  const partnerMap = new Map((await db.partner.findMany({ where: { id: { in: partnerIds } }, select: { id: true, name: true } })).map((p) => [p.id, p.name]));
+  const custMap = new Map((await db.customer.findMany({ where: { id: { in: custIds } }, select: { id: true, fullName: true, nickname: true } })).map((c) => [c.id, c.nickname || c.fullName]));
+
+  const data: DebtOpenTxnDto[] = [];
+  for (const r of rows) {
+    const remainingPartner = Math.max(0, r.revenuePartner - (paid.get(`${r.id}:PARTNER`) ?? 0));
+    const remainingSell = Math.max(0, r.revenueSell - (paid.get(`${r.id}:SELL`) ?? 0));
+    if (remainingPartner <= 0 && remainingSell <= 0) continue;
+    const t = tidMap.get(r.tidId);
+    data.push({
+      id: r.id,
+      code: r.code,
+      txnDate: r.txnDate.toISOString(),
+      tid: t?.tid ?? null,
+      mid: t?.mid ?? null,
+      hkdName: t?.hkdName ?? null,
+      customerId: r.customerId,
+      customerName: r.customerId != null ? custMap.get(r.customerId) ?? null : null,
+      partnerId: t?.partnerId ?? null,
+      partnerName: t?.partnerId != null ? partnerMap.get(t.partnerId) ?? null : null,
+      revenuePartner: r.revenuePartner,
+      revenueSell: r.revenueSell,
+      remainingPartner,
+      remainingSell,
+      settled: r.settled
+    });
+  }
+  return { ok: true, data };
 }
