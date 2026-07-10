@@ -1,4 +1,4 @@
-import { Search, RotateCcw } from 'lucide-react';
+import { Search, FilterX } from 'lucide-react';
 import { inputCls } from './Field.js';
 
 /** A dropdown dimension (đại lý, ngân hàng, trạng thái, vai trò…). */
@@ -12,7 +12,7 @@ export interface FilterSelect {
 
 /**
  * Reusable filter bar (R_UX_FILTER): text search + từ ngày → đến ngày + N dimension selects
- * + Lọc + Làm mới. All filtering is server-side — this only collects params.
+ * + Lọc + Xóa lọc. All filtering is server-side — this only collects params.
  */
 export function FilterBar({
   search,
@@ -76,10 +76,10 @@ export function FilterBar({
       </button>
       <button
         onClick={onReset}
-        title="Làm mới bộ lọc"
+        title="Xóa toàn bộ bộ lọc, đưa về mặc định"
         className="flex items-center gap-1 rounded-md border border-line px-3 py-2 text-sm text-slate-600 hover:bg-appbg"
       >
-        <RotateCcw className="h-4 w-4" /> Làm mới
+        <FilterX className="h-4 w-4" /> Xóa lọc
       </button>
     </div>
   );

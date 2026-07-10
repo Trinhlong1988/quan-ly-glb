@@ -76,7 +76,10 @@ function SourceTab({ canManage }: { canManage: boolean }): JSX.Element {
     <div>
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} nguồn · <span className="text-slate-400">ví dụ: Khách hàng, Nội bộ</span></div>
-        {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm nguồn</Button>}
+        <div className="flex gap-2">
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('nguon_tk', ['Tên nguồn', 'Người sửa gần nhất', 'Ngày', 'Giờ'], rows.map((s) => [s.name, s.updatedByName ?? s.createdByName ?? '', fmtDate(s.updatedAt), fmtTime(s.updatedAt)]))}>Xuất Excel</Button>
+          {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm nguồn</Button>}
+        </div>
       </div>
       {canManage && <SelectionBar count={sel.count} entityLabel="nguồn" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
@@ -192,7 +195,7 @@ function AccountTab({ canManage }: { canManage: boolean }): JSX.Element {
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} tài khoản</div>
         <div className="flex gap-2">
-          <Button variant="neutral" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('tk_nhan_tien', ['Nguồn', 'Tên TK', 'STK', 'Ngân hàng', 'Chi nhánh', 'CCCD', 'Khách hàng', 'Số điện thoại'], rows.map((r) => [r.sourceName, r.accountName, r.accountNumber, r.bankCode, r.branch, r.cccdNumber, r.customerName ?? 'Nội bộ', r.phone]))}>Xuất Excel</Button>
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('tk_nhan_tien', ['Nguồn', 'Tên TK', 'STK', 'Ngân hàng', 'Chi nhánh', 'CCCD', 'Khách hàng', 'Số điện thoại'], rows.map((r) => [r.sourceName, r.accountName, r.accountNumber, r.bankCode, r.branch, r.cccdNumber, r.customerName ?? 'Nội bộ', r.phone]))}>Xuất Excel</Button>
           {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => sources.length && banks.length ? setForm({ mode: 'create' }) : toast.alert('Cần có ít nhất 1 nguồn tài khoản và 1 ngân hàng trước.', 'Thiếu dữ liệu nền')}>Thêm tài khoản</Button>}
         </div>
       </div>

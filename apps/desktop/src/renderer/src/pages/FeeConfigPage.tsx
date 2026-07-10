@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2, Loader2, Percent, Tag, Save } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, Percent, Tag, Save, Download } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate, fmtTime } from '@glb/shared';
 import type { FeeTypeDto, FeeRateDto, PartnerDto, LiteRef, CardTypeDto } from '../../../preload/index.d';
@@ -88,7 +88,10 @@ function TypeTab({ canManage }: { canManage: boolean }): JSX.Element {
     <div>
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} loại phí · <span className="text-slate-400">ví dụ: Ủy quyền, Tiền chờ, Tiền Nhanh</span></div>
-        {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm loại phí</Button>}
+        <div className="flex gap-2">
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('loai_phi', ['Tên loại phí', 'Người sửa gần nhất', 'Ngày', 'Giờ'], rows.map((t) => [t.name, t.updatedByName ?? t.createdByName ?? '', fmtDate(t.updatedAt), fmtTime(t.updatedAt)]))}>Xuất Excel</Button>
+          {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm loại phí</Button>}
+        </div>
       </div>
       {canManage && <SelectionBar count={sel.count} entityLabel="loại phí" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
@@ -206,7 +209,7 @@ function RateTab({ canManage }: { canManage: boolean }): JSX.Element {
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} biểu phí</div>
         <div className="flex gap-2">
-          <Button variant="neutral" icon={<Percent className="h-4 w-4" />} onClick={() => exportCsv('bieu_phi', ['Đối tác', 'Ngân hàng', 'Loại thẻ', 'Hiệu lực từ', 'Đang hiệu lực', 'Phí mua %', 'Phí cài máy %', 'Phí bán %', 'Chênh lệch với Nhà cung cấp %', 'Chênh lệch với Khách hàng %'], rows.map((r) => [r.partnerName, r.bankCode, r.cardTypeName, fmtDate(r.effectiveFrom), r.isCurrent ? 'x' : '', r.phiMua, r.phiCaiMay, r.phiBan, r.clNcc, r.clKh]))}>Xuất Excel</Button>
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('bieu_phi', ['Đối tác', 'Ngân hàng', 'Loại thẻ', 'Hiệu lực từ', 'Đang hiệu lực', 'Phí mua %', 'Phí cài máy %', 'Phí bán %', 'Chênh lệch với Nhà cung cấp %', 'Chênh lệch với Khách hàng %'], rows.map((r) => [r.partnerName, r.bankCode, r.cardTypeName, fmtDate(r.effectiveFrom), r.isCurrent ? 'x' : '', r.phiMua, r.phiCaiMay, r.phiBan, r.clNcc, r.clKh]))}>Xuất Excel</Button>
           {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => partners.length ? setSetOpen('new') : toast.alert('Cần có đối tác + loại thẻ + liên kết ngân hàng trước khi đặt phí.', 'Thiếu dữ liệu nền')}>Đặt biểu phí</Button>}
         </div>
       </div>

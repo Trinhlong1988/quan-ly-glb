@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Loader2, ScrollText, Search } from 'lucide-react';
+import { Loader2, ScrollText, Search, Download, FilterX } from 'lucide-react';
 import type { AuditRowDto } from '../../../preload/index.d';
 import { fmtDate, fmtTime, fmtDateTime } from '@glb/shared';
 import { useToast } from '../lib/toast.js';
 import { Modal } from '../components/Modal.js';
+import { Button } from '../components/Button.js';
 import { inputCls } from '../components/Field.js';
+import { exportCsv } from '../lib/exportCsv.js';
 
 const ACTIONS = [
   'LOGIN_SUCCESS', 'LOGIN_FAILED', 'PERMISSION_DENIED',
@@ -93,6 +95,12 @@ export function AuditPage(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [action]);
 
+  function resetFilters(): void {
+    setAction('');
+    setSearch('');
+    setTimeout(reload, 0);
+  }
+
   return (
     <div>
       <div className="mb-4">
@@ -119,9 +127,15 @@ export function AuditPage(): JSX.Element {
             </option>
           ))}
         </select>
-        <button onClick={reload} className="rounded-md border border-line px-3 py-2 text-sm text-slate-600 hover:bg-appbg">
+        <button onClick={reload} className="rounded-md bg-brand px-3 py-2 text-sm font-medium text-white hover:bg-brand-hover">
           Lọc
         </button>
+        <button onClick={resetFilters} title="Xóa toàn bộ bộ lọc, đưa về mặc định" className="flex items-center gap-1 rounded-md border border-line px-3 py-2 text-sm text-slate-600 hover:bg-appbg">
+          <FilterX className="h-4 w-4" /> Xóa lọc
+        </button>
+        <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('nhat_ky', ['Ngày', 'Giờ', 'Người thao tác', 'Hành động', 'Đối tượng'], rows.map((r) => [fmtDate(r.createdAt), fmtTime(r.createdAt), r.actorUsername ?? (r.actorUserId ? `#${r.actorUserId}` : ''), actionLabel(r.action), r.targetType ? targetLabel(r.targetType) + (r.targetId ? ` #${r.targetId}` : '') : '']))}>
+          Xuất Excel
+        </Button>
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">

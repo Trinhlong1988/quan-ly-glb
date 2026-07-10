@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Check, X, Loader2, ClipboardCheck } from 'lucide-react';
+import { Check, X, Loader2, ClipboardCheck, Download } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { fmtDate } from '@glb/shared';
 import type { CancelRequestDto } from '../../../preload/index.d';
@@ -11,6 +11,7 @@ import { Button } from '../components/Button.js';
 import { StatBar } from '../components/StatBar.js';
 import { statusTone } from '../components/StatusPill.js';
 import { useRowSelection, SelectAllCell, SelectCell } from '../components/Selection.js';
+import { exportCsv } from '../lib/exportCsv.js';
 
 /** VND, nhóm 3 số bằng dấu chấm (KHÔNG toLocaleString — R_UI QA gate). */
 function money(n: number): string {
@@ -103,9 +104,14 @@ export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
 
   return (
     <div>
-      <div className="mb-4">
-        <h2 className="text-lg font-semibold text-slate-800">Duyệt hủy bill</h2>
-        <p className="text-sm text-slate-500">Các yêu cầu hủy bill đang chờ bạn duyệt — người tạo yêu cầu khác người duyệt (phân vai theo cấp).</p>
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-800">Duyệt hủy bill</h2>
+          <p className="text-sm text-slate-500">Các yêu cầu hủy bill đang chờ bạn duyệt — người tạo yêu cầu khác người duyệt (phân vai theo cấp).</p>
+        </div>
+        <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('duyet_huy_bill', ['Mã bill', 'Số tiền', 'Lý do hủy', 'Người tạo yêu cầu', 'Thời gian'], rows.map((r) => [r.billCode ?? `#${r.transactionId}`, r.amount, r.reason, r.requestedByName ?? `#${r.requestedBy}`, fmtDate(r.requestedAt)]))}>
+          Xuất Excel
+        </Button>
       </div>
 
       <StatBar

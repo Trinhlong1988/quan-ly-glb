@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Loader2, Trash2, RotateCcw, ShieldAlert, Loader } from 'lucide-react';
+import { Loader2, Trash2, RotateCcw, ShieldAlert, Loader, Download } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate, fmtTime } from '@glb/shared';
 import type { TrashRow } from '../../../preload/index.d';
@@ -10,6 +10,7 @@ import { StatBar } from '../components/StatBar.js';
 import { Modal } from '../components/Modal.js';
 import { Field } from '../components/Field.js';
 import { PasswordInput } from '../components/PasswordInput.js';
+import { exportCsv } from '../lib/exportCsv.js';
 
 // E4 Thùng rác (R_TRASH_RESTORE): liệt kê dữ liệu đã xóa mềm, Admin phục hồi.
 export function TrashPage({ user }: { user: AuthUser }): JSX.Element {
@@ -67,11 +68,16 @@ export function TrashPage({ user }: { user: AuthUser }): JSX.Element {
             Dữ liệu đã xóa mềm — chưa mất hẳn. Phục hồi để dùng lại, hoặc <b>xóa vĩnh viễn</b> (không thể khôi phục).
           </p>
         </div>
-        {canPurge && rows.length > 0 && (
-          <Button variant="danger" icon={<Trash2 className="h-4 w-4" />} onClick={() => setShowEmpty(true)}>
-            Dọn sạch thùng rác
+        <div className="flex items-center gap-2">
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('thung_rac', ['Loại', 'Mã', 'Tên', 'Người xóa', 'Ngày xóa', 'Giờ'], rows.map((r) => [r.entityLabel, r.code ?? '', r.label, r.deletedByName ?? '', fmtDate(r.deletedAt), fmtTime(r.deletedAt)]))}>
+            Xuất Excel
           </Button>
-        )}
+          {canPurge && rows.length > 0 && (
+            <Button variant="danger" icon={<Trash2 className="h-4 w-4" />} onClick={() => setShowEmpty(true)}>
+              Dọn sạch thùng rác
+            </Button>
+          )}
+        </div>
       </div>
 
       <StatBar items={[{ label: 'Tổng mục', value: rows.length, tone: 'bg-brand-tint text-brand' }, ...byKind]} />

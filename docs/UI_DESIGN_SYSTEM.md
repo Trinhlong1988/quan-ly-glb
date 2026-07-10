@@ -30,12 +30,17 @@ brand `#1657D0` · brand-hover `#1247AE` · sidebar `#10233F` · appbg `#F4F6FA`
 ## 4. Nút (R_BUTTON_SEMANTICS)
 | Loại | Component | Màu |
 |---|---|---|
-| Thực hiện / Xác nhận / Lưu / Thêm mới | `<Button variant="confirm">` | 🟢 xanh brand |
+| Thực hiện / Xác nhận / Lưu / Thêm mới / **Xuất Excel** | `<Button variant="confirm">` | 🟢 xanh brand |
 | Sửa | `<Button variant="edit">` hoặc IconBtn `variant="edit"` | 🟡 vàng warning |
 | Xóa | `<Button variant="danger">` / IconBtn `variant="danger"` | 🔴 đỏ danger |
-| Hủy / Làm mới / phụ | `<Button variant="neutral">` | ⚪ xám viền |
+| **Làm mới / tải lại nhẹ** | `<Button variant="soft">` | 🔵 xanh nhạt (`bg-brand/10`, không viền) |
+| Hủy / **Xóa lọc** / phụ | `<Button variant="neutral">` | ⚪ xám viền |
 
-Nút bo góc `rounded-lg`. **Cấm** viết `<button>` thủ công cho 4 loại trên — phải dùng `Button`/`IconBtn` chung.
+- **Xuất Excel** = `variant="confirm"` + icon `Download` + nhãn "Xuất Excel" (đồng bộ MỌI trang có bảng dữ liệu).
+- **Làm mới** (tải lại dữ liệu) = `variant="soft"` (xanh nhạt) — phân biệt rõ với neutral (xám = Hủy).
+- **Xóa lọc** (reset bộ lọc về mặc định) = nút xám viền + icon `FilterX` + nhãn "Xóa lọc"; đưa MỌI state lọc về giá trị khởi tạo trong 1 lần bấm. Trong thanh lọc dùng `<button>` gọn cùng hàng với "Lọc" (xanh brand); ngoài thanh lọc dùng `<Button variant="neutral">`.
+
+Nút bo góc `rounded-lg`. **Cấm** viết `<button>` thủ công cho các loại trên — phải dùng `Button`/`IconBtn` chung (ngoại lệ: nút gọn "Lọc"/"Xóa lọc" trong thanh `FilterBar`/thanh lọc thủ công dùng chung 1 kiểu markup).
 
 ## 5. Thành phần dùng chung (cấm tự chế bản mới)
 `Button` · `IconBtn(variant)` · `Modal` · `ConfirmDialog` (xóa/nguy hiểm, xuống dòng được) · `toast.alert` (**dialog lỗi TO-RÕ đồng bộ toàn app** — header đỏ + icon cảnh báo; mọi lỗi/thao tác sai dùng cái này, KHÔNG dùng toast nhỏ) · `toast.success/info` (thông báo nhẹ) · `StatusPill` + `statusLabel` · `FilterBar` · `Field` + `inputCls`.

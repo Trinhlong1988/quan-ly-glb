@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Pencil, Lock, Unlock, Trash2, Search, Loader2, Users, KeyRound } from 'lucide-react';
+import { Plus, Pencil, Lock, Unlock, Trash2, Search, Loader2, Users, KeyRound, Download, FilterX } from 'lucide-react';
 import { AdminResetPasswordModal } from '../components/AdminResetPasswordModal.js';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, roleLabel, ROLES } from '@glb/shared';
@@ -14,6 +14,7 @@ import { Field, inputCls } from '../components/Field.js';
 import { PasswordInput } from '../components/PasswordInput.js';
 import { Button } from '../components/Button.js';
 import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../components/Selection.js';
+import { exportCsv } from '../lib/exportCsv.js';
 
 const STATUSES = ['ACTIVE', 'PENDING', 'LOCKED', 'DISABLED', 'DELETED'];
 
@@ -85,6 +86,13 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
     await reload();
   }
 
+  function resetFilters(): void {
+    setSearch('');
+    setRoleFilter('');
+    setStatusFilter('');
+    setTimeout(reload, 0);
+  }
+
   const roleOptions = mergeRoles(roles);
   // ID được phép chọn để xóa: chưa bị xóa (self / Admin-cuối sẽ bị backend bỏ qua kèm lý do).
   const selectableIds = rows.filter((u) => u.status !== 'DELETED').map((u) => u.id);
@@ -96,11 +104,16 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
           <h2 className="text-lg font-semibold text-slate-800">Quản lý danh sách nhân sự</h2>
           <p className="text-sm text-slate-500">Sổ nhân sự theo từng vai trò, trạng thái — có tìm kiếm & lọc.</p>
         </div>
-        {canCreate && (
-          <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)}>
-            Thêm nhân sự
+        <div className="flex items-center gap-2">
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('nhan_su', ['Mã NV', 'Họ tên', 'Tên đăng nhập', 'Số điện thoại', 'Vai trò', 'Trạng thái'], rows.map((u) => [u.employeeCode ?? '', u.fullName, u.username, u.phone ?? '', u.roles.map(roleLabel).join(' | '), statusLabel(u.status)]))}>
+            Xuất Excel
           </Button>
-        )}
+          {canCreate && (
+            <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)}>
+              Thêm nhân sự
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Bộ đếm (đếm CLIENT từ danh sách đã tải — userList trả full, không phân trang;
@@ -142,8 +155,11 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
             </option>
           ))}
         </select>
-        <button onClick={reload} className="rounded-md border border-line px-3 py-2 text-sm text-slate-600 hover:bg-appbg">
+        <button onClick={reload} className="rounded-md bg-brand px-3 py-2 text-sm font-medium text-white hover:bg-brand-hover">
           Lọc
+        </button>
+        <button onClick={resetFilters} title="Xóa toàn bộ bộ lọc, đưa về mặc định" className="flex items-center gap-1 rounded-md border border-line px-3 py-2 text-sm text-slate-600 hover:bg-appbg">
+          <FilterX className="h-4 w-4" /> Xóa lọc
         </button>
       </div>
 

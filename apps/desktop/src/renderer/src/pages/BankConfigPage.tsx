@@ -108,7 +108,7 @@ function BankTab({ canManage }: { canManage: boolean }): JSX.Element {
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} ngân hàng</div>
         <div className="flex gap-2">
-          <Button variant="neutral" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('ngan_hang', ['Mã', 'Tên ngân hàng', 'Người sửa gần nhất', 'Cập nhật'], rows.map((r) => [r.code, r.name, r.updatedByName ?? r.createdByName, `${fmtDate(r.updatedAt)} ${fmtTime(r.updatedAt)}`]))}>Xuất Excel</Button>
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('ngan_hang', ['Mã', 'Tên ngân hàng', 'Người sửa gần nhất', 'Cập nhật'], rows.map((r) => [r.code, r.name, r.updatedByName ?? r.createdByName, `${fmtDate(r.updatedAt)} ${fmtTime(r.updatedAt)}`]))}>Xuất Excel</Button>
           {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm ngân hàng</Button>}
         </div>
       </div>
@@ -229,7 +229,7 @@ function CardTypeTab({ canManage }: { canManage: boolean }): JSX.Element {
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} loại thẻ</div>
         <div className="flex gap-2">
-          <Button variant="neutral" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('loai_the', ['Mã', 'Tên loại thẻ', 'Ngân hàng', 'Người sửa gần nhất', 'Cập nhật'], rows.map((r) => [r.code, r.name, r.bankName, r.updatedByName ?? r.createdByName, `${fmtDate(r.updatedAt)} ${fmtTime(r.updatedAt)}`]))}>Xuất Excel</Button>
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('loai_the', ['Mã', 'Tên loại thẻ', 'Ngân hàng', 'Người sửa gần nhất', 'Cập nhật'], rows.map((r) => [r.code, r.name, r.bankName, r.updatedByName ?? r.createdByName, `${fmtDate(r.updatedAt)} ${fmtTime(r.updatedAt)}`]))}>Xuất Excel</Button>
           {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm loại thẻ</Button>}
         </div>
       </div>
@@ -359,7 +359,7 @@ function PartnerTab({ canManage }: { canManage: boolean }): JSX.Element {
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} đối tác</div>
         <div className="flex gap-2">
-          <Button variant="neutral" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('doi_tac', ['Mã', 'Tên đối tác', 'Người liên hệ', 'Số điện thoại', 'Ngân hàng liên kết', 'Cập nhật'], rows.map((r) => [r.code, r.name, r.contactPerson, r.phone, r.bankIds.map(bankName).join(' | '), `${fmtDate(r.updatedAt)} ${fmtTime(r.updatedAt)}`]))}>Xuất Excel</Button>
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('doi_tac', ['Mã', 'Tên đối tác', 'Người liên hệ', 'Số điện thoại', 'Ngân hàng liên kết', 'Cập nhật'], rows.map((r) => [r.code, r.name, r.contactPerson, r.phone, r.bankIds.map(bankName).join(' | '), `${fmtDate(r.updatedAt)} ${fmtTime(r.updatedAt)}`]))}>Xuất Excel</Button>
           {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm đối tác</Button>}
         </div>
       </div>

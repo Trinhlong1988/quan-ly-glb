@@ -76,7 +76,10 @@ function StatusTab({ canManage }: { canManage: boolean }): JSX.Element {
     <div>
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} trạng thái · <span className="text-slate-400">ví dụ: mới cấp, thu hồi, đổi cho đối tác</span></div>
-        {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm trạng thái</Button>}
+        <div className="flex gap-2">
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('trang_thai_tid', ['Tên trạng thái', 'Người sửa gần nhất', 'Ngày', 'Giờ'], rows.map((s) => [s.name, s.updatedByName ?? s.createdByName ?? '', fmtDate(s.updatedAt), fmtTime(s.updatedAt)]))}>Xuất Excel</Button>
+          {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm trạng thái</Button>}
+        </div>
       </div>
       {canManage && <SelectionBar count={sel.count} entityLabel="trạng thái" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
@@ -196,7 +199,7 @@ function TidTab({ canManage }: { canManage: boolean }): JSX.Element {
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} TID cấu hình</div>
         <div className="flex gap-2">
-          <Button variant="neutral" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('cau_hinh_tid', ['TID', 'Tên HKD', 'Ngân hàng', 'Đối tác', 'Ngày cấp', 'Trạng thái', 'Nguồn hồ sơ', 'TK nhận tiền'], rows.map((r) => [r.tid, r.hkdName, r.bankCode, r.partnerName, r.issuedAt ? fmtDate(r.issuedAt) : '', r.configStatusName, r.dossierSourceCode, r.receiveAccountLabel]))}>Xuất Excel</Button>
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('cau_hinh_tid', ['TID', 'Tên HKD', 'Ngân hàng', 'Đối tác', 'Ngày cấp', 'Trạng thái', 'Nguồn hồ sơ', 'TK nhận tiền'], rows.map((r) => [r.tid, r.hkdName, r.bankCode, r.partnerName, r.issuedAt ? fmtDate(r.issuedAt) : '', r.configStatusName, r.dossierSourceCode, r.receiveAccountLabel]))}>Xuất Excel</Button>
           {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => banks.length && partners.length ? setForm({ mode: 'create' }) : toast.alert('Cần có ít nhất 1 ngân hàng và 1 đối tác trước.', 'Thiếu dữ liệu nền')}>Thêm TID</Button>}
         </div>
       </div>

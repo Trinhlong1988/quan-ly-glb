@@ -112,7 +112,7 @@ function SupplierTab({ canManage }: { canManage: boolean }): JSX.Element {
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} nhà cung cấp</div>
         <div className="flex gap-2">
-          <Button variant="neutral" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('nha_cung_cap', ['Mã', 'Tên nhà cung cấp', 'Người liên hệ', 'Số điện thoại', 'Địa chỉ', 'Cập nhật'], rows.map((r) => [r.code, r.name, r.contactPerson, r.phone, r.address, `${fmtDate(r.updatedAt)} ${fmtTime(r.updatedAt)}`]))}>Xuất Excel</Button>
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('nha_cung_cap', ['Mã', 'Tên nhà cung cấp', 'Người liên hệ', 'Số điện thoại', 'Địa chỉ', 'Cập nhật'], rows.map((r) => [r.code, r.name, r.contactPerson, r.phone, r.address, `${fmtDate(r.updatedAt)} ${fmtTime(r.updatedAt)}`]))}>Xuất Excel</Button>
           {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm nhà cung cấp</Button>}
         </div>
       </div>
@@ -241,7 +241,7 @@ function ModelTab({ canManage }: { canManage: boolean }): JSX.Element {
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} chủng loại máy</div>
         <div className="flex gap-2">
-          <Button variant="neutral" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('chung_loai_pos', ['Mã máy', 'Tên máy', 'Cập nhật'], rows.map((r) => [r.code, r.name, `${fmtDate(r.updatedAt)} ${fmtTime(r.updatedAt)}`]))}>Xuất Excel</Button>
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('chung_loai_pos', ['Mã máy', 'Tên máy', 'Cập nhật'], rows.map((r) => [r.code, r.name, `${fmtDate(r.updatedAt)} ${fmtTime(r.updatedAt)}`]))}>Xuất Excel</Button>
           {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm chủng loại</Button>}
         </div>
       </div>
@@ -357,7 +357,10 @@ function StatusTab({ canManage }: { canManage: boolean }): JSX.Element {
     <div>
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} trạng thái nhập máy · <span className="text-slate-400">ví dụ: Máy mới, Máy cũ, Máy đổi, Máy thuê</span></div>
-        {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm trạng thái</Button>}
+        <div className="flex gap-2">
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('trang_thai_nhap', ['Tên trạng thái', 'Người sửa gần nhất', 'Ngày', 'Giờ'], rows.map((s) => [s.name, s.updatedByName ?? s.createdByName ?? '', fmtDate(s.updatedAt), fmtTime(s.updatedAt)]))}>Xuất Excel</Button>
+          {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm trạng thái</Button>}
+        </div>
       </div>
       {canManage && <SelectionBar count={sel.count} entityLabel="trạng thái" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
@@ -479,7 +482,7 @@ function IntakeTab({ canManage }: { canManage: boolean }): JSX.Element {
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} máy POS trong kho</div>
         <div className="flex gap-2">
-          <Button variant="neutral" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('nhap_kho_pos', ['Số thứ tự', 'Chủng loại', 'Số seri', 'Nhà cung cấp', 'Giá nhập', 'Ngày nhập', 'Trạng thái'], rows.map((r, i) => [i + 1, `${r.posModelCode} · ${r.posModelName}`, r.serial, r.supplierName, r.importPrice, fmtDate(r.importedAt), r.intakeStatusName]))}>Xuất Excel</Button>
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('nhap_kho_pos', ['Số thứ tự', 'Chủng loại', 'Số seri', 'Nhà cung cấp', 'Giá nhập', 'Ngày nhập', 'Trạng thái'], rows.map((r, i) => [i + 1, `${r.posModelCode} · ${r.posModelName}`, r.serial, r.supplierName, r.importPrice, fmtDate(r.importedAt), r.intakeStatusName]))}>Xuất Excel</Button>
           {canManage && <Button variant="confirm" icon={<PackagePlus className="h-4 w-4" />} onClick={() => canAdd ? setForm({ mode: 'create' }) : toast.alert('Cần có ít nhất 1 chủng loại máy, 1 nhà cung cấp và 1 trạng thái nhập trước khi nhập kho.', 'Thiếu dữ liệu nền')}>Nhập kho máy POS</Button>}
         </div>
       </div>

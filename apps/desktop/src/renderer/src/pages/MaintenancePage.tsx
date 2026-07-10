@@ -114,7 +114,7 @@ export function MaintenancePage({ user }: { user: AuthUser }): JSX.Element {
           <h2 className="text-lg font-semibold text-slate-800">Bảo Trì Hệ Thống</h2>
           <p className="text-sm text-slate-500">Chống tràn bộ nhớ khi lên server · backup định kỳ · dọn dẹp an toàn (luôn backup trước khi xóa).</p>
         </div>
-        <Button variant="neutral" icon={<RefreshCw className="h-4 w-4" />} onClick={reload}>Làm mới</Button>
+        <Button variant="soft" icon={<RefreshCw className="h-4 w-4" />} onClick={reload}>Làm mới</Button>
       </div>
 
       {/* Cảnh báo vượt ngưỡng */}

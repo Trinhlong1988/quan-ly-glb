@@ -1,16 +1,18 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 
 // Quy ước màu button theo ngữ nghĩa (R_BUTTON_SEMANTICS, LEAD lock 9/7):
-//   confirm = xanh (thực hiện / xác nhận / lưu / thêm mới)
+//   confirm = xanh (thực hiện / xác nhận / lưu / thêm mới / xuất Excel)
 //   edit    = vàng (sửa / chỉnh sửa)
 //   danger  = đỏ (xóa)
-//   neutral = xám viền (hủy / làm mới / phụ)
-export type ButtonVariant = 'confirm' | 'edit' | 'danger' | 'neutral';
+//   soft    = xanh nhạt (làm mới / tải lại nhẹ — không viền, phân biệt với neutral)
+//   neutral = xám viền (hủy / xóa lọc / phụ)
+export type ButtonVariant = 'confirm' | 'edit' | 'danger' | 'soft' | 'neutral';
 
 const VARIANT: Record<ButtonVariant, string> = {
   confirm: 'bg-brand text-white hover:bg-brand-hover shadow-sm',
   edit: 'bg-warning text-white hover:brightness-95 shadow-sm',
   danger: 'bg-danger text-white hover:brightness-95 shadow-sm',
+  soft: 'bg-brand/10 text-brand hover:bg-brand/20',
   neutral: 'border border-line bg-white text-slate-600 hover:bg-appbg'
 };
 

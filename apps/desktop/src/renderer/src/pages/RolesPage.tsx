@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Pencil, Lock, Unlock, Trash2, ShieldCheck, Loader2 } from 'lucide-react';
+import { Plus, Pencil, Lock, Unlock, Trash2, ShieldCheck, Loader2, Download } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission } from '@glb/shared';
 import type { RoleDto, PermissionDto } from '../../../preload/index.d';
@@ -10,6 +10,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { StatusPill, statusLabel, statusTone } from '../components/StatusPill.js';
 import { StatBar } from '../components/StatBar.js';
 import { Field, inputCls } from '../components/Field.js';
+import { exportCsv } from '../lib/exportCsv.js';
 
 export function RolesPage({ user }: { user: AuthUser }): JSX.Element {
   const toast = useToast();
@@ -61,11 +62,16 @@ export function RolesPage({ user }: { user: AuthUser }): JSX.Element {
           <h2 className="text-lg font-semibold text-slate-800">Quản lý vai trò</h2>
           <p className="text-sm text-slate-500">Tạo, phân quyền, khóa/mở khóa và xóa vai trò hệ thống.</p>
         </div>
-        {canCreate && (
-          <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)}>
-            Thêm vai trò
+        <div className="flex items-center gap-2">
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('vai_tro', ['Vai trò', 'Mã', 'Số quyền', 'Nhân sự', 'Trạng thái'], roles.map((r) => [r.name, r.code, r.permissions.length, r.userCount, statusLabel(r.status)]))}>
+            Xuất Excel
           </Button>
-        )}
+          {canCreate && (
+            <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)}>
+              Thêm vai trò
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Bộ đếm (đếm CLIENT từ roleList — trả full, không phân trang). userCount sẵn trong RoleDto

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Loader2, HardDrive, History, Wrench } from 'lucide-react';
+import { Plus, Loader2, HardDrive, History, Wrench, Download } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate, fmtTimeSec } from '@glb/shared';
 import type { PosDto, TimelineEventDto, CustomerDto, AgentDto } from '../../../preload/index.d';
@@ -11,6 +11,7 @@ import { StatusPill, statusLabel, statusTone } from '../components/StatusPill.js
 import { StatBar } from '../components/StatBar.js';
 import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
+import { exportCsv } from '../lib/exportCsv.js';
 
 const POS_STATUSES = ['IN_STOCK', 'DEPLOYED', 'IN_REPAIR', 'DAMAGED', 'RETIRED'];
 
@@ -89,11 +90,16 @@ export function PosPage({ user }: { user: AuthUser }): JSX.Element {
           <h2 className="text-lg font-semibold text-slate-800">Quản Lý Máy POS</h2>
           <p className="text-sm text-slate-500">Danh tính = serial bất biến · vòng đời có nhật ký sự kiện.</p>
         </div>
-        {canManage && (
-          <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)}>
-            Thêm máy POS
+        <div className="flex items-center gap-2">
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('may_pos', ['Serial', 'Ngân hàng', 'TID hiện tại', 'Trạng thái'], rows.map((d) => [d.serial, d.bank ?? '', d.currentTid ?? '', statusLabel(d.status)]))}>
+            Xuất Excel
           </Button>
-        )}
+          {canManage && (
+            <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)}>
+              Thêm máy POS
+            </Button>
+          )}
+        </div>
       </div>
 
       <FilterBar

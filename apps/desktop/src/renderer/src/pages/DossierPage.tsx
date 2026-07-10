@@ -81,7 +81,10 @@ function SourceTab({ canManage }: { canManage: boolean }): JSX.Element {
     <div>
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} nguồn hồ sơ</div>
-        {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm nguồn hồ sơ</Button>}
+        <div className="flex gap-2">
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('nguon_ho_so', ['Mã nguồn hồ sơ', 'Chiết khấu', 'Người sửa gần nhất', 'Ngày', 'Giờ'], rows.map((s) => [s.code, fmtPct(s.discountRate), s.updatedByName ?? s.createdByName ?? '', fmtDate(s.updatedAt), fmtTime(s.updatedAt)]))}>Xuất Excel</Button>
+          {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm nguồn hồ sơ</Button>}
+        </div>
       </div>
       {canManage && <SelectionBar count={sel.count} entityLabel="nguồn" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
@@ -203,7 +206,7 @@ function DossierTab({ canManage }: { canManage: boolean }): JSX.Element {
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} hồ sơ</div>
         <div className="flex gap-2">
-          <Button variant="neutral" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('ho_so_hkd', ['Nguồn', 'Tên HKD', 'MST/ĐKKD', 'Chủ hộ', 'CCCD', 'Địa chỉ HKD'], rows.map((r) => [r.sourceCode, r.hkdName, r.taxCode, r.ownerName, r.cccdNumber, r.hkdAddress]))}>Xuất Excel</Button>
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('ho_so_hkd', ['Nguồn', 'Tên HKD', 'MST/ĐKKD', 'Chủ hộ', 'CCCD', 'Địa chỉ HKD'], rows.map((r) => [r.sourceCode, r.hkdName, r.taxCode, r.ownerName, r.cccdNumber, r.hkdAddress]))}>Xuất Excel</Button>
           {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => sources.length ? setForm({ mode: 'create' }) : toast.alert('Cần có ít nhất 1 nguồn hồ sơ trước.', 'Thiếu dữ liệu nền')}>Thêm hồ sơ</Button>}
         </div>
       </div>

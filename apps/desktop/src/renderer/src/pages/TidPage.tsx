@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Loader2, CreditCard, Link2, RefreshCw, Undo2, PackageCheck, Send } from 'lucide-react';
+import { Plus, Loader2, CreditCard, Link2, RefreshCw, Undo2, PackageCheck, Send, Download } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission } from '@glb/shared';
 import type { TidDto, UndeliveredTidDto, PosDto, CustomerDto } from '../../../preload/index.d';
@@ -10,6 +10,7 @@ import { StatusPill, statusLabel, statusTone } from '../components/StatusPill.js
 import { StatBar } from '../components/StatBar.js';
 import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
+import { exportCsv } from '../lib/exportCsv.js';
 
 const TID_STATUSES = ['UNASSIGNED', 'ACTIVE', 'DEAD', 'CLOSED', 'RECALLED'];
 type Tab = 'all' | 'undelivered';
@@ -78,11 +79,18 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
           <h2 className="text-lg font-semibold text-slate-800">Quản Lý TID</h2>
           <p className="text-sm text-slate-500">Terminal ID · gán/đổi/thu hồi/giao · theo dõi TID chưa giao.</p>
         </div>
-        {canManage && (
-          <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)}>
-            Thêm TID
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {tab === 'all' && (
+            <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('tid', ['TID', 'Ngân hàng', 'POS', 'Trạng thái'], rows.map((t) => [t.tid, t.bank ?? '', t.posSerial ?? '', statusLabel(t.status)]))}>
+              Xuất Excel
+            </Button>
+          )}
+          {canManage && (
+            <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)}>
+              Thêm TID
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="mb-3 flex items-center gap-1 border-b border-line">

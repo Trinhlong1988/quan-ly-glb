@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Ban, Trash2, Loader2, TrendingUp, Download, Receipt, Handshake, Users } from 'lucide-react';
+import { Plus, Ban, Trash2, Loader2, TrendingUp, Download, Receipt, Handshake, Users, FilterX } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate } from '@glb/shared';
 import type {
@@ -210,8 +210,8 @@ export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
             <input type="date" className={inputCls} value={fTo} onChange={(e) => setFTo(e.target.value)} />
           </label>
           <button onClick={applyFilter} className="rounded-md bg-brand px-3 py-2 text-sm font-medium text-white hover:bg-brand-hover">Lọc</button>
-          <button onClick={resetFilter} className="rounded-md border border-line px-3 py-2 text-sm text-slate-600 hover:bg-appbg">Làm mới</button>
-          <Button variant="neutral" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('doanh_thu', ['Mã GD', 'Ngày', 'TID', 'MID', 'HKD', 'Khách', 'Loại thẻ', 'Số tiền', 'Chênh đối tác', 'Chênh bán', 'Doanh thu', 'Đối soát'], rows.map((r) => [r.code ?? '', fmtDate(r.txnDate), r.tid ?? '', r.mid ?? '', r.hkdName ?? '', r.customerName ?? '', r.cardTypeName ?? '', String(r.amount), String(r.revenuePartner), String(r.revenueSell), String(r.revenueAmount), r.settled ? 'Đã đối soát' : 'Chưa']))}>Xuất Excel</Button>
+          <button onClick={resetFilter} title="Xóa toàn bộ bộ lọc, đưa về mặc định" className="flex items-center gap-1 rounded-md border border-line px-3 py-2 text-sm text-slate-600 hover:bg-appbg"><FilterX className="h-4 w-4" /> Xóa lọc</button>
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('doanh_thu', ['Mã GD', 'Ngày', 'TID', 'MID', 'HKD', 'Khách', 'Loại thẻ', 'Số tiền', 'Chênh đối tác', 'Chênh bán', 'Doanh thu', 'Đối soát'], rows.map((r) => [r.code ?? '', fmtDate(r.txnDate), r.tid ?? '', r.mid ?? '', r.hkdName ?? '', r.customerName ?? '', r.cardTypeName ?? '', String(r.amount), String(r.revenuePartner), String(r.revenueSell), String(r.revenueAmount), r.settled ? 'Đã đối soát' : 'Chưa']))}>Xuất Excel</Button>
         </div>
       </div>
 

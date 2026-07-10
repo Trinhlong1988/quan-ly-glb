@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2, Loader2, UserRound } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, UserRound, Download } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission } from '@glb/shared';
 import type { CustomerDto, AgentDto } from '../../../preload/index.d';
@@ -10,6 +10,7 @@ import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
 import { StatBar } from '../components/StatBar.js';
 import { Button } from '../components/Button.js';
+import { exportCsv } from '../lib/exportCsv.js';
 
 // Tông màu luân phiên (palette design system) cho bộ đếm theo đại lý — không phải trạng thái.
 const AGENT_TONES = ['bg-indigo-50 text-indigo-600', 'bg-emerald-50 text-emerald-600', 'bg-amber-50 text-amber-600', 'bg-sky-50 text-sky-600', 'bg-violet-50 text-violet-600', 'bg-rose-50 text-rose-600'];
@@ -74,11 +75,16 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
           <h2 className="text-lg font-semibold text-slate-800">Quản Lý Khách Hàng</h2>
           <p className="text-sm text-slate-500">Mã khách hàng tự sinh · biệt danh dễ gọi · tên thật · Số điện thoại.</p>
         </div>
-        {canCreate && (
-          <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)}>
-            Thêm khách hàng
+        <div className="flex items-center gap-2">
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('khach_hang', ['Mã khách hàng', 'Biệt danh', 'Tên thật', 'Số điện thoại', 'Địa chỉ'], rows.map((c) => [c.code, c.nickname, c.fullName, c.phone ?? '', c.address ?? '']))}>
+            Xuất Excel
           </Button>
-        )}
+          {canCreate && (
+            <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)}>
+              Thêm khách hàng
+            </Button>
+          )}
+        </div>
       </div>
 
       <FilterBar
