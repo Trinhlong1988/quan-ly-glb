@@ -3,13 +3,14 @@ import { defineConfig } from 'electron-vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
-// Native / runtime modules that MUST stay external in the main bundle.
-// better-sqlite3 is a native .node addon; @prisma runtime is resolved at run time
+// Runtime modules that MUST stay external in the main bundle (G10: PostgreSQL).
+// pg is pure-JS (no native .node addon) but pulls in Node built-ins/dynamic requires,
+// so keep it + the Prisma pg adapter external; @prisma runtime is resolved at run time
 // from the workspace node_modules (dev). @glb/* packages are BUNDLED (their source is .ts,
 // so Vite transpiles them — do NOT externalize them or Node would try to require raw .ts).
 const mainExternals = [
-  'better-sqlite3',
-  '@prisma/adapter-better-sqlite3',
+  'pg',
+  '@prisma/adapter-pg',
   '@prisma/client',
   '@prisma/client/runtime/client',
   '@prisma/client/runtime/index-browser'

@@ -1,8 +1,11 @@
-// DB bootstrap for the Electron main process.
-// - Dev (not packaged): reuse the already-seeded packages/database/dev.db for fast iteration.
-// - Prod (packaged): use app.getPath('userData')/glb.db and seed it inline when empty (R001/R002).
-import { existsSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+// DB bootstrap for the Electron main process (G10: FULL-SWITCH → PostgreSQL).
+// - Connection = postgresql:// built from GLB_DB_URL (self-test), DATABASE_URL (.env dev),
+//   or the client server-config file (userData/server-config.json — màn "Cấu hình máy chủ").
+// - Role split (G10 model A): CHỈ máy chủ (GLB_ROLE=server) chạy seed. Client (mặc định) chỉ connect.
+//   Prisma 7 `prisma-client` KHÔNG kèm migrate engine → migrate chạy bằng prisma CLI phía server,
+//   KHÔNG từ .exe.
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { app } from 'electron';
 import { createPrisma, type Db } from '@glb/database';
 import { PERMISSIONS, ROLES, DEFAULT_ROLE_PERMISSIONS } from '@glb/shared';
@@ -14,17 +17,58 @@ const ADMIN_DEFAULT_PASSWORD = 'Admin@123456';
 
 let prisma: Db | undefined;
 
-/** Resolve the SQLite database URL (file:...) for the current run. */
-export function resolveDatabaseUrl(): string {
-  // Explicit override (used by the headless self-test to run on a throwaway copy).
-  if (process.env['GLB_DB_URL']) return process.env['GLB_DB_URL'] as string;
-  if (app.isPackaged) {
-    return 'file:' + join(app.getPath('userData'), 'glb.db');
+/** Cấu hình kết nối máy chủ PostgreSQL (client nhập ở màn "Cấu hình máy chủ", G10 model A). */
+interface ServerConfig {
+  host: string;
+  port?: number;
+  database: string;
+  user: string;
+  password: string;
+}
+
+/** Đường dẫn file cấu hình máy chủ (nằm trong userData của client). */
+export function serverConfigPath(): string {
+  return join(app.getPath('userData'), 'server-config.json');
+}
+
+/** Đọc cấu hình máy chủ nếu client đã cấu hình. Trả null nếu chưa (→ UI hiện màn cấu hình). */
+export function readServerConfig(): ServerConfig | null {
+  const p = serverConfigPath();
+  if (!existsSync(p)) return null;
+  try {
+    const cfg = JSON.parse(readFileSync(p, 'utf8')) as Partial<ServerConfig>;
+    if (!cfg.host || !cfg.database || !cfg.user || cfg.password == null) return null;
+    return { host: cfg.host, port: cfg.port ?? 5432, database: cfg.database, user: cfg.user, password: cfg.password };
+  } catch {
+    return null;
   }
-  // Dev: point at the seeded workspace DB (packages/database/dev.db).
-  // __dirname at runtime = apps/desktop/out/main → climb to repo root.
-  const devDb = resolve(__dirname, '../../../../packages/database/dev.db');
-  return 'file:' + devDb;
+}
+
+/** Dựng chuỗi postgresql:// (URL-encode user/password để không vỡ khi có ký tự đặc biệt). */
+function buildPgUrl(cfg: ServerConfig): string {
+  const user = encodeURIComponent(cfg.user);
+  const pass = encodeURIComponent(cfg.password);
+  return `postgresql://${user}:${pass}@${cfg.host}:${cfg.port ?? 5432}/${cfg.database}`;
+}
+
+/** Resolve the PostgreSQL connection URL (postgresql://...) for the current run. */
+export function resolveDatabaseUrl(): string {
+  // Explicit override (self-test harness points at a throwaway Postgres database).
+  if (process.env['GLB_DB_URL']) return process.env['GLB_DB_URL'] as string;
+  // Dev (.env) — máy chủ dev + selftest CLI.
+  if (!app.isPackaged && process.env['DATABASE_URL']) return process.env['DATABASE_URL'] as string;
+  // Client đóng gói: đọc cấu hình máy chủ (IP:port + tài khoản pg chung).
+  const cfg = readServerConfig();
+  if (cfg) return buildPgUrl(cfg);
+  throw new Error(
+    'CHƯA cấu hình máy chủ PostgreSQL. Hãy mở "Cấu hình máy chủ" nhập IP:port + tài khoản, ' +
+      'hoặc đặt DATABASE_URL (dev).'
+  );
+}
+
+/** True nếu tiến trình này là MÁY CHỦ (được phép seed/migrate). Mặc định = client (fail-safe). */
+export function isServerRole(): boolean {
+  return process.env['GLB_ROLE'] === 'server';
 }
 
 export function getDb(): Db {
@@ -116,15 +160,12 @@ export async function seedIfEmpty(db: Db): Promise<void> {
 
 export async function initDb(): Promise<Db> {
   const url = resolveDatabaseUrl();
-  const filePath = url.replace(/^file:/, '');
-  const preexisting = existsSync(filePath);
   prisma = createPrisma(url);
-  // In prod the file/schema won't exist yet — packaging must ship migrations (Phase C).
-  // For now: attempt seed; if tables are missing this throws and is surfaced to the user.
-  await seedIfEmpty(prisma);
-  if (!preexisting && !app.isPackaged) {
-    // eslint-disable-next-line no-console
-    console.warn('[db] dev DB file was missing at', filePath);
+  // G10 model A: CHỈ máy chủ seed (1 lần). Client chỉ connect (DB đã được server migrate+seed).
+  // Client seed mỗi boot lên DB dùng chung = churn/deadlock (bài học HIGH-4). Migrate KHÔNG chạy
+  // từ .exe (Prisma 7 prisma-client thiếu migrate engine) — máy chủ migrate bằng prisma CLI.
+  if (isServerRole()) {
+    await seedIfEmpty(prisma);
   }
   return prisma;
 }

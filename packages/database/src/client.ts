@@ -1,15 +1,21 @@
-// Prisma client factory (Prisma 7 + better-sqlite3 driver adapter).
-// better-sqlite3 packages cleanly into Electron (.exe) — no query-engine binary.
-// Electron main passes an absolute url under app.getPath('userData'); dev uses .env.
+// Prisma client factory (Prisma 7 + @prisma/adapter-pg driver adapter).
+// G10: FULL-SWITCH SQLite → PostgreSQL. pg is pure-JS → packages cleanly into
+// Electron (.exe) with no native .node addon and no query-engine binary.
+// Electron main passes a postgresql:// url built from the server-config file; dev uses .env.
 import "dotenv/config";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../generated/prisma/client.js";
 
 export type Db = PrismaClient;
 
 export function createPrisma(databaseUrl?: string): PrismaClient {
-  const url = databaseUrl ?? process.env.DATABASE_URL ?? "file:./dev.db";
-  const adapter = new PrismaBetterSqlite3({ url });
+  const connectionString = databaseUrl ?? process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error(
+      "DATABASE_URL không được cấu hình. Cần chuỗi postgresql:// (server-config hoặc .env)."
+    );
+  }
+  const adapter = new PrismaPg({ connectionString });
   return new PrismaClient({ adapter });
 }
 

@@ -100,8 +100,14 @@ Thứ tự cuốn chiếu, mỗi mục có gate ở §5:
 - **Đóng gói đúng (QA #10):** generator = `prisma-client` (queryCompiler, **KHÔNG có query-engine binary**) → KHÔNG asarUnpack engine. Đóng gói generated Prisma client (Wasm) + native `better-sqlite3` HIỆN TẠI (bước này vẫn SQLite). `asarUnpack` cho `better-sqlite3` (.node). Kiểm path khi `app.isPackaged`.
 - Gate G-G10.1: installer sinh ra → cài máy sạch → app mở, đăng nhập adminroot OK (vẫn SQLite local — chỉ kiểm đóng gói).
 
-### G10.2 — Swap adapter SQLite → Postgres (mô hình A: client nối thẳng)
-- Sửa **`packages/database/src/client.ts`** (QA #3 — KHÔNG phải db.ts): `PrismaBetterSqlite3` → `@prisma/adapter-pg` (`PrismaPg`) + `pg`. Đổi `datasource` provider `sqlite`→`postgresql`. Gỡ dep native `better-sqlite3` + `adapter-better-sqlite3` khỏi `package.json`; sửa `electron.vite.config.ts` externals → `pg`/`adapter-pg`.
+### G10.2 — FULL-SWITCH Postgres (Mr.Long chốt B 10/7) — 1 schema, mọi thứ chạy pg
+> Sạch nhất: 1 code path, test phủ đúng pg, không drift. Giá: test chậm hơn (createdb/migrate/seed/drop mỗi selftest). Postgres 16.9 đã cài (D:\PostgreSQL16, port 5432, db `glb`, pw `Glb@Pg2026`).
+- **Schema:** `schema.prisma` provider `sqlite`→`postgresql`. Thêm `@db.Timestamptz(3)` cho field instant (`*At`); field date-only (`txnDate/effectiveFrom/birthDate/…`) khớp `startOfDayLocal` (F1/B16) — gate REV15-on-pg bắt lệch.
+- **Adapter:** `client.ts` `PrismaBetterSqlite3`→`@prisma/adapter-pg` (`PrismaPg`)+`pg`. **Gỡ** better-sqlite3+adapter-better-sqlite3 khỏi **CẢ 2** `package.json` (database+desktop) + `seed.ts` import + `electron.vite.config.ts` externals→pg + `electron-builder.yml` bỏ asarUnpack native (pg pure-JS, đóng gói nhẹ hơn). `prisma.config.ts` DATABASE_URL=pg.
+- **Migration squash:** 15/15 migration SQLite-only → tạo baseline pg MỚI: đổi provider + thêm Timestamptz vào schema TRƯỚC → `migrate diff --from-empty --to-schema-datamodel --script` → thay `prisma/migrations` (baseline pg) + `migration_lock.toml` provider=postgresql. (Migration SQLite cũ giữ trong lịch sử git/tag, không dùng.)
+- **Init (QA #4/D):** `db.ts` `resolveDatabaseUrl`→`postgresql://` từ config; bỏ `existsSync(file:)`; **chỉ server** seed+migrate (1 lần); `GLB_ROLE` mặc định **client** (fail-safe, không seed).
+- **Storage/backup (CRITICAL-B):** bỏ "db file path" khi pg; đo `pg_database_size()`; backup `pg_dump`/`pg_restore`; bỏ/map VACUUM. KHÔNG để feature chết-lặng.
+- **Test-harness:** mỗi selftest createdb→migrate deploy→seed→chạy→drop trên pg (thay copy-file SQLite). Chạy selftest 1–21 + vitest trên pg → 0 fail. **Đây cũng là nơi guard tương tranh G10.C được kiểm trên DB đa-writer thật.**
 - **Tách init (QA #4, mô hình A):** `db.ts` `resolveDatabaseUrl` đọc IP:port từ file cấu hình máy client (màn "Cấu hình máy chủ") + tài khoản pg chung → dựng `postgresql://`. **CHỈ máy chủ chạy `seedIfEmpty`+migrate+`backfillEmployeeCodes` (1 lần)**; client boot **chỉ connect** (bỏ `existsSync(file:)`/seed mỗi boot). Cờ phân biệt server vs client (vd biến môi trường/cấu hình `GLB_ROLE=server|client`).
 
 ### G10.3 — Migration squash Postgres + cấu hình server (QA #1, #12)

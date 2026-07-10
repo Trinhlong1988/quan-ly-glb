@@ -4,9 +4,8 @@
 //  • Backup ĐỊNH KỲ 1 lần/ngày (scheduler gọi systemBackupIfDue).
 //  • Cảnh báo vượt ngưỡng đẩy vào hòm thư Admin/Manager + cờ để renderer bật dialog xác nhận.
 // Nguyên tắc: KHÔNG bao giờ xóa mà chưa có bản sao lưu; mọi thao tác ghi audit.
-import { statfsSync, statSync, existsSync } from 'node:fs';
+import { statfsSync } from 'node:fs';
 import type { Db } from '@glb/database';
-import { resolveDatabaseUrl } from './db.js';
 import { requirePermission, verifyActorPassword } from './guard.js';
 import { writeAudit } from './audit.js';
 import { systemBackup } from './backup-service.js';
@@ -40,9 +39,6 @@ const MIN_AUDIT_DAYS = 7;
 const MIN_TRASH_DAYS = 1;
 const MIN_BACKUP_HOURS = 1;
 
-function dbFilePath(): string {
-  return resolveDatabaseUrl().replace(/^file:/, '');
-}
 async function getNum(db: Db, key: string, def: number): Promise<number> {
   const row = await db.appSetting.findUnique({ where: { key } });
   const n = row?.value != null ? Number(row.value) : NaN;
@@ -60,23 +56,36 @@ const auditRetention = async (db: Db): Promise<number> => Math.max(MIN_AUDIT_DAY
 const trashRetention = async (db: Db): Promise<number> => Math.max(MIN_TRASH_DAYS, await getNum(db, K.trashRetentionDays, DEFAULTS.trashRetentionDays));
 const backupInterval = async (db: Db): Promise<number> => Math.max(MIN_BACKUP_HOURS, await getNum(db, K.backupIntervalHours, DEFAULTS.backupIntervalHours));
 
-/** Tổng dung lượng file DB (kèm WAL/SHM nếu có). */
-function dbBytes(): number {
-  const base = dbFilePath();
-  let total = 0;
-  for (const suffix of ['', '-wal', '-shm']) {
-    const p = base + suffix;
-    if (existsSync(p)) {
-      try { total += statSync(p).size; } catch { /* bỏ qua */ }
-    }
-  }
-  return total;
+/** Tổng dung lượng DB PostgreSQL (bytes) qua pg_database_size(). */
+async function dbBytes(db: Db): Promise<number> {
+  const rows = await db.$queryRawUnsafe<Array<{ size: bigint | number | string }>>(
+    'SELECT pg_database_size(current_database()) AS size'
+  );
+  const raw = rows?.[0]?.size ?? 0;
+  const n = typeof raw === 'bigint' ? Number(raw) : Number(raw);
+  return Number.isFinite(n) ? n : 0;
 }
 
-/** Dung lượng ổ đĩa chứa DB. Trả null nếu nền tảng không hỗ trợ statfs. */
-function diskInfo(): { total: number; free: number } | null {
+/** Thư mục dữ liệu của máy chủ PostgreSQL (dùng làm nhãn + để đo ổ đĩa trên máy chủ). */
+async function pgDataDirectory(db: Db): Promise<string | null> {
   try {
-    const s = statfsSync(dbFilePath());
+    const rows = await db.$queryRawUnsafe<Array<{ data_directory: string }>>('SHOW data_directory');
+    return rows?.[0]?.data_directory ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Dung lượng ổ đĩa chứa DB. Trên MÁY CHỦ (cùng máy với Postgres) statfs vào data_directory cho số thật.
+ * Trên máy CLIENT (data_directory là đường dẫn của máy khác) statfs fail → trả null (thành thật "không
+ * xác định được", KHÔNG báo bừa) — cảnh báo ngưỡng chỉ có ý nghĩa khi chạy trên máy chủ.
+ */
+async function diskInfo(db: Db): Promise<{ total: number; free: number } | null> {
+  const dir = await pgDataDirectory(db);
+  if (!dir) return null;
+  try {
+    const s = statfsSync(dir);
     const total = s.blocks * s.bsize;
     const free = s.bavail * s.bsize;
     if (total > 0) return { total, free };
@@ -126,7 +135,7 @@ async function computeStatus(db: Db): Promise<StorageStatus> {
   const auditRetentionDays = await auditRetention(db);
   const trashRetentionDays = await trashRetention(db);
   const backupIntervalHours = await backupInterval(db);
-  const disk = diskInfo();
+  const disk = await diskInfo(db);
   const diskUsedPct = disk ? Math.round(((disk.total - disk.free) / disk.total) * 1000) / 10 : null;
 
   const auditCutoff = new Date(Date.now() - auditRetentionDays * 86400_000);
@@ -138,8 +147,8 @@ async function computeStatus(db: Db): Promise<StorageStatus> {
   }
 
   return {
-    dbBytes: dbBytes(),
-    dbPath: dbFilePath(),
+    dbBytes: await dbBytes(db),
+    dbPath: (await pgDataDirectory(db)) ?? 'postgresql',
     diskTotalBytes: disk?.total ?? null,
     diskFreeBytes: disk?.free ?? null,
     diskUsedPct,
@@ -274,8 +283,8 @@ export async function systemStorageCheck(db: Db): Promise<{ over: boolean; usedP
 
 /**
  * BẢO TRÌ ĐỊNH KỲ (mặc định 1 tuần/lần) — scheduler gọi. Trình tự an toàn:
- *   backup → (nếu bật autoPurge) xóa audit/thùng rác QUÁ HẠN → VACUUM + PRAGMA optimize (thu hồi chỗ trống)
- *   → wal_checkpoint(TRUNCATE) → ghi mốc + thông báo Admin. KHÔNG đụng dữ liệu trong hạn, KHÔNG "reset".
+ *   backup → (nếu bật autoPurge) xóa audit/thùng rác QUÁ HẠN → VACUUM (ANALYZE) (thu hồi chỗ trống +
+ *   cập nhật thống kê Postgres) → ghi mốc + thông báo Admin. KHÔNG đụng dữ liệu trong hạn, KHÔNG "reset".
  */
 export async function systemWeeklyMaintenanceIfDue(db: Db): Promise<{ ran: boolean; auditDeleted?: number; trashDeleted?: number; vacuumed?: boolean }> {
   // Tắt tự động → không chạy.
@@ -304,16 +313,15 @@ export async function systemWeeklyMaintenanceIfDue(db: Db): Promise<{ ran: boole
     }
   }
 
-  // 3) thu hồi chỗ trống SQLite (an toàn — không mất dữ liệu)
+  // 3) thu hồi chỗ trống + cập nhật thống kê PostgreSQL (an toàn — không mất dữ liệu).
+  //    VACUUM (ANALYZE) KHÔNG chạy trong transaction → dùng $executeRawUnsafe ngoài tx.
   let vacuumed = false;
   try {
-    await db.$executeRawUnsafe('PRAGMA wal_checkpoint(TRUNCATE)');
-    await db.$executeRawUnsafe('VACUUM');
-    await db.$executeRawUnsafe('PRAGMA optimize');
+    await db.$executeRawUnsafe('VACUUM (ANALYZE)');
     vacuumed = true;
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.error('[maintenance] vacuum failed', err);
+    console.error('[maintenance] VACUUM (ANALYZE) failed', err);
   }
 
   await setStr(db, K.lastMaintenanceAt, new Date().toISOString());

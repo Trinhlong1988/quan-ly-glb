@@ -10,7 +10,9 @@
 | F-NOTIF | Đẩy thông báo hủy bill vào hòm thư (UI đã có) | `DISPATCH_PROMPTS_REMAINING.md` (prompt đã QA) | typecheck0/build0/vitest198/selftest18 31-0/selftest19 26-0/guard | ✅ **FROZEN provisional** tag `f-notif` — Engineering Validated 10/7, chờ Production Validation R196 |
 | G10.1 | Đóng gói .exe electron-builder | `PHASE_G10…§8` | packaging + login packaged | ✅ done, commit `e7efba0` (WIP, chưa tag tier) |
 | **G10.C** | **Gia cố tương tranh** (transaction+guard cho request/approve/reject hủy bill + code_counter) — CHẠM P1.2 freeze, **Mr.Long duyệt 10/7** | `PHASE_G10…§9b CRITICAL-A/HIGH-C/E` | selftest18/19 giữ xanh + selftest race-logic mới + guard | 🔄 **ĐANG** — làm trên SQLite hiện tại, TRƯỚC swap pg |
-| G10.2+ | Swap Postgres + migration squash + LAN + backup | `PHASE_G10…§8/§9b` | §5 G-G10.2..6 | ⛔ sau G10.C. Postgres 16.9 đã cài+chạy (D:\PostgreSQL16, port 5432, db `glb`) |
+| G10.2 | **Full-switch Postgres** (B): schema→pg + squash baseline (35 bảng/97 timestamptz) + PrismaPg + gỡ better-sqlite3 + storage/backup pg + harness pg | `PHASE_G10…§8 B` | migrate deploy 0 lỗi + selftest 18/21 trên pg thật | ✅ **done + verify độc lập** (18=31/0, 21=19/0 trên Postgres). WIP toward g10 |
+| G10.3+ | Cấu hình LAN (`listen_addresses`/`pg_hba`/firewall) + migrate `glb` prod + UI "Cấu hình máy chủ" | `PHASE_G10…§8` | máy B nối được | ⛔ kế tiếp |
+| G10.5 | Stress-race thật (selftest=20) + code_counter atomic (KH/NV) | `PHASE_G10…§9b HIGH-C/E` | N-client trùng mã=0 | ⛔ chưa làm |
 | F-NOTIF | **Trung tâm Thông báo** (chuông + hòm thư): đẩy sự kiện yêu cầu/duyệt/từ chối hủy bill + user khóa + backup lỗi + công nợ đến hạn | (viết khi tới) | 🆕 Mr.Long chốt 10/7 **TÁCH RIÊNG** khỏi P1.2 — không nối trong F1 |
 | ~~F3~~ | ~~Backlog Nhóm 1 (ngày dd/mm/yyyy, thùng rác UI, màu button)~~ | — | — | ✅ **ĐÃ XONG (verify 10/7)** — KHÔNG cần build frame. Xem "Reality-check F3" dưới. Chỉ còn (tùy chọn) 1 pass QA đồng bộ UI |
 | F4 | **Nền móng Nhóm 2** (multi-branch, mã CT 6 số, master data kho/sản phẩm/ĐVT/nhóm hàng) — **frame build THẬT kế tiếp sau G10** | `SPEC_V2_GAP_AND_BACKLOG.md` §B + §E Nhóm 2 | (viết khi tới) | ⛔ chờ Mr.Long duyệt scope |

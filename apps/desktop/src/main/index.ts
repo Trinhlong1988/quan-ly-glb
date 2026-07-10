@@ -43,14 +43,25 @@ async function createWindow(): Promise<void> {
 }
 
 app.whenReady().then(async () => {
-  // Harness guard (B04): self-test 2/3 mutate the DB. Nếu KHÔNG chỉ định GLB_DB_URL riêng thì
-  // chúng sẽ ghi vào dev.db và làm nhiễm dữ liệu (chạy lần 2 hỏng). Bắt buộc chạy trên DB throwaway.
+  // Harness guard (B04, G10): self-test 2+ mutate the DB. Trên PostgreSQL mỗi selftest phải chạy trên
+  // 1 DB throwaway RIÊNG (createdb → migrate deploy → drop) để không nhiễm DB dev/prod dùng chung.
+  // Bắt buộc: GLB_DB_URL=postgresql://…<tmpdb> + GLB_ROLE=server (để initDb seed admin/permissions).
   const st = process.env['GLB_SELFTEST'];
   if (st && st !== '1' && !process.env['GLB_DB_URL']) {
     // eslint-disable-next-line no-console
     console.error(
-      `SELFTEST${st} ABORT | phải set GLB_DB_URL trỏ tới DB throwaway đã migrate ` +
-        `(tránh ghi vào dev.db). Ví dụ: migrate deploy sang file tạm rồi GLB_DB_URL=file:<tmp>.`
+      `SELFTEST${st} ABORT | phải set GLB_DB_URL trỏ tới DB PostgreSQL throwaway đã migrate ` +
+        `+ GLB_ROLE=server. Ví dụ: createdb tmp; DATABASE_URL=postgresql://…/tmp prisma migrate deploy; ` +
+        `GLB_SELFTEST=${st} GLB_ROLE=server GLB_DB_URL=postgresql://…/tmp electron apps/desktop; dropdb tmp.`
+    );
+    app.exit(2);
+    return;
+  }
+  if (st && st !== '1' && process.env['GLB_ROLE'] !== 'server') {
+    // eslint-disable-next-line no-console
+    console.error(
+      `SELFTEST${st} ABORT | thiếu GLB_ROLE=server → initDb sẽ KHÔNG seed (admin/permissions rỗng) ` +
+        `và selftest fail ở bước đăng nhập. Đặt GLB_ROLE=server khi chạy selftest.`
     );
     app.exit(2);
     return;

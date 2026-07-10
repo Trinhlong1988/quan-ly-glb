@@ -7,7 +7,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 model User {
@@ -25,13 +25,13 @@ model User {
   status              String    @default("ACTIVE") // ACTIVE|PENDING|LOCKED|DISABLED|DELETED
   forceChangePassword Boolean   @default(false) @map("force_change_password")
   failedAttempts      Int       @default(0) @map("failed_attempts") // đếm mọi lần xác thực SAI (đăng nhập/đổi mật khẩu/pass cấp 2). ≥5 → tự khóa
-  lockedAt            DateTime? @map("locked_at") // thời điểm bị tự khóa do sai quá số lần
+  lockedAt            DateTime? @map("locked_at") @db.Timestamptz(3) // thời điểm bị tự khóa do sai quá số lần
   level2Hash          String?   @map("level2_hash") // băm bcrypt (cost cao) mật khẩu CẤP 2 — chỉ Admin/Manager đặt; dùng cho xóa vĩnh viễn
-  level2SetAt         DateTime? @map("level2_set_at")
+  level2SetAt         DateTime? @map("level2_set_at") @db.Timestamptz(3)
   createdBy           Int?      @map("created_by")
-  createdAt           DateTime  @default(now()) @map("created_at")
-  updatedAt           DateTime  @updatedAt @map("updated_at")
-  deletedAt           DateTime? @map("deleted_at")
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt           DateTime? @map("deleted_at") @db.Timestamptz(3)
 
   roles     UserRole[]
   auditLogs AuditLog[]     @relation("actor")
@@ -50,9 +50,9 @@ model Message {
   body        String
   senderId    Int?      @map("sender_id") // null = hệ thống
   recipientId Int       @map("recipient_id")
-  readAt      DateTime? @map("read_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  deletedAt   DateTime? @map("deleted_at")
+  readAt      DateTime? @map("read_at") @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(3)
 
   @@index([recipientId, deletedAt])
   @@map("messages")
@@ -66,9 +66,9 @@ model Role {
   status      String    @default("ACTIVE") // ACTIVE|LOCKED
   isSystem    Boolean   @default(false) @map("is_system")
   createdBy   Int?      @map("created_by")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
-  deletedAt   DateTime? @map("deleted_at")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(3)
 
   users       UserRole[]
   permissions RolePermission[]
@@ -82,7 +82,7 @@ model Permission {
   name        String
   description String?
   group       String?
-  createdAt   DateTime @default(now()) @map("created_at")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   roles RolePermission[]
 
@@ -92,7 +92,7 @@ model Permission {
 model UserRole {
   userId    Int      @map("user_id")
   roleId    Int      @map("role_id")
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
@@ -104,7 +104,7 @@ model UserRole {
 model RolePermission {
   roleId       Int      @map("role_id")
   permissionId Int      @map("permission_id")
-  createdAt    DateTime @default(now()) @map("created_at")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
   permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
@@ -123,7 +123,7 @@ model AuditLog {
   afterJson   String?  @map("after_json")
   ipAddress   String?  @map("ip_address")
   deviceInfo  String?  @map("device_info")
-  createdAt   DateTime @default(now()) @map("created_at")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   actor User? @relation("actor", fields: [actorUserId], references: [id])
 
@@ -134,7 +134,7 @@ model AppSetting {
   id        Int      @id @default(autoincrement())
   key       String   @unique
   value     String?
-  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@map("app_settings")
 }
@@ -145,7 +145,7 @@ model BackupLog {
   fileSize  Int?     @map("file_size")
   checksum  String?
   createdBy Int?     @map("created_by")
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   note      String?
 
   @@map("backup_logs")
@@ -154,8 +154,8 @@ model BackupLog {
 model LoginSession {
   id        String   @id
   userId    Int      @map("user_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -174,9 +174,9 @@ model Agent {
   code      String?   @unique
   name      String
   region    String?
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
   deletedBy Int?      @map("deleted_by")
 
   @@map("agents")
@@ -194,9 +194,9 @@ model Customer {
   agentId   Int?      @map("agent_id")
   note      String?
   createdBy Int?      @map("created_by")
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
   deletedBy Int?      @map("deleted_by")
 
   @@map("customers")
@@ -214,8 +214,8 @@ model PosDevice {
   currentTid        String?  @map("current_tid")
   warehouseLoc      String?  @map("warehouse_loc")
   note              String?
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@map("pos_devices")
 }
@@ -230,24 +230,24 @@ model Tid {
   posSerial        String?   @map("pos_serial")
   customerId       Int?      @map("customer_id")
   agentId          Int?      @map("agent_id")
-  openedAt         DateTime? @map("opened_at")
-  deliveredAt      DateTime? @map("delivered_at")
-  closedAt         DateTime? @map("closed_at")
+  openedAt         DateTime? @map("opened_at") @db.Timestamptz(3)
+  deliveredAt      DateTime? @map("delivered_at") @db.Timestamptz(3)
+  closedAt         DateTime? @map("closed_at") @db.Timestamptz(3)
   // ── G-CFG.6 §9 Cấu hình TID (Cách 1: gộp thông tin thương mại vào chính bảng tids) ──
   bankId           Int?      @map("bank_id") // Ngân hàng (chọn từ danh sách, thay text `bank`)
   partnerId        Int?      @map("partner_id") // Đối tác → tra biểu phí
   hkdName          String?   @map("hkd_name") // Tên Hộ Kinh Doanh của máy POS
   receiveAccountId Int?      @map("receive_account_id") // TK nhận tiền (§8)
-  issuedAt         DateTime? @map("issued_at") // Ngày cấp TID (§9)
+  issuedAt         DateTime? @map("issued_at") @db.Timestamptz(3) // Ngày cấp TID (§9)
   configStatusId   Int?      @map("config_status_id") // Trạng thái TID cấu hình (§9a)
   dossierSourceId  Int?      @map("dossier_source_id") // Nguồn hồ sơ (§10a)
   note             String?
   createdBy        Int?      @map("created_by")
   updatedBy        Int?      @map("updated_by")
-  deletedAt        DateTime? @map("deleted_at") // soft-delete cho cấu hình TID (§9b)
+  deletedAt        DateTime? @map("deleted_at") @db.Timestamptz(3) // soft-delete cho cấu hình TID (§9b)
   deletedBy        Int?      @map("deleted_by")
-  createdAt        DateTime  @default(now()) @map("created_at")
-  updatedAt        DateTime  @updatedAt @map("updated_at")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@index([partnerId])
   @@index([bankId])
@@ -273,19 +273,19 @@ model Transaction {
   revenueSell        Int       @default(0) @map("revenue_sell") // thu khách (VND)
   revenueAmount      Int       @default(0) @map("revenue_amount") // tổng doanh thu = partner + sell (VND)
   settled            Boolean   @default(false) // đã thu/đối soát chưa (cho công nợ)
-  settledAt          DateTime? @map("settled_at")
+  settledAt          DateTime? @map("settled_at") @db.Timestamptz(3)
   txnDate            DateTime  @map("txn_date")
   note               String?
   // P1.2 — chứng từ bất biến: bill không sửa; sai thì HỦY qua duyệt. status POSTED|CANCEL_PENDING|CANCELLED.
   status             String    @default("POSTED")
   cancelReason       String?   @map("cancel_reason")
-  cancelledAt        DateTime? @map("cancelled_at")
+  cancelledAt        DateTime? @map("cancelled_at") @db.Timestamptz(3)
   cancelRequestId    Int?      @map("cancel_request_id")
   createdBy          Int?      @map("created_by")
   updatedBy          Int?      @map("updated_by")
-  createdAt          DateTime  @default(now()) @map("created_at")
-  updatedAt          DateTime  @updatedAt @map("updated_at")
-  deletedAt          DateTime? @map("deleted_at")
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt          DateTime? @map("deleted_at") @db.Timestamptz(3)
   deletedBy          Int?      @map("deleted_by")
 
   @@index([tidId])
@@ -305,12 +305,12 @@ model ApprovalRequest {
   reason       String
   status       String    @default("PENDING") // PENDING | APPROVED | REJECTED
   requestedBy  Int       @map("requested_by")
-  requestedAt  DateTime  @default(now()) @map("requested_at")
+  requestedAt  DateTime  @default(now()) @map("requested_at") @db.Timestamptz(3)
   decidedBy    Int?      @map("decided_by")
-  decidedAt    DateTime? @map("decided_at")
+  decidedAt    DateTime? @map("decided_at") @db.Timestamptz(3)
   decisionNote String?   @map("decision_note")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@index([entityType, entityId])
   @@index([status])
@@ -322,10 +322,10 @@ model TidConfigStatus {
   id        Int       @id @default(autoincrement())
   name      String    @unique
   createdBy Int?      @map("created_by")
-  createdAt DateTime  @default(now()) @map("created_at")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedBy Int?      @map("updated_by")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
   deletedBy Int?      @map("deleted_by")
 
   @@map("tid_config_statuses")
@@ -343,11 +343,11 @@ model AssetEvent {
   toAgentId    Int?     @map("to_agent_id")
   customerId   Int?     @map("customer_id")
   actorUserId  Int?     @map("actor_user_id")
-  occurredAt   DateTime @map("occurred_at") // thời gian thao tác thực (≠ createdAt)
+  occurredAt   DateTime @map("occurred_at") @db.Timestamptz(3) // thời gian thao tác thực (≠ createdAt)
   note         String?
   beforeJson   String?  @map("before_json")
   afterJson    String?  @map("after_json")
-  createdAt    DateTime @default(now()) @map("created_at")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   @@index([deviceSerial])
   @@index([tid])
@@ -359,10 +359,10 @@ model PosTidBinding {
   id           Int       @id @default(autoincrement())
   posSerial    String    @map("pos_serial")
   tid          String
-  boundAt      DateTime  @map("bound_at")
-  unboundAt    DateTime? @map("unbound_at")
+  boundAt      DateTime  @map("bound_at") @db.Timestamptz(3)
+  unboundAt    DateTime? @map("unbound_at") @db.Timestamptz(3)
   unbindReason String?   @map("unbind_reason")
-  createdAt    DateTime  @default(now()) @map("created_at")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
   @@index([posSerial])
   @@index([tid])
@@ -373,7 +373,7 @@ model PosTidBinding {
 model CodeCounter {
   prefix    String   @id
   lastValue Int      @default(0) @map("last_value")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@map("code_counters")
 }
@@ -391,10 +391,10 @@ model Bank {
   name      String
   code      String    @unique // VCB, TCB... (unique, không phân biệt hoa/thường ở service)
   createdBy Int?      @map("created_by")
-  createdAt DateTime  @default(now()) @map("created_at")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedBy Int?      @map("updated_by")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
   deletedBy Int?      @map("deleted_by")
 
   @@map("banks")
@@ -407,10 +407,10 @@ model CardType {
   name      String
   code      String
   createdBy Int?      @map("created_by")
-  createdAt DateTime  @default(now()) @map("created_at")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedBy Int?      @map("updated_by")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
   deletedBy Int?      @map("deleted_by")
 
   @@index([bankId])
@@ -426,10 +426,10 @@ model Partner {
   phone         String?
   contactPerson String?   @map("contact_person")
   createdBy     Int?      @map("created_by")
-  createdAt     DateTime  @default(now()) @map("created_at")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedBy     Int?      @map("updated_by")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
-  deletedAt     DateTime? @map("deleted_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(3)
   deletedBy     Int?      @map("deleted_by")
 
   @@map("partners")
@@ -442,10 +442,10 @@ model PartnerBank {
   partnerId Int       @map("partner_id")
   bankId    Int       @map("bank_id")
   createdBy Int?      @map("created_by")
-  createdAt DateTime  @default(now()) @map("created_at")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedBy Int?      @map("updated_by")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
 
   @@unique([partnerId, bankId])
   @@index([partnerId])
@@ -468,10 +468,10 @@ model Supplier {
   phone         String?
   contactPerson String?   @map("contact_person")
   createdBy     Int?      @map("created_by")
-  createdAt     DateTime  @default(now()) @map("created_at")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedBy     Int?      @map("updated_by")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
-  deletedAt     DateTime? @map("deleted_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(3)
   deletedBy     Int?      @map("deleted_by")
 
   @@map("suppliers")
@@ -483,10 +483,10 @@ model PosModel {
   code      String    @unique // mã máy POS
   name      String // tên máy POS
   createdBy Int?      @map("created_by")
-  createdAt DateTime  @default(now()) @map("created_at")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedBy Int?      @map("updated_by")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
   deletedBy Int?      @map("deleted_by")
 
   @@map("pos_models")
@@ -497,10 +497,10 @@ model PosIntakeStatus {
   id        Int       @id @default(autoincrement())
   name      String    @unique
   createdBy Int?      @map("created_by")
-  createdAt DateTime  @default(now()) @map("created_at")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedBy Int?      @map("updated_by")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
   deletedBy Int?      @map("deleted_by")
 
   @@map("pos_intake_statuses")
@@ -515,13 +515,13 @@ model PosIntake {
   intakeStatusId Int       @map("intake_status_id")
   supplierId     Int       @map("supplier_id")
   importPrice    Int       @map("import_price") // giá nhập (VND, số nguyên đồng)
-  importedAt     DateTime  @map("imported_at") // ngày nhập
+  importedAt     DateTime  @map("imported_at") @db.Timestamptz(3) // ngày nhập
   note           String?
   createdBy      Int?      @map("created_by")
-  createdAt      DateTime  @default(now()) @map("created_at")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedBy      Int?      @map("updated_by")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
-  deletedAt      DateTime? @map("deleted_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(3)
   deletedBy      Int?      @map("deleted_by")
 
   @@index([posModelId])
@@ -539,10 +539,10 @@ model FeeType {
   id        Int       @id @default(autoincrement())
   name      String    @unique
   createdBy Int?      @map("created_by")
-  createdAt DateTime  @default(now()) @map("created_at")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedBy Int?      @map("updated_by")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
   deletedBy Int?      @map("deleted_by")
 
   @@map("fee_types")
@@ -565,10 +565,10 @@ model FeeRate {
   phiBan       Int       @map("phi_ban") // ×1000
   effectiveFrom DateTime @map("effective_from") // ngày bắt đầu hiệu lực của kỳ giá (P1.1)
   createdBy  Int?      @map("created_by")
-  createdAt  DateTime  @default(now()) @map("created_at")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedBy  Int?      @map("updated_by")
-  updatedAt  DateTime  @updatedAt @map("updated_at")
-  deletedAt  DateTime? @map("deleted_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt  DateTime? @map("deleted_at") @db.Timestamptz(3)
   deletedBy  Int?      @map("deleted_by")
 
   @@index([partnerId])
@@ -586,10 +586,10 @@ model ReceiveAccountSource {
   id        Int       @id @default(autoincrement())
   name      String    @unique
   createdBy Int?      @map("created_by")
-  createdAt DateTime  @default(now()) @map("created_at")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedBy Int?      @map("updated_by")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
   deletedBy Int?      @map("deleted_by")
 
   @@map("receive_account_sources")
@@ -617,10 +617,10 @@ model ReceiveAccount {
   cccdBackName   String?   @map("cccd_back_name")
   note           String?
   createdBy      Int?      @map("created_by")
-  createdAt      DateTime  @default(now()) @map("created_at")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedBy      Int?      @map("updated_by")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
-  deletedAt      DateTime? @map("deleted_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(3)
   deletedBy      Int?      @map("deleted_by")
 
   @@index([sourceId])
@@ -640,10 +640,10 @@ model DossierSource {
   code         String    @unique // Mã nguồn hồ sơ
   discountRate Int       @default(0) @map("discount_rate") // chiết khấu % ×1000 (≤3 thập phân, Int chính xác)
   createdBy    Int?      @map("created_by")
-  createdAt    DateTime  @default(now()) @map("created_at")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedBy    Int?      @map("updated_by")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
-  deletedAt    DateTime? @map("deleted_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(3)
   deletedBy    Int?      @map("deleted_by")
 
   @@map("dossier_sources")
@@ -678,10 +678,10 @@ model Dossier {
   cccdBackName     String?   @map("cccd_back_name")
   note             String?
   createdBy        Int?      @map("created_by")
-  createdAt        DateTime  @default(now()) @map("created_at")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedBy        Int?      @map("updated_by")
-  updatedAt        DateTime  @updatedAt @map("updated_at")
-  deletedAt        DateTime? @map("deleted_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt        DateTime? @map("deleted_at") @db.Timestamptz(3)
   deletedBy        Int?      @map("deleted_by")
 
   @@index([sourceId])
@@ -706,8 +706,8 @@ model MaintenanceRun {
   autoFixed    Int       @default(0) @map("auto_fixed")
   durationMs   Int       @default(0) @map("duration_ms")
   triggeredBy  Int?      @map("triggered_by")
-  startedAt    DateTime  @default(now()) @map("started_at")
-  finishedAt   DateTime? @map("finished_at")
+  startedAt    DateTime  @default(now()) @map("started_at") @db.Timestamptz(3)
+  finishedAt   DateTime? @map("finished_at") @db.Timestamptz(3)
 
   @@index([startedAt])
   @@map("maintenance_runs")

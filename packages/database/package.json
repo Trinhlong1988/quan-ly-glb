@@ -20,11 +20,12 @@
   "dependencies": {
     "@glb/business-rules": "*",
     "@glb/shared": "*",
-    "@prisma/adapter-better-sqlite3": "^7.8.0",
+    "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
-    "better-sqlite3": "^12.11.1"
+    "pg": "^8.13.1"
   },
   "devDependencies": {
+    "@types/pg": "^8.11.10",
     "bcryptjs": "^3.0.2",
     "dotenv": "^17.2.0",
     "prisma": "^7.8.0",
