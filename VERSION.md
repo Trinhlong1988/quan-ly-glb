@@ -1,10 +1,10 @@
 ---
 project: Quản Lý GLB (IMS)
 phase: G-REV.B / G-MAINT.E
-current_version: 0.21.0-h2b
-status: H2b (Phân loại chất lượng công nợ + Ghi giảm nợ xấu) ENGINEERING VALIDATED — chờ LEAD AUDIT + commit + tag. (H1 cashcat 9ead981; H2-core 1b333e4; H2-debt 1d33f10.)
+current_version: 0.21.1-h2b
+status: Thu-Chi H1→H2b HOÀN CHỈNH + COMMITTED (H1 9ead981; H2-core 1b333e4; H2-debt 1d33f10; H2b+hardening b09b289). B21 fix seed hoa/thường f1be7aa. DB thật `glb` đã migrate+seed+dedup — .env trỏ `glb` — SẴN SÀNG REOPEN lượt 1 (Mr.Long check menu lần lượt). PHASE_K = reopen lượt 2 (chờ duyệt 13 câu hỏi).
 last_update_ts: 2026-07-11
-last_update_by: CMD_BUILD (Executor) — chờ LEAD rerun độc lập
+last_update_by: LEAD (AUDIT rerun sạch: typecheck 0 · build 0 · vitest 237 · selftest 2/5/25/26/27/28 xanh · selftest 5=112)
 rule_break_count: 0
 schema_version: 17
 repo_path: D:\TT HKD AI\tools\quan-ly-glb (chuyển C→D 10/7; bản C giữ làm sao lưu, cấm sửa)
