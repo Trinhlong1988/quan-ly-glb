@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Plus, Pencil, Trash2, Loader2, Wallet, Tag, Download } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
-import { hasPermission, fmtDate, fmtTime } from '@glb/shared';
+import { hasPermission, fmtDate, fmtTime, prereqMessage } from '@glb/shared';
 import type { RcvSourceDto, RcvAccountDto, LiteRef, CustomerDto, RcvAccountInput } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
 import { Modal } from '../components/Modal.js';
@@ -196,7 +196,7 @@ function AccountTab({ canManage }: { canManage: boolean }): JSX.Element {
         <div className="text-sm text-slate-500">{rows.length} tài khoản</div>
         <div className="flex gap-2">
           <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('tk_nhan_tien', ['Nguồn', 'Tên TK', 'STK', 'Ngân hàng', 'Chi nhánh', 'CCCD', 'Khách hàng', 'Số điện thoại'], rows.map((r) => [r.sourceName, r.accountName, r.accountNumber, r.bankCode, r.branch, r.cccdNumber, r.customerName ?? 'Nội bộ', r.phone]))}>Xuất Excel</Button>
-          {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => sources.length && banks.length ? setForm({ mode: 'create' }) : toast.alert('Cần có ít nhất 1 nguồn tài khoản và 1 ngân hàng trước.', 'Thiếu dữ liệu nền')}>Thêm tài khoản</Button>}
+          {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => { const msg = prereqMessage([{ count: sources.length, label: 'Nguồn tài khoản', where: "tab 'Nguồn tài khoản'" }, { count: banks.length, label: 'Ngân hàng', where: "tab 'Ngân hàng'" }]); return msg ? toast.alert(msg, 'Thiếu dữ liệu nền') : setForm({ mode: 'create' }); }}>Thêm tài khoản</Button>}
         </div>
       </div>
       <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Tìm tên TK / STK / CCCD / Số điện thoại…"

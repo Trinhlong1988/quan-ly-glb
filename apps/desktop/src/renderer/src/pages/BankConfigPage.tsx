@@ -171,7 +171,7 @@ function BankForm({ mode, row, onClose, onSaved }: { mode: 'create' | 'edit'; ro
     else toast.alert(res.message ?? 'Lưu ngân hàng thất bại', 'Không lưu được');
   }
   return (
-    <Modal title={mode === 'edit' ? `Sửa ngân hàng ${row?.code}` : 'Thêm ngân hàng mới'} onClose={onClose} width="max-w-md">
+    <Modal title={mode === 'edit' ? `Sửa ngân hàng ${row?.code}` : 'Thêm ngân hàng mới'} onClose={onClose} width="max-w-md" onSubmit={() => void save()}>
       <div className="grid gap-4">
         <Field label="Tên ngân hàng" required><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} autoFocus placeholder="Ngân hàng TMCP Ngoại thương" /></Field>
         <Field label="Mã ngân hàng" required hint="Ví dụ: VCB, TCB (không trùng)"><input className={inputCls} value={code} onChange={(e) => setCode(e.target.value)} placeholder="VCB" /></Field>
@@ -285,7 +285,9 @@ function CardTypeForm({ mode, row, banks, onClose, onSaved }: { mode: 'create' |
   const [name, setName] = useState(row?.name ?? '');
   const [code, setCode] = useState(row?.code ?? '');
   const [busy, setBusy] = useState(false);
+  const noBank = banks.length === 0; // FIX 3 — chống dead-end khi chưa có ngân hàng
   async function save(): Promise<void> {
+    if (noBank) return toast.alert('Chưa có ngân hàng — thêm ở tab \'Ngân hàng\' trước khi tạo loại thẻ.', 'Thiếu dữ liệu nền');
     if (!bankId) return toast.alert('Phải chọn ngân hàng.', 'Thiếu thông tin');
     if (!name.trim()) return toast.alert('Tên loại thẻ bắt buộc.', 'Thiếu thông tin');
     if (!code.trim()) return toast.alert('Mã loại thẻ bắt buộc.', 'Thiếu thông tin');
@@ -297,15 +299,16 @@ function CardTypeForm({ mode, row, banks, onClose, onSaved }: { mode: 'create' |
     else toast.alert(res.message ?? 'Lưu loại thẻ thất bại', 'Không lưu được');
   }
   return (
-    <Modal title={mode === 'edit' ? `Sửa loại thẻ ${row?.code}` : 'Thêm loại thẻ mới'} onClose={onClose} width="max-w-md">
+    <Modal title={mode === 'edit' ? `Sửa loại thẻ ${row?.code}` : 'Thêm loại thẻ mới'} onClose={onClose} width="max-w-md" onSubmit={() => void save()}>
       <div className="grid gap-4">
-        <Field label="Ngân hàng" required><select className={inputCls} value={bankId} onChange={(e) => setBankId(e.target.value)} autoFocus><option value="">— Chọn ngân hàng —</option>{banks.map((b) => <option key={b.id} value={b.id}>{b.code} · {b.name}</option>)}</select></Field>
+        <Field label="Ngân hàng" required><select className={inputCls} value={bankId} onChange={(e) => setBankId(e.target.value)} autoFocus disabled={noBank}><option value="">{noBank ? '— Chưa có ngân hàng: thêm ở tab Ngân hàng —' : '— Chọn ngân hàng —'}</option>{banks.map((b) => <option key={b.id} value={b.id}>{b.code} · {b.name}</option>)}</select></Field>
         <Field label="Tên loại thẻ" required hint="Ví dụ: Visa nội địa, Napas"><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} /></Field>
         <Field label="Mã loại thẻ" required><input className={inputCls} value={code} onChange={(e) => setCode(e.target.value)} placeholder="VISA" /></Field>
       </div>
+      {noBank && <p className="mt-2 text-xs font-medium text-warning">Chưa có ngân hàng nào — vào tab <b>Ngân hàng</b> thêm ít nhất 1 ngân hàng trước khi tạo loại thẻ.</p>}
       <div className="mt-6 flex justify-end gap-2">
         <Button variant="neutral" onClick={onClose}>Hủy</Button>
-        <Button variant="confirm" onClick={save} disabled={busy} icon={busy ? <Loader2 className="h-4 w-4 animate-spin" /> : undefined}>{mode === 'edit' ? 'Lưu thay đổi' : 'Thêm loại thẻ'}</Button>
+        <Button variant="confirm" onClick={save} disabled={busy || noBank} icon={busy ? <Loader2 className="h-4 w-4 animate-spin" /> : undefined}>{mode === 'edit' ? 'Lưu thay đổi' : 'Thêm loại thẻ'}</Button>
       </div>
     </Modal>
   );
@@ -434,7 +437,7 @@ function PartnerForm({ mode, row, onClose, onSaved }: { mode: 'create' | 'edit';
     else toast.alert(res.message ?? 'Lưu đối tác thất bại', 'Không lưu được');
   }
   return (
-    <Modal title={mode === 'edit' ? `Sửa đối tác ${row?.code}` : 'Thêm đối tác mới'} onClose={onClose} width="max-w-xl">
+    <Modal title={mode === 'edit' ? `Sửa đối tác ${row?.code}` : 'Thêm đối tác mới'} onClose={onClose} width="max-w-xl" onSubmit={() => void save()}>
       <div className="grid grid-cols-2 gap-4">
         <Field label="Tên đối tác" required><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} autoFocus /></Field>
         <Field label="Mã đối tác" required hint="Không trùng"><input className={inputCls} value={code} onChange={(e) => setCode(e.target.value)} /></Field>
@@ -463,7 +466,7 @@ function LinkBanksModal({ partner, banks, onClose, onSaved }: { partner: Partner
     else toast.alert(res.message ?? 'Lưu liên kết thất bại', 'Không lưu được');
   }
   return (
-    <Modal title={`Liên kết ngân hàng — ${partner.name}`} onClose={onClose} width="max-w-lg">
+    <Modal title={`Liên kết ngân hàng — ${partner.name}`} onClose={onClose} width="max-w-lg" onSubmit={() => void save()}>
       <p className="mb-3 text-sm text-slate-500">Tích chọn các ngân hàng mà đối tác này liên kết.</p>
       <div className="grid max-h-72 grid-cols-2 gap-2 overflow-auto">
         {banks.length === 0 && <div className="col-span-2 text-sm text-slate-400">Chưa có ngân hàng nào — thêm ở tab Ngân hàng trước.</div>}

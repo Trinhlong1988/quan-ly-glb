@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Plus, Pencil, Trash2, Loader2, CreditCard, Tag, Download } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
-import { hasPermission, fmtDate, fmtTime } from '@glb/shared';
+import { hasPermission, fmtDate, fmtTime, prereqMessage } from '@glb/shared';
 import type { TidConfigStatusDto, ConfigTidDto, ConfigTidInput, BankLite, PartnerDto, RcvAccountDto, DossierSourceDto, FeeRateDto } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
 import { Modal } from '../components/Modal.js';
@@ -200,7 +200,7 @@ function TidTab({ canManage }: { canManage: boolean }): JSX.Element {
         <div className="text-sm text-slate-500">{rows.length} TID cấu hình</div>
         <div className="flex gap-2">
           <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('cau_hinh_tid', ['TID', 'Tên HKD', 'Ngân hàng', 'Đối tác', 'Ngày cấp', 'Trạng thái', 'Nguồn hồ sơ', 'TK nhận tiền'], rows.map((r) => [r.tid, r.hkdName, r.bankCode, r.partnerName, r.issuedAt ? fmtDate(r.issuedAt) : '', r.configStatusName, r.dossierSourceCode, r.receiveAccountLabel]))}>Xuất Excel</Button>
-          {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => banks.length && partners.length ? setForm({ mode: 'create' }) : toast.alert('Cần có ít nhất 1 ngân hàng và 1 đối tác trước.', 'Thiếu dữ liệu nền')}>Thêm TID</Button>}
+          {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => { const msg = prereqMessage([{ count: banks.length, label: 'Ngân hàng', where: "tab 'Ngân hàng'" }, { count: partners.length, label: 'Đối tác', where: "tab 'Đối tác'" }]); return msg ? toast.alert(msg, 'Thiếu dữ liệu nền') : setForm({ mode: 'create' }); }}>Thêm TID</Button>}
         </div>
       </div>
       <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Tìm TID / tên HKD…"

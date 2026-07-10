@@ -149,7 +149,7 @@ function TypeForm({ mode, row, onClose, onSaved }: { mode: 'create' | 'edit'; ro
     else toast.alert(res.message ?? 'Lưu loại phí thất bại', 'Không lưu được');
   }
   return (
-    <Modal title={mode === 'edit' ? 'Sửa loại phí' : 'Thêm loại phí'} onClose={onClose} width="max-w-md">
+    <Modal title={mode === 'edit' ? 'Sửa loại phí' : 'Thêm loại phí'} onClose={onClose} width="max-w-md" onSubmit={() => void save()}>
       <Field label="Tên loại phí" required hint="Ví dụ: Ủy quyền, Tiền chờ, Tiền Nhanh"><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} autoFocus /></Field>
       <div className="mt-6 flex justify-end gap-2">
         <Button variant="neutral" onClick={onClose}>Hủy</Button>
@@ -210,7 +210,7 @@ function RateTab({ canManage }: { canManage: boolean }): JSX.Element {
         <div className="text-sm text-slate-500">{rows.length} biểu phí</div>
         <div className="flex gap-2">
           <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('bieu_phi', ['Đối tác', 'Ngân hàng', 'Loại thẻ', 'Hiệu lực từ', 'Đang hiệu lực', 'Phí mua %', 'Phí cài máy %', 'Phí bán %', 'Chênh lệch với Nhà cung cấp %', 'Chênh lệch với Khách hàng %'], rows.map((r) => [r.partnerName, r.bankCode, r.cardTypeName, fmtDate(r.effectiveFrom), r.isCurrent ? 'x' : '', r.phiMua, r.phiCaiMay, r.phiBan, r.clNcc, r.clKh]))}>Xuất Excel</Button>
-          {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => partners.length ? setSetOpen('new') : toast.alert('Cần có đối tác + loại thẻ + liên kết ngân hàng trước khi đặt phí.', 'Thiếu dữ liệu nền')}>Đặt biểu phí</Button>}
+          {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => partners.length ? setSetOpen('new') : toast.alert('Chưa có đối tác — thêm ở tab \'Đối tác\' (Cấu hình ngân hàng) rồi liên kết ngân hàng trước khi đặt phí.', 'Thiếu dữ liệu nền')}>Đặt biểu phí</Button>}
         </div>
       </div>
       <FilterBar
@@ -322,12 +322,19 @@ function RateForm({ existing, partners, banks, onClose, onSaved }: { existing: F
   }
 
   return (
-    <Modal title={isEdit ? `Sửa biểu phí — ${existing?.partnerName} · ${existing?.cardTypeName}` : 'Đặt biểu phí mới'} onClose={onClose} width="max-w-xl">
+    <Modal title={isEdit ? `Sửa biểu phí — ${existing?.partnerName} · ${existing?.cardTypeName}` : 'Đặt biểu phí mới'} onClose={onClose} width="max-w-xl" onSubmit={() => void save()}>
       <div className="grid grid-cols-3 gap-4">
         <Field label="Đối tác" required><select className={inputCls} value={partnerId} disabled={isEdit} onChange={(e) => { setPartnerId(e.target.value); setBankId(''); setCardTypeId(''); }}><option value="">— Chọn đối tác —</option>{partners.map((p) => <option key={p.id} value={p.id}>{p.code} · {p.name}</option>)}</select></Field>
         <Field label="Ngân hàng" required hint="Ngân hàng đã liên kết đối tác"><select className={inputCls} value={bankId} disabled={isEdit || !partnerId} onChange={(e) => { setBankId(e.target.value); setCardTypeId(''); }}><option value="">— Chọn ngân hàng —</option>{availBanks.map((b) => <option key={b.id} value={b.id}>{b.code} · {b.name}</option>)}</select></Field>
         <Field label="Loại thẻ" required><select className={inputCls} value={cardTypeId} disabled={isEdit || !bankId} onChange={(e) => setCardTypeId(e.target.value)}><option value="">— Chọn loại thẻ —</option>{cards.map((c) => <option key={c.id} value={c.id}>{c.code} · {c.name}</option>)}</select></Field>
       </div>
+      {/* FIX 2 — hướng dẫn thoát dead-end thay vì kẹt "Vui lòng chọn…" */}
+      {!isEdit && partnerId && availBanks.length === 0 && (
+        <p className="mt-2 text-xs font-medium text-warning">Đối tác này chưa liên kết ngân hàng nào — vào tab <b>Đối tác</b> › nút <b>Liên kết ngân hàng</b> để thêm, rồi mở lại form này.</p>
+      )}
+      {!isEdit && bankId && cards.length === 0 && (
+        <p className="mt-2 text-xs font-medium text-warning">Ngân hàng đã chọn chưa có loại thẻ nào — thêm ở <b>Cấu hình ngân hàng › Loại thẻ</b> trước, rồi mở lại form này.</p>
+      )}
       <div className="mt-4 grid grid-cols-3 gap-4">
         <Field label="Phí mua (%)" required><input className={inputCls} inputMode="decimal" value={phiMua} onChange={(e) => setPhiMua(e.target.value)} placeholder="1.02" /></Field>
         <Field label="Phí cài máy (%)" required><input className={inputCls} inputMode="decimal" value={phiCaiMay} onChange={(e) => setPhiCaiMay(e.target.value)} placeholder="1.03" /></Field>

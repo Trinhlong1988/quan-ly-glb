@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Plus, Pencil, Trash2, Loader2, Building2, Cpu, PackagePlus, Tag, Download } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
-import { hasPermission, fmtDate, fmtTime } from '@glb/shared';
+import { hasPermission, fmtDate, fmtTime, groupDigits, parseVndInput, prereqMessage } from '@glb/shared';
+import type { PrereqDef } from '@glb/shared';
 import type { SupplierDto, PosModelDto, IntakeStatusDto, PosIntakeDto, LiteRef } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
 import { Modal } from '../components/Modal.js';
+import { DateInput } from '../components/DateInput.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
@@ -51,8 +53,8 @@ export function PosSupplyPage({ user }: { user: AuthUser }): JSX.Element {
       <div className="mb-3 flex items-center gap-1 border-b border-line">
         <TabBtn active={tab === 'supplier'} onClick={() => setTab('supplier')} icon={<Building2 className="h-4 w-4" />}>Nhà cung cấp</TabBtn>
         <TabBtn active={tab === 'model'} onClick={() => setTab('model')} icon={<Cpu className="h-4 w-4" />}>Chủng loại POS</TabBtn>
-        <TabBtn active={tab === 'intake'} onClick={() => setTab('intake')} icon={<PackagePlus className="h-4 w-4" />}>Nhập kho POS</TabBtn>
         <TabBtn active={tab === 'status'} onClick={() => setTab('status')} icon={<Tag className="h-4 w-4" />}>Trạng thái nhập</TabBtn>
+        <TabBtn active={tab === 'intake'} onClick={() => setTab('intake')} icon={<PackagePlus className="h-4 w-4" />}>Nhập kho POS</TabBtn>
       </div>
       {tab === 'supplier' && <SupplierTab canManage={canManage} />}
       {tab === 'model' && <ModelTab canManage={canManage} />}
@@ -183,7 +185,7 @@ function SupplierForm({ mode, row, onClose, onSaved }: { mode: 'create' | 'edit'
     else toast.alert(res.message ?? 'Lưu nhà cung cấp thất bại', 'Không lưu được');
   }
   return (
-    <Modal title={mode === 'edit' ? `Sửa nhà cung cấp ${row?.code}` : 'Thêm nhà cung cấp mới'} onClose={onClose} width="max-w-xl">
+    <Modal title={mode === 'edit' ? `Sửa nhà cung cấp ${row?.code}` : 'Thêm nhà cung cấp mới'} onClose={onClose} width="max-w-xl" onSubmit={() => void save()}>
       <div className="grid grid-cols-2 gap-4">
         <Field label="Tên nhà cung cấp" required><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} autoFocus /></Field>
         <Field label="Mã nhà cung cấp" required hint="Không trùng"><input className={inputCls} value={code} onChange={(e) => setCode(e.target.value)} /></Field>
@@ -304,7 +306,7 @@ function ModelForm({ mode, row, onClose, onSaved }: { mode: 'create' | 'edit'; r
     else toast.alert(res.message ?? 'Lưu chủng loại thất bại', 'Không lưu được');
   }
   return (
-    <Modal title={mode === 'edit' ? `Sửa chủng loại ${row?.code}` : 'Thêm chủng loại máy POS'} onClose={onClose} width="max-w-md">
+    <Modal title={mode === 'edit' ? `Sửa chủng loại ${row?.code}` : 'Thêm chủng loại máy POS'} onClose={onClose} width="max-w-md" onSubmit={() => void save()}>
       <div className="grid gap-4">
         <Field label="Mã máy POS" required hint="Ví dụ: PAX-A920, VX520"><input className={inputCls} value={code} onChange={(e) => setCode(e.target.value)} autoFocus /></Field>
         <Field label="Tên máy POS" required><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} /></Field>
@@ -416,7 +418,7 @@ function StatusForm({ mode, row, onClose, onSaved }: { mode: 'create' | 'edit'; 
     else toast.alert(res.message ?? 'Lưu trạng thái thất bại', 'Không lưu được');
   }
   return (
-    <Modal title={mode === 'edit' ? 'Sửa trạng thái nhập máy' : 'Thêm trạng thái nhập máy'} onClose={onClose} width="max-w-md">
+    <Modal title={mode === 'edit' ? 'Sửa trạng thái nhập máy' : 'Thêm trạng thái nhập máy'} onClose={onClose} width="max-w-md" onSubmit={() => void save()}>
       <Field label="Tên trạng thái" required hint="Ví dụ: Máy mới, Máy cũ, Máy đổi, Máy thuê"><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} autoFocus /></Field>
       <div className="mt-6 flex justify-end gap-2">
         <Button variant="neutral" onClick={onClose}>Hủy</Button>
@@ -437,6 +439,7 @@ function IntakeTab({ canManage }: { canManage: boolean }): JSX.Element {
   const [search, setSearch] = useState('');
   const [supplierId, setSupplierId] = useState('');
   const [modelId, setModelId] = useState('');
+  const [statusId, setStatusId] = useState(''); // FIX 1d — lọc trạng thái máy CLIENT-SIDE
   const [form, setForm] = useState<{ mode: 'create' | 'edit'; row?: PosIntakeDto } | null>(null);
   const [del, setDel] = useState<PosIntakeDto | null>(null);
   const [bulkDel, setBulkDel] = useState(false);
@@ -475,31 +478,39 @@ function IntakeTab({ canManage }: { canManage: boolean }): JSX.Element {
     await reload();
   }
 
-  const canAdd = canManage && models.length > 0 && suppliers.length > 0 && statuses.length > 0;
+  const prereqDefs: PrereqDef[] = [
+    { count: models.length, label: 'Chủng loại máy', where: "tab 'Chủng loại POS'" },
+    { count: suppliers.length, label: 'Nhà cung cấp', where: "tab 'Nhà cung cấp'" },
+    { count: statuses.length, label: 'Trạng thái nhập máy', where: "tab 'Trạng thái nhập'" }
+  ];
+  const canAdd = canManage && prereqMessage(prereqDefs) === null;
+  // FIX 1d — lọc trạng thái máy client-side (không đổi API posIntakeList).
+  const visibleRows = statusId ? rows.filter((r) => String(r.intakeStatusId) === statusId) : rows;
 
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
-        <div className="text-sm text-slate-500">{rows.length} máy POS trong kho</div>
+        <div className="text-sm text-slate-500">{visibleRows.length} máy POS trong kho</div>
         <div className="flex gap-2">
-          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('nhap_kho_pos', ['Số thứ tự', 'Chủng loại', 'Số seri', 'Nhà cung cấp', 'Giá nhập', 'Ngày nhập', 'Trạng thái'], rows.map((r, i) => [i + 1, `${r.posModelCode} · ${r.posModelName}`, r.serial, r.supplierName, r.importPrice, fmtDate(r.importedAt), r.intakeStatusName]))}>Xuất Excel</Button>
-          {canManage && <Button variant="confirm" icon={<PackagePlus className="h-4 w-4" />} onClick={() => canAdd ? setForm({ mode: 'create' }) : toast.alert('Cần có ít nhất 1 chủng loại máy, 1 nhà cung cấp và 1 trạng thái nhập trước khi nhập kho.', 'Thiếu dữ liệu nền')}>Nhập kho máy POS</Button>}
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('nhap_kho_pos', ['Số thứ tự', 'Chủng loại', 'Số seri', 'Nhà cung cấp', 'Giá nhập', 'Ngày nhập', 'Trạng thái'], visibleRows.map((r, i) => [i + 1, `${r.posModelCode} · ${r.posModelName}`, r.serial, r.supplierName, r.importPrice, fmtDate(r.importedAt), r.intakeStatusName]))}>Xuất Excel</Button>
+          {canManage && <Button variant="confirm" icon={<PackagePlus className="h-4 w-4" />} onClick={() => canAdd ? setForm({ mode: 'create' }) : toast.alert(prereqMessage(prereqDefs) ?? 'Thiếu dữ liệu nền để nhập kho.', 'Thiếu dữ liệu nền')}>Nhập kho máy POS</Button>}
         </div>
       </div>
       <FilterBar
         search={search} onSearch={setSearch} searchPlaceholder="Tìm seri / ghi chú…"
         selects={[
           { key: 'model', placeholder: 'Tất cả chủng loại', value: modelId, options: models.map((m) => ({ value: String(m.id), label: `${m.code} · ${m.name}` })), onChange: setModelId },
-          { key: 'sup', placeholder: 'Tất cả nhà cung cấp', value: supplierId, options: suppliers.map((s) => ({ value: String(s.id), label: `${s.code} · ${s.name}` })), onChange: setSupplierId }
+          { key: 'sup', placeholder: 'Tất cả nhà cung cấp', value: supplierId, options: suppliers.map((s) => ({ value: String(s.id), label: `${s.code} · ${s.name}` })), onChange: setSupplierId },
+          { key: 'status', placeholder: 'Tất cả trạng thái', value: statusId, options: statuses.map((s) => ({ value: String(s.id), label: s.name })), onChange: setStatusId }
         ]}
-        onApply={reload} onReset={() => { setSearch(''); setSupplierId(''); setModelId(''); setTimeout(reload, 0); }}
+        onApply={reload} onReset={() => { setSearch(''); setSupplierId(''); setModelId(''); setStatusId(''); setTimeout(reload, 0); }}
       />
       {canManage && <SelectionBar count={sel.count} entityLabel="máy POS" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>
-              {canManage && <SelectAllCell ids={rows.map((r) => r.id)} sel={sel} />}
+              {canManage && <SelectAllCell ids={visibleRows.map((r) => r.id)} sel={sel} />}
               <th className="px-4 py-3">Số thứ tự</th>
               <th className="px-4 py-3">Chủng loại</th>
               <th className="px-4 py-3">Seri number</th>
@@ -512,8 +523,8 @@ function IntakeTab({ canManage }: { canManage: boolean }): JSX.Element {
           </thead>
           <tbody className="divide-y divide-line">
             {loading && <tr><td colSpan={canManage ? 9 : 7} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
-            {!loading && rows.length === 0 && <tr><td colSpan={canManage ? 9 : 7} className="px-4 py-10 text-center text-slate-400"><PackagePlus className="mx-auto mb-2 h-6 w-6" /> Chưa có máy POS nào nhập kho.</td></tr>}
-            {!loading && rows.map((pi, i) => (
+            {!loading && visibleRows.length === 0 && <tr><td colSpan={canManage ? 9 : 7} className="px-4 py-10 text-center text-slate-400"><PackagePlus className="mx-auto mb-2 h-6 w-6" /> {statusId ? 'Không có máy POS khớp trạng thái đã lọc.' : 'Chưa có máy POS nào nhập kho.'}</td></tr>}
+            {!loading && visibleRows.map((pi, i) => (
               <tr key={pi.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(pi.id) ? 'bg-brand-tint/40' : '')}>
                 {canManage && <SelectCell id={pi.id} sel={sel} />}
                 <td className="px-4 py-3 text-slate-500">{i + 1}</td>
@@ -539,24 +550,6 @@ function IntakeTab({ canManage }: { canManage: boolean }): JSX.Element {
       {form && <IntakeForm mode={form.mode} row={form.row} models={models} suppliers={suppliers} statuses={statuses} onClose={() => setForm(null)} onSaved={() => { setForm(null); void reload(); }} />}
       {del && <ConfirmDialog title="Xóa máy POS nhập kho" message={`Máy POS seri "${del.serial}" sẽ vào Thùng rác (có thể phục hồi). Nhập lại mật khẩu để xác nhận.`} confirmLabel="Xóa" danger requirePassword onCancel={() => setDel(null)} onConfirm={(pwd) => doDelete(del, pwd)} />}
       {bulkDel && <ConfirmDialog title="Xóa nhiều máy POS" message={`${sel.count} máy POS đã chọn sẽ vào Thùng rác (có thể phục hồi). Nhập lại mật khẩu để xác nhận.`} confirmLabel={`Xóa ${sel.count} mục`} danger requirePassword onCancel={() => setBulkDel(false)} onConfirm={(pwd) => doBulkDelete(pwd)} />}
-    </div>
-  );
-}
-
-/** Ngày nhập tách 3 ô dd | mm | yyyy (§C8 b1). Trả yyyy-mm-dd. */
-function DateParts({ value, onChange }: { value: string; onChange: (v: string) => void }): JSX.Element {
-  const [y, m, d] = value ? value.split('-') : ['', '', ''];
-  function set(dd: string, mm: string, yy: string): void {
-    if (dd && mm && yy) onChange(`${yy.padStart(4, '0')}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`);
-    else onChange('');
-  }
-  return (
-    <div className="flex items-center gap-2">
-      <input className={inputCls + ' w-16 text-center'} placeholder="Ngày" inputMode="numeric" value={d ?? ''} onChange={(e) => set(e.target.value.replace(/\D/g, ''), m ?? '', y ?? '')} />
-      <span className="text-slate-400">/</span>
-      <input className={inputCls + ' w-16 text-center'} placeholder="Tháng" inputMode="numeric" value={m ?? ''} onChange={(e) => set(d ?? '', e.target.value.replace(/\D/g, ''), y ?? '')} />
-      <span className="text-slate-400">/</span>
-      <input className={inputCls + ' w-20 text-center'} placeholder="Năm" inputMode="numeric" value={y ?? ''} onChange={(e) => set(d ?? '', m ?? '', e.target.value.replace(/\D/g, ''))} />
     </div>
   );
 }
@@ -588,16 +581,16 @@ function IntakeForm({ mode, row, models, suppliers, statuses, onClose, onSaved }
     else toast.alert(res.message ?? 'Lưu máy POS thất bại', 'Không lưu được');
   }
 
-  const priceNum = Number(price.replace(/\D/g, ''));
+  const priceNum = parseVndInput(price) ?? 0;
   return (
-    <Modal title={mode === 'edit' ? `Sửa máy POS ${row?.serial}` : 'Nhập kho máy POS mới'} onClose={onClose} width="max-w-xl">
+    <Modal title={mode === 'edit' ? `Sửa máy POS ${row?.serial}` : 'Nhập kho máy POS mới'} onClose={onClose} width="max-w-xl" onSubmit={() => void save()}>
       <div className="grid grid-cols-2 gap-4">
         <Field label="Chủng loại máy" required><select className={inputCls} value={posModelId} onChange={(e) => setPosModelId(e.target.value)} autoFocus><option value="">— Chọn chủng loại —</option>{models.map((m) => <option key={m.id} value={m.id}>{m.code} · {m.name}</option>)}</select></Field>
         <Field label="Seri number" required hint="Chữ + số, không giới hạn"><input className={inputCls} value={serial} onChange={(e) => setSerial(e.target.value)} /></Field>
         <Field label="Nhà cung cấp" required><select className={inputCls} value={supplierId} onChange={(e) => setSupplierId(e.target.value)}><option value="">— Chọn nhà cung cấp —</option>{suppliers.map((s) => <option key={s.id} value={s.id}>{s.code} · {s.name}</option>)}</select></Field>
         <Field label="Trạng thái nhập" required><select className={inputCls} value={intakeStatusId} onChange={(e) => setIntakeStatusId(e.target.value)}><option value="">— Chọn trạng thái —</option>{statuses.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
-        <Field label="Giá nhập (VND)" required hint={price ? fmtVnd(priceNum) : 'Số nguyên đồng'}><input className={inputCls} inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value.replace(/\D/g, ''))} placeholder="5000000" /></Field>
-        <Field label="Ngày nhập" required><DateParts value={importedAt} onChange={setImportedAt} /></Field>
+        <Field label="Giá nhập (VND)" required hint={price ? fmtVnd(priceNum) : 'Số nguyên đồng'}><input className={inputCls} inputMode="numeric" value={groupDigits(price)} onChange={(e) => setPrice(e.target.value.replace(/\D/g, ''))} placeholder="5.000.000" /></Field>
+        <Field label="Ngày nhập" required><DateInput value={importedAt} onChange={setImportedAt} /></Field>
         <div className="col-span-2"><Field label="Ghi chú"><input className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} /></Field></div>
       </div>
       <div className="mt-6 flex justify-end gap-2">
