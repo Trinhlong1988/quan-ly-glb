@@ -201,17 +201,22 @@ export async function seedSystemCashCategories(db: Db): Promise<number> {
 // (gate PosSupplyPage đòi statuses.length > 0). Seed 4 trạng thái chuẩn (đúng ví dụ trong UI) cho
 // CẢ DB mới LẪN DB đã tồn tại: seedIfEmpty chạy mỗi boot máy chủ theo kiểu ADDITIVE (giống các
 // seedSystemCashCategories / grant*) nên phủ luôn DB cũ của Mr.Long.
-// Idempotent theo khóa tự nhiên = name. `name` là @unique TOÀN CỤC (KHÔNG lọc soft-delete) nên
-// dùng findUnique theo name: (a) chưa có → tạo; (b) đã có (kể cả bản đã xóa mềm) → bỏ qua. Vừa
-// tránh vi phạm ràng buộc unique, vừa KHÔNG "hồi sinh" trạng thái admin đã CHỦ ĐỘNG xóa
-// (tôn trọng G-POS-A01: reboot không tự bật lại cái admin đã tắt). createdBy = null (system seed).
+// Idempotent theo khóa tự nhiên = name, so khớp KHÔNG PHÂN BIỆT HOA/THƯỜNG (fix db-evolution-gap
+// 11/7): DB cũ có thể đã có biến thể khác hoa/thường (vd "Máy Mới") → nếu dùng findUnique khớp
+// chính xác thì seed đẻ thêm "Máy mới" gần trùng, gây 2 dòng lẫn lộn trong dropdown. Dùng findFirst
+// insensitive: (a) chưa có biến thể nào → tạo; (b) đã có bất kỳ biến thể (kể cả xóa mềm) → bỏ qua.
+// Vừa tránh trùng gần-giống, vừa KHÔNG "hồi sinh" trạng thái admin đã CHỦ ĐỘNG xóa (tôn trọng
+// G-POS-A01: reboot không tự bật lại cái admin đã tắt). createdBy = null (system seed).
 const DEFAULT_INTAKE_STATUS_NAMES = ['Máy mới', 'Máy cũ', 'Máy đổi', 'Máy thuê'];
 
 /** Seed idempotent 4 trạng thái nhập máy POS mặc định. Trả về số trạng thái vừa tạo mới. */
 export async function seedDefaultIntakeStatusesIfMissing(db: Db): Promise<number> {
   let created = 0;
   for (const name of DEFAULT_INTAKE_STATUS_NAMES) {
-    const existing = await db.posIntakeStatus.findUnique({ where: { name }, select: { id: true } });
+    const existing = await db.posIntakeStatus.findFirst({
+      where: { name: { equals: name, mode: 'insensitive' } },
+      select: { id: true }
+    });
     if (existing) continue;
     await db.posIntakeStatus.create({ data: { name, createdBy: null } });
     created++;

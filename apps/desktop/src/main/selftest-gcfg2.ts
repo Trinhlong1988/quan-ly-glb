@@ -145,6 +145,27 @@ export async function runPosSupplySelfTest(): Promise<number> {
   ok('SAI SALES xóa nhập kho → FORBIDDEN', (await sup.deletePosIntakes([intakeIds[1]], PW)).error === 'FORBIDDEN');
   await logout();
 
+  // ═══════════ REGRESSION db-evolution-gap 11/7 ═══════════
+  // Bug thật (Mr.Long reopen 11/7): DB cũ có "Máy Mới" (hoa) → seed cũ khớp chính xác nên đẻ thêm
+  // "Máy mới" (thường) = 2 dòng gần trùng trong dropdown. Fix: seedDefaultIntakeStatusesIfMissing
+  // so khớp KHÔNG phân biệt hoa/thường. Kịch bản: DB chỉ có biến thể HOA → seed CHỈ tạo 3 cái còn
+  // lại, KHÔNG đẻ "Máy mới". Đặt CUỐI cùng vì xóa/dựng lại toàn bộ trạng thái nhập.
+  {
+    const { getDb, seedDefaultIntakeStatusesIfMissing } = await import('./db.js');
+    const db = getDb();
+    await db.posIntake.deleteMany({}); // gỡ ref FK trước khi xóa trạng thái
+    await db.posIntakeStatus.deleteMany({});
+    await db.posIntakeStatus.create({ data: { name: 'Máy Mới', createdBy: null } }); // biến thể HOA của "Máy mới"
+    const created = await seedDefaultIntakeStatusesIfMissing(db);
+    ok('seed dedup hoa/thường: chỉ tạo 3 (bỏ "Máy mới" vì đã có "Máy Mới")', created === 3, created);
+    const names = (await db.posIntakeStatus.findMany({ select: { name: true } })).map((s) => s.name);
+    ok('KHÔNG đẻ bản thường "Máy mới" trùng với "Máy Mới"', !names.includes('Máy mới'), names);
+    ok('giữ nguyên bản HOA "Máy Mới" của admin', names.includes('Máy Mới'), names);
+    ok('tổng đúng 4 trạng thái (Máy Mới + cũ/đổi/thuê)', names.length === 4, names);
+    // seed lần 2 = no-op (idempotent, đủ 4 biến thể)
+    ok('seed lần 2 idempotent (tạo 0)', (await seedDefaultIntakeStatusesIfMissing(db)) === 0);
+  }
+
   // eslint-disable-next-line no-console
   console.log(`GCFG5 SUMMARY | pass=${pass} fail=${fail}`);
   return fail === 0 ? 0 : 1;
