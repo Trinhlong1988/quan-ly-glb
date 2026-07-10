@@ -6,11 +6,22 @@
 | # | Frame | Spec | Gate freeze | Trạng thái |
 |---|---|---|---|---|
 | F0 | P1.1 giá theo kỳ | `PHASE1_GIA_THEO_KY_SPEC.md` | REV15 73/0 + Prod accept | ✅ FROZEN tag `p1.1-gia-theo-ky` |
-| F1 | P1.2 approval + bill bất biến + bulk | `PHASE1_2_APPROVAL_SPEC.md` | typecheck0 / build0 / vitest / selftest18 / REV15 73/0 + Prod accept | 🔶 **ĐANG** — backend xanh, UI CMD_BUILD sửa web-typecheck, **CHƯA freeze** |
-| F2 | G10 triển khai đa máy (Postgres LAN + .exe) | `PHASE_G10_DEPLOYMENT_SPEC.md` | §5 G-G10.1..6 + Prod accept LAN thật | ⛔ KHÓA tới khi F1 tag `p1.2` + Mr.Long duyệt §2 |
+| F1 | P1.2 approval + bill bất biến + bulk | `PHASE1_2_APPROVAL_SPEC.md` | typecheck0 / build0 / vitest198 / selftest18 31/0 / REV15 73/0 | ✅ **FROZEN provisional** tag `p1.2` (commit d3e0399) — TẠM NGHIỆM THU 10/7, **chờ Production Validation đầy đủ R196 để nâng L2** |
+| F-NOTIF | Đẩy thông báo hủy bill vào hòm thư (UI đã có) | `DISPATCH_PROMPTS_REMAINING.md` (prompt đã QA) | typecheck0/build0/vitest198/selftest18 31-0/selftest19 26-0/guard | ✅ **FROZEN provisional** tag `f-notif` — Engineering Validated 10/7, chờ Production Validation R196 |
+| F2 | G10 triển khai đa máy (Postgres LAN + .exe) | `PHASE_G10_DEPLOYMENT_SPEC.md` (§9 QA findings + Q3/Q4=A) | §5 G-G10.1..6 + Prod accept LAN thật | 🔧 **MỞ** — Q1–Q6 chốt (kết nối=A), F-NOTIF đã tag. Chờ LEAD viết lại §8 theo QA + re-QA → dispatch |
 | F-NOTIF | **Trung tâm Thông báo** (chuông + hòm thư): đẩy sự kiện yêu cầu/duyệt/từ chối hủy bill + user khóa + backup lỗi + công nợ đến hạn | (viết khi tới) | 🆕 Mr.Long chốt 10/7 **TÁCH RIÊNG** khỏi P1.2 — không nối trong F1 |
-| F3 | Backlog Nhóm 1 còn lại (ngày dd/mm/yyyy, thùng rác UI, màu button) | `SPEC_V2_GAP_AND_BACKLOG.md` §E1–E4 | (viết khi tới) | ⛔ chờ scope |
-| F4 | Backlog Nhóm 2 nền móng (multi-branch, mã CT 6 số, master data kho…) | `SPEC_V2_GAP_AND_BACKLOG.md` §E Nhóm 2 | (viết khi tới) | ⛔ chờ Mr.Long duyệt scope |
+| ~~F3~~ | ~~Backlog Nhóm 1 (ngày dd/mm/yyyy, thùng rác UI, màu button)~~ | — | — | ✅ **ĐÃ XONG (verify 10/7)** — KHÔNG cần build frame. Xem "Reality-check F3" dưới. Chỉ còn (tùy chọn) 1 pass QA đồng bộ UI |
+| F4 | **Nền móng Nhóm 2** (multi-branch, mã CT 6 số, master data kho/sản phẩm/ĐVT/nhóm hàng) — **frame build THẬT kế tiếp sau G10** | `SPEC_V2_GAP_AND_BACKLOG.md` §B + §E Nhóm 2 | (viết khi tới) | ⛔ chờ Mr.Long duyệt scope |
+
+### Reality-check F3 (verify code thật 10/7 — backlog 9/7 lỗi thời, tránh over-reach xây lại)
+| Item backlog | Backlog 9/7 nói | **Thực tế code 10/7** |
+|---|---|---|
+| E1 Việt hóa | ✅ đợt 1 | ✅ giữ nguyên |
+| E2 màu button | 🔶 cần áp | ✅ **ĐÃ CÓ** `Button.tsx` variant `confirm`(xanh)/`edit`(vàng)/`danger`(đỏ)/`neutral` — dùng **137 lần** |
+| E3 ngày dd/mm/yyyy tách giờ | ❌ "SAI, dùng toLocaleString" | ✅ **ĐÃ CÓ** `fmtDate/fmtTime/fmtDateTime` từ `@glb/shared`, dùng 14 trang. 0 chỗ `toLocaleString` thật (5 match đều là comment CẤM) |
+| E4 Thùng rác UI + phục hồi + cảnh báo liên kết | ❌ "thiếu UI" | ✅ **ĐÃ CÓ** `TrashPage.tsx` (201 dòng, vào menu, `trashRestore`) + `trashLinkSummary` dùng ở CustomersPage |
+| Ngày/giờ tách cột (§C) | ❌ SAI | ✅ `fmtDate` + `fmtTime` riêng |
+> Bài học (tường minh): suýt spec F3 xây lại thứ đã có. Đúng lớp bug "stale-assumption/over-reach" phiên này → **luôn verify code thật trước khi mở frame**, đừng tin backlog cũ. Nếu muốn, F3 rút gọn thành 1 pass QA đồng bộ UI (không phải build lại).
 
 ## Quy tắc cuốn chiếu
 1. CMD_BUILD chỉ được chạm code của frame có trạng thái 🔶 ĐANG. Frame ⛔ = cấm.

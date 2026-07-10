@@ -181,6 +181,13 @@ app.whenReady().then(async () => {
     app.exit(code);
     return;
   }
+  // F-NOTIF self-test: đẩy thông báo sự kiện hủy bill vào hòm thư (đúng người nhận + idempotent).
+  if (process.env['GLB_SELFTEST'] === '19') {
+    const { runNotifySelfTest } = await import('./selftest-notify.js');
+    const code = await runNotifySelfTest();
+    app.exit(code);
+    return;
+  }
 
   await createWindow();
   startHousekeeping();

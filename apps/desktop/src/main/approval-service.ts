@@ -48,6 +48,51 @@ async function countUsersWithPerm(db: Db, code: string): Promise<number> {
   return n;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// THÔNG BÁO HỆ THỐNG (F-NOTIF) — đẩy sự kiện hủy bill vào hòm thư (bảng messages,
+// kind=SYSTEM, senderId=null). Dùng lại chuông/badge/MessagesDrawer sẵn có.
+// Phụ trợ tuyệt đối: nuốt lỗi — KHÔNG bao giờ làm hỏng luồng hủy/duyệt/từ chối.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Người ĐƯỢC duyệt 1 yêu cầu hủy — khớp phân vai của `listCancelRequests`/`canApprove`:
+ * loại chính người tạo; yêu cầu do Quản lý/Admin (có APPROVE) tạo → chỉ cấp ELEVATED,
+ * ngược lại mọi người có APPROVE. Chỉ user còn sống + ACTIVE (mới đăng nhập xử lý được).
+ */
+async function cancelApproverRecipients(db: Db, requestedBy: number): Promise<number[]> {
+  const requesterPerms = await userPermSet(db, requestedBy);
+  const needCode = requesterPerms.has(APPROVE) ? ELEVATED : APPROVE;
+  const users = await db.user.findMany({
+    where: { deletedAt: null, status: 'ACTIVE' },
+    include: { roles: { include: { role: { include: { permissions: { include: { permission: true } } } } } } }
+  });
+  const ids: number[] = [];
+  for (const u of users) {
+    if (u.id === requestedBy) continue; // loại chính người tạo (§②a)
+    if (u.roles.some((ur) => ur.role.permissions.some((rp) => rp.permission.code === needCode))) ids.push(u.id);
+  }
+  return ids;
+}
+
+/** Chèn thông báo hệ thống tới danh sách người nhận (idempotent theo lần gọi sự kiện). */
+async function pushSystemNotice(
+  db: Db,
+  recipientIds: number[],
+  category: string,
+  subject: string,
+  body: string
+): Promise<void> {
+  const ids = [...new Set(recipientIds)];
+  if (ids.length === 0) return;
+  try {
+    await db.message.createMany({
+      data: ids.map((rid) => ({ kind: 'SYSTEM', category, subject, body, senderId: null, recipientId: rid }))
+    });
+  } catch {
+    // Thông báo là phụ trợ — không được làm hỏng luồng chính (hủy/duyệt/từ chối bill).
+  }
+}
+
 // ═════════════════════════════════════════════════════════════════════════════
 // TẠO YÊU CẦU HỦY
 // ═════════════════════════════════════════════════════════════════════════════
@@ -72,6 +117,19 @@ export async function requestCancelBill(transactionId: number, reason: string): 
     targetId: String(tx.id),
     after: auditSnapshot({ requestId: req.id, code: tx.code, reason: r })
   });
+  // F-NOTIF: báo cho người ĐƯỢC duyệt yêu cầu này (phân vai) — đúng 1 lần/sự kiện.
+  try {
+    const recipients = await cancelApproverRecipients(db, user.id);
+    await pushSystemNotice(
+      db,
+      recipients,
+      'BILL_CANCEL_REQUEST',
+      `Yêu cầu hủy bill ${tx.code}`,
+      `${user.fullName} đề nghị hủy bill ${tx.code}. Lý do: ${r}. Vào mục Duyệt hủy bill để xử lý.`
+    );
+  } catch {
+    // Thông báo phụ trợ — không chặn việc tạo yêu cầu.
+  }
   return { ok: true, id: req.id };
 }
 
@@ -118,6 +176,18 @@ async function approveOne(db: Db, user: AuthUser, requestId: number, decisionNot
   });
   await db.approvalRequest.update({ where: { id: req.id }, data: { status: 'APPROVED', decidedBy: user.id, decidedAt: new Date(), decisionNote: note } });
   await writeAudit(db, { actorUserId: user.id, action: 'BILL_CANCEL_APPROVED', targetType: 'Transaction', targetId: String(tx.id), before: auditSnapshot({ status: tx.status, revenueAmount: tx.revenueAmount }), after: auditSnapshot({ status: 'CANCELLED', requestId: req.id, note }) });
+  // F-NOTIF: báo kết quả cho người tạo yêu cầu (§②b) — chỉ chạy ở nhánh thành công.
+  try {
+    await pushSystemNotice(
+      db,
+      [req.requestedBy],
+      'BILL_CANCEL_APPROVED',
+      `Yêu cầu hủy bill ${tx.code} đã được DUYỆT`,
+      `Yêu cầu hủy bill ${tx.code} của bạn đã được duyệt.${note ? ' Ghi chú: ' + note + '.' : ''}`
+    );
+  } catch {
+    // Thông báo phụ trợ — không chặn việc duyệt.
+  }
   return { ok: true, id: req.id };
 }
 
@@ -133,6 +203,20 @@ async function rejectOne(db: Db, user: AuthUser, requestId: number, decisionNote
   await db.approvalRequest.update({ where: { id: req.id }, data: { status: 'REJECTED', decidedBy: user.id, decidedAt: new Date(), decisionNote: note } });
   await db.transaction.update({ where: { id: req.entityId }, data: { status: 'POSTED', updatedBy: user.id } });
   await writeAudit(db, { actorUserId: user.id, action: 'BILL_CANCEL_REJECTED', targetType: 'Transaction', targetId: String(req.entityId), after: auditSnapshot({ requestId: req.id, note }) });
+  // F-NOTIF: báo kết quả cho người tạo yêu cầu (§②b) — chỉ chạy ở nhánh thành công.
+  try {
+    const txForNotice = await db.transaction.findUnique({ where: { id: req.entityId }, select: { code: true } });
+    const code = txForNotice?.code ?? String(req.entityId);
+    await pushSystemNotice(
+      db,
+      [req.requestedBy],
+      'BILL_CANCEL_REJECTED',
+      `Yêu cầu hủy bill ${code} bị TỪ CHỐI`,
+      `Yêu cầu hủy bill ${code} của bạn đã bị từ chối. Lý do: ${note}.`
+    );
+  } catch {
+    // Thông báo phụ trợ — không chặn việc từ chối.
+  }
   return { ok: true, id: req.id };
 }
 

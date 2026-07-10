@@ -20,18 +20,17 @@
 
 ---
 
-## §2. Quyết định cần Mr.Long chốt (TENTATIVE — CẤM code khi chưa duyệt)
+## §2. Quyết định — ✅ CHỐT (Mr.Long 10/7)
 
-| # | Quyết định | Phương án đề xuất (TENTATIVE) | Ghi chú |
+| # | Quyết định | ✅ ĐÃ CHỐT | Ghi chú thực thi |
 |---|---|---|---|
-| Q1 | Phiên bản Postgres | `TENTATIVE`: PostgreSQL 16 (LTS, better-sqlite3→pg adapter) | Cần chốt bản + cách cài (installer/Docker/portable) |
-| Q2 | Data cũ SQLite | Mr.Long đã nói **"bỏ qua data cũ"** → khởi tạo Postgres rỗng + seed adminroot | Xác nhận lại: KHÔNG migrate dev.db |
-| Q3 | Cấu hình kết nối client | `TENTATIVE`: màn hình "Cấu hình máy chủ" nhập IP:port lần đầu, lưu local (không lưu password DB trong client?) | Bảo mật chuỗi kết nối là điểm nhạy |
-| Q4 | Xác thực client↔server | `TENTATIVE`: 1 DB user chung + login app-level (đã có) VS mỗi máy 1 credential | Ảnh hưởng audit "máy nào nhập" |
-| Q5 | Auto-update .exe | `TENTATIVE`: **hoãn** (cài tay bản mới) — tránh over-engineer | |
-| Q6 | Khóa ghi đồng thời | `TENTATIVE`: dựa transaction Postgres + optimistic (updatedAt) cho sửa | Xem §4 |
+| Q1 | Phiên bản Postgres + cách cài | **PostgreSQL 16, installer chính thức trên máy này** | adapter Prisma `@prisma/adapter-pg` + `pg`; provider `postgresql` |
+| Q2 | Data cũ SQLite | **BỎ — khởi tạo Postgres rỗng + seed adminroot** | KHÔNG migrate dev.db |
+| Q3+Q4 | Mô hình kết nối/credential (đã gỡ mâu thuẫn — **Mr.Long chốt A 10/7**) | **A — Client nối THẲNG Postgres.** Màn "Cấu hình máy chủ" nhập IP:port + **1 tài khoản pg chung (mật khẩu LƯU trong config máy client)**. Chấp nhận rủi ro LAN nội bộ tin cậy. Đăng nhập app-level giữ nguyên; audit ghi user APP. | **Ràng buộc từ QA:** chỉ **máy chủ** chạy seed/migrate (client chỉ connect — tách server-init/client-init); tranh chấp duyệt = conditional transition (I-G3). Không chọn B (API layer) / C (pg trust). |
+| Q5 | Auto-update .exe | **HOÃN — cài tay bản mới** | |
+| Q6 | Khóa ghi đồng thời | **Transaction Postgres + optimistic (updatedAt) cho sửa; test 2 client song song** | Xem §4 I-G2/I-G3 |
 
-> **CẤM SUY LUẬN:** Không tự chọn giá trị Q1–Q6. Đánh dấu TENTATIVE tới khi Mr.Long duyệt.
+> Quyết định đã chốt → G10 được phép code SAU KHI F-NOTIF freeze+tag (thứ tự pipeline). Không còn mục TENTATIVE nào chặn.
 
 ---
 
@@ -62,7 +61,7 @@
 | G-G10.2 typecheck+vitest | typecheck node+web = 0; vitest ≥ số hiện tại; build 0 |
 | G-G10.3 migrate Postgres | `prisma migrate deploy` lên Postgres rỗng = 0 lỗi, đủ bảng |
 | G-G10.4 regression trên Postgres | selftest 1–18 + REV15 chạy với `GLB_DB_URL` trỏ Postgres → toàn 0 fail |
-| G-G10.5 concurrency test | selftest MỚI (=19?) mô phỏng 2 phiên ghi song song → I-G2/I-G3 PASS |
+| G-G10.5 concurrency test | selftest MỚI **=20** (19 đã dành cho F-NOTIF) mô phỏng 2 phiên ghi song song → I-G2/I-G3 PASS |
 | G-G10.6 LAN thực tế | ≥1 máy B thật kết nối nhập 1 bill → máy này thấy realtime (Production Validation R196, Mr.Long accept) |
 
 > **Freeze order:** G10.1→G10.2→…→G10.6, mỗi bước xanh mới sang bước kế. KHÔNG build song song. Sau G10.6 + Mr.Long accept → freeze + tag `g10-deployment`.
@@ -88,3 +87,44 @@ Thứ tự cuốn chiếu, mỗi mục có gate ở §5:
 6. Thử nghiệm LAN thật với máy B (G10.6, Mr.Long accept).
 
 > CẤM commit/tag/push (chỉ LEAD). Chỉ làm trên ổ D. KHÔNG đụng bản C.
+
+---
+
+## §8. Chi tiết thực thi (đã đủ quyết định — runway cho CMD_BUILD)
+
+### G10.1 — Đóng gói .exe (electron-builder)
+- Thêm dev-dep `electron-builder` vào `apps/desktop`; thêm script `"dist": "electron-vite build && electron-builder --win"`.
+- `electron-builder.yml`: `appId: com.globeway.glb`, `productName: "Quản Lý GLB"`, target `nsis` (installer) cho Windows.
+- **Native/Prisma trong gói** (rủi ro chính): `asarUnpack` cho Prisma query engine + `@prisma/adapter-pg`/`pg`; `extraResources` copy thư mục `migrations` + `schema.prisma` để `migrate deploy` chạy được ở máy client-server. Kiểm engine path khi `app.isPackaged`.
+- Gate G-G10.1: chạy installer sinh ra → cài trên 1 máy sạch (hoặc thư mục portable) → app mở, đăng nhập adminroot OK.
+
+### G10.2/G10.3 — SQLite → PostgreSQL (rủi ro cao nhất)
+- Đổi `datasource` provider `sqlite`→`postgresql`; thay `@prisma/adapter-better-sqlite3` → `@prisma/adapter-pg` + `pg` trong `db.ts`.
+- **Migration KHÔNG tự tương thích:** tạo baseline migration MỚI cho Postgres (KHÔNG sửa migration SQLite đã tag). Cần map: `AUTOINCREMENT`→`SERIAL/IDENTITY`, `DATETIME`→`TIMESTAMPTZ`, boolean SQLite (0/1)→`boolean`, `PRAGMA`/rebuild-table pattern (B05) → cách Postgres. Cân nhắc `prisma migrate diff` từ schema để sinh SQL Postgres, rồi rà tay.
+- **TZ (B16/F1):** `TIMESTAMPTZ` + máy UTC+7 → chạy lại ca giá-theo-kỳ (REV15) trên Postgres, xác nhận không tái lệch ngày.
+- Gate G-G10.3: `migrate deploy` lên Postgres rỗng = 0 lỗi, đủ bảng. G-G10.4: selftest 1–19 + REV15 chạy với `GLB_DB_URL` trỏ Postgres → 0 fail.
+
+### G10.4/G10.5 — concurrency
+- selftest **=20**: 2 "phiên" ghi song song (2 kết nối) → tạo 2 bill khác nhau đồng thời (I-G2: cả 2 vào, mã chứng từ không trùng); 2 phiên cùng hủy/sửa 1 bản ghi (I-G3: 1 thắng, 1 nhận lỗi optimistic rõ ràng).
+
+### Nguồn cấp số selftest (chống đụng số): 1–18 cũ · 19 = F-NOTIF · **20 = G10 concurrency** · kế tiếp cấp tăng dần.
+
+---
+
+## §9. QA RED-TEAM 10/7 — findings phải sửa TRƯỚC khi dispatch (đã verify code thật)
+
+> Vòng lặp QA-trước-dispatch bắt 2 CRITICAL khiến G10 KHÔNG code được như §8 đang viết. Spec §8 sẽ được VIẾT LẠI sau khi Mr.Long chốt mô hình kết nối (dưới), vì kiến trúc phụ thuộc quyết định đó.
+
+- **[CRITICAL-1] Migration squash bắt buộc.** `migration_lock.toml` = `sqlite`; 13/15 migration dùng `PRAGMA/AUTOINCREMENT/defer_foreign_keys/DATETIME` → `migrate deploy` lên Postgres FAIL ở migration đầu. **Phải squash 15 migration thành 1 baseline Postgres MỚI** (thư mục migrations riêng cho pg) + đổi `migration_lock` provider=postgresql. **Gỡ luật "migrations/* chỉ thêm mới" riêng cho frame G10** (mâu thuẫn). Sinh baseline qua `prisma migrate diff` từ schema rồi rà tay.
+- **[CRITICAL-2] Mô hình kết nối/credential — CẦN Mr.Long chốt** (Q3/Q4 hiện mâu thuẫn: "không lưu mật khẩu DB trong client" vs "client tự nối Postgres"). 3 phương án — xem phần trình Mr.Long.
+- [HIGH-3] Adapter ở `packages/database/src/client.ts` (`PrismaBetterSqlite3`), KHÔNG ở db.ts. Sửa client.ts + `electron.vite.config.ts` externals (→ pg/adapter-pg) + gỡ dep native `better-sqlite3`.
+- [HIGH-4] `db.ts` bootstrap thuần SQLite (`resolveDatabaseUrl` file:, `existsSync`, `seedIfEmpty` + `backfillEmployeeCodes` **mỗi client boot** lên DB dùng chung → churn/deadlock). Tách **server-init (seed+migrate 1 lần) vs client-init (chỉ connect)**.
+- [HIGH-5] Test-harness: selftest chạy trên **bản copy SQLite throwaway** (`GLB_DB_URL=file:`). Postgres không copy-file → mỗi test cần createdb/drop hoặc reset schema+migrate. Scope lại G-G10.4.
+- [HIGH-6] Backup/Bảo trì: hiện zip file SQLite + `MaintenanceRun.vacuumed` (VACUUM) → **vỡ trên Postgres**. I-G6 cần bước `pg_dump/pg_restore` cụ thể + định số phận module Bảo trì.
+- [MED-7] Prisma map `DateTime`→`timestamp` (WITHOUT tz), KHÔNG phải TIMESTAMPTZ. Ép `@db.Timestamptz(3)` tường minh HOẶC xử lý UTC ở app; giữ gate REV15-on-pg.
+- [MED-8] `code_counter.nextCode` (`upsert{increment}`): dưới Postgres đồng thời có thể race → trùng mã. Verify SQL sinh ra / dùng raw `INSERT..ON CONFLICT DO UPDATE RETURNING`; gate concurrency N-cao.
+- [MED-9] I-G3 sửa cơ chế: bill BẤT BIẾN (P1.2) → race thật = 2 client cùng duyệt 1 `ApprovalRequest` → dùng **conditional transition** (`updateMany WHERE status='PENDING'`, count=0 → thua) chứ không phải optimistic updatedAt (Q6 cũ).
+- [MED-10] Đóng gói: generator `prisma-client` (queryCompiler, **không engine binary**) → bỏ khuyên asarUnpack engine; đóng gói generated client (Wasm) + `pg` (pure-JS); gỡ native; bỏ extraResources-migrations ở client (client không migrate runtime).
+- [MED-11] ② G10 thêm lớp bug: `type-mirror-drift`, `test-orphan`, `db-evolution-gap`.
+- [MED-12] Runway thiếu cấu hình server: `postgresql.conf listen_addresses` + `pg_hba.conf host` (điều kiện client LAN nối được) — thêm sub-task + gate kết nối từ máy B.
+- [LOW-13] Gỡ câu "nhiều mục TENTATIVE" tồn dư ở §1 (đã chốt §2); ghi rõ read-list trong prompt.
