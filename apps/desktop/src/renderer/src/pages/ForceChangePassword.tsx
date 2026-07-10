@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { KeyRound, Loader2, LogOut } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
+import { PasswordInput } from '../components/PasswordInput.js';
 import { useToast } from '../lib/toast.js';
 
 export function ForceChangePassword({
@@ -107,12 +108,7 @@ function Field({
   return (
     <label className="flex flex-col gap-1.5">
       <span className="text-sm font-medium text-slate-700">{label}</span>
-      <input
-        type="password"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="rounded-md border border-line bg-white px-3 py-2.5 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
-      />
+      <PasswordInput value={value} onChange={(e) => onChange(e.target.value)} />
     </label>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Eye, EyeOff, LogIn, ShieldCheck, Loader2 } from 'lucide-react';
+import { LogIn, ShieldCheck, Loader2 } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
+import { PasswordInput } from '../components/PasswordInput.js';
 import { useToast } from '../lib/toast.js';
 
 export function Login({ onLoggedIn }: { onLoggedIn: (u: AuthUser, mustChange: boolean) => void }): JSX.Element {
@@ -8,7 +9,6 @@ export function Login({ onLoggedIn }: { onLoggedIn: (u: AuthUser, mustChange: bo
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(false);
-  const [showPwd, setShowPwd] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -80,23 +80,11 @@ export function Login({ onLoggedIn }: { onLoggedIn: (u: AuthUser, mustChange: bo
 
           <label className="flex flex-col gap-1.5">
             <span className="text-sm font-medium text-slate-700">Mật khẩu</span>
-            <div className="relative">
-              <input
-                type={showPwd ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-md border border-line bg-white px-3 py-2.5 pr-10 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
-                placeholder="••••••••"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPwd((s) => !s)}
-                aria-label={showPwd ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
-                className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 hover:text-brand"
-              >
-                {showPwd ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-              </button>
-            </div>
+            <PasswordInput
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+            />
           </label>
 
           <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-slate-600">

@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { KeyRound, Loader2, Eye, EyeOff } from 'lucide-react';
+import { KeyRound, Loader2 } from 'lucide-react';
 import { Modal } from './Modal.js';
 import { Button } from './Button.js';
 import { Field, inputCls } from './Field.js';
+import { PasswordInput } from './PasswordInput.js';
 import { useToast } from '../lib/toast.js';
 
 /**
@@ -14,7 +15,6 @@ export function ChangePasswordModal({ onClose }: { onClose: () => void }): JSX.E
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
-  const [show, setShow] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -47,34 +47,23 @@ export function ChangePasswordModal({ onClose }: { onClose: () => void }): JSX.E
     }
   }
 
-  const type = show ? 'text' : 'password';
   return (
     <Modal title="Đổi mật khẩu" onClose={onClose} width="max-w-md">
       <form onSubmit={submit} className="flex flex-col gap-4">
         <Field label="Mật khẩu hiện tại" required>
-          <input type={type} className={inputCls} value={current} onChange={(e) => setCurrent(e.target.value)} autoFocus />
+          <PasswordInput value={current} onChange={(e) => setCurrent(e.target.value)} autoFocus />
         </Field>
         <Field label="Mật khẩu mới" required>
-          <input type={type} className={inputCls} value={next} onChange={(e) => setNext(e.target.value)} />
+          <PasswordInput value={next} onChange={(e) => setNext(e.target.value)} />
         </Field>
         <Field label="Xác nhận mật khẩu mới" required>
-          <input
-            type={type}
+          <PasswordInput
             className={inputCls + (mismatch ? ' border-danger focus:border-danger focus:ring-danger/20' : '')}
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
           />
         </Field>
         {mismatch && <p className="-mt-2 text-xs font-medium text-danger">Mật khẩu xác nhận chưa khớp.</p>}
-
-        <button
-          type="button"
-          onClick={() => setShow((s) => !s)}
-          className="flex w-fit items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700"
-        >
-          {show ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-          {show ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
-        </button>
 
         {error && (
           <div className="rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">{error}</div>

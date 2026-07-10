@@ -7,7 +7,8 @@ import { useToast } from '../lib/toast.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { Button } from '../components/Button.js';
 import { Modal } from '../components/Modal.js';
-import { Field, inputCls } from '../components/Field.js';
+import { Field } from '../components/Field.js';
+import { PasswordInput } from '../components/PasswordInput.js';
 
 // E4 Thùng rác (R_TRASH_RESTORE): liệt kê dữ liệu đã xóa mềm, Admin phục hồi.
 export function TrashPage({ user }: { user: AuthUser }): JSX.Element {
@@ -186,7 +187,7 @@ function EmptyTrashModal({ count, onClose, onDone }: { count: number; onClose: (
           </span>
         </div>
         <Field label="Mật khẩu cấp 2" required>
-          <input type="password" className={inputCls} value={level2} onChange={(e) => setLevel2(e.target.value)} autoFocus />
+          <PasswordInput value={level2} onChange={(e) => setLevel2(e.target.value)} autoFocus />
         </Field>
         {error && <div className="rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">{error}</div>}
         <div className="mt-1 flex justify-end gap-2">

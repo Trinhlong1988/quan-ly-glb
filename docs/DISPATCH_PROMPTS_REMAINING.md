@@ -46,6 +46,39 @@
 
 ---
 
+## PROMPT F-STATBAR — Thanh bộ đếm trực quan đầu MỌI trang danh sách (Mr.Long 10/7) — SẴN, chạy SAU con-mắt-mật-khẩu
+
+> Cơ sở: Explore map code thật 10/7. **CẤM over-reach**: KHÔNG dựng lại KpiCard ở Debt/Revenue (đã có), KHÔNG bịa trường active/inactive cho thực thể không có.
+> **Chốt scope Mr.Long cần xác nhận trước khi bắn:** Customer KHÔNG có trường ACTIVE/INACTIVE (chỉ deletedAt) → hiển thị **Tổng + theo đại lý/nguồn**, KHÔNG bịa "hoạt động/không". POS/TID quy ước nhóm trạng thái = "hoạt động".
+
+**① Vai + repo:** Bạn = CMD_BUILD. Chỉ sửa ổ D `D:\TT HKD AI\tools\quan-ly-glb`. CẤM đụng bản C. CẤM git commit/tag/push. Bí → DỪNG hỏi. Đọc trước: `docs/UI_DESIGN_SYSTEM.md`, `docs/CMD_BUILD_DISPATCH_PROTOCOL.md`, `components/StatusPill.tsx` (từ điển trạng thái chuẩn), `pages/Dashboard.tsx` (mẫu BreakdownCard/KpiCard ln462-497), `pages/DebtPage.tsx`+`RevenuePage.tsx` (mẫu KpiCard lặp — sẽ gộp).
+
+**② Đo lường trước bug (gate):**
+- `emit-trap`: verify LUÔN `npm run typecheck` (--noEmit), CẤM `tsc -p` trần, git status sạch.
+- `type-mirror-drift`: nếu thêm DTO stats vào `preload/index.d.ts` → web typecheck 0 + `audit:protected` PASS. CHỈ Edit chèn.
+- `ui-inconsistency`: 1 component `StatBar` DÙNG CHUNG mọi trang — cấm mỗi trang 1 kiểu (R_UI_STANDARD). Nhãn/màu trạng thái LẤY TỪ `StatusPill`/`statusLabel`, không hardcode lại.
+- `count-pagination-drift`: nếu trang phân trang, đếm client-side từ `rows` sẽ SAI khi chỉ tải 1 trang → PHẢI đếm ở main (API count/summary), không đếm từ mảng đã phân trang. Trang chưa phân trang (tải full) mới được đếm client.
+- `regression`: chạm nhiều page → typecheck/build/vitest phải xanh; selftest hiện có giữ nguyên số.
+
+**③ File được bảo vệ:** `preload/index.d.ts` (chỉ Edit). Sau sửa `npm run audit:protected` PASS.
+
+**④ Việc (ĐÚNG phạm vi Explore chốt):**
+1. Tạo `components/StatBar.tsx` dùng chung: nhận `items: {label, value, tone?}[]`, render hàng thẻ đếm gọn trên đầu trang; tái dùng token màu design system + `statusLabel` cho nhãn trạng thái. Responsive, không phá layout.
+2. **Gộp** KpiCard đang lặp ở `DebtPage.tsx`(ln19) + `RevenuePage.tsx`(ln45) về 1 nguồn (StatBar hoặc KpiCard chung) — hết copy-paste.
+3. Gắn StatBar (chỉ số theo Explore) cho các trang CHƯA có:
+   - **StaffPage**: Tổng nhân sự · Hoạt động(ACTIVE) · Đã khóa(LOCKED) · Chờ/Ngưng(PENDING+DISABLED).
+   - **RolesPage**: Tổng vai trò · Hoạt động · Đã khóa (dùng `userCount` sẵn trong RoleDto).
+   - **PosPage**: Tổng máy · theo status (IN_STOCK/DEPLOYED/IN_REPAIR/DAMAGED/RETIRED).
+   - **TidPage**: Tổng TID · Chưa giao(sẵn có) · theo status · (nếu dễ) theo ngân hàng.
+   - **ApprovalPage**: Tổng · Chờ duyệt(PENDING) · Đã duyệt · Từ chối.
+   - **CustomersPage**: Tổng khách · theo đại lý/nguồn (KHÔNG bịa active/inactive).
+   - **TrashPage**: Tổng mục · theo `kind`.
+4. API đếm ở main khi cần chính xác (trang có filter/nhiều bản ghi): thêm method `*Stats`/`*Summary` (mẫu `dashboard-service.ts` đã có `posByStatus`/`tidsByBank` — tách thành API trang dùng được). User theo status / Role theo status / POS theo status / TID theo status / CancelRequest theo status / Customer theo agent / Trash theo kind. Trang nào tải full rows không phân trang thì được phép đếm client (ghi rõ trang nào đếm ở đâu).
+
+**⑤ Bằng chứng (dán THÔ; AUDIT rerun sạch):** `npm run typecheck`=0 · `npm run build`=0 · `npm test`≥205 (thêm test đếm nếu có API mới) · `npm run audit:protected` PASS · `git status` sạch. Liệt kê từng trang + chỉ số đã gắn + đếm ở client hay main. KHÔNG commit.
+
+---
+
 ## PROMPT F3 — Backlog Nhóm 1 còn lại (ngày dd/mm/yyyy + thùng rác UI + màu button) — SKELETON
 
 **① Vai + repo:** như trên. **⛔ KHÔNG bắt đầu khi Mr.Long/LEAD chưa chốt scope §E1–E4.** Đọc `SPEC_V2_GAP_AND_BACKLOG.md` §C/§D/§E1–E4 + `UI_DESIGN_SYSTEM.md`.

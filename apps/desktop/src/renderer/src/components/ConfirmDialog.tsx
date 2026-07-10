@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import { Modal } from './Modal.js';
+import { PasswordInput } from './PasswordInput.js';
 
 /**
  * Confirmation dialog (IMS_SPEC §14). ALWAYS has a Hủy (cancel) button.
@@ -53,13 +54,11 @@ export function ConfirmDialog({
           {requirePassword && (
             <label className="mt-4 flex flex-col gap-1.5">
               <span className="text-sm font-medium text-slate-700">Nhập lại mật khẩu để xác nhận</span>
-              <input
-                type="password"
+              <PasswordInput
                 value={password}
                 autoFocus
                 onChange={(e) => setPassword(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && run()}
-                className="rounded-md border border-line bg-white px-3 py-2.5 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
                 placeholder="Mật khẩu của bạn"
               />
             </label>

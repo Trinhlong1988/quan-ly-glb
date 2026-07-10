@@ -3,6 +3,7 @@ import { ShieldCheck, Loader2, ShieldAlert } from 'lucide-react';
 import { Modal } from './Modal.js';
 import { Button } from './Button.js';
 import { Field, inputCls } from './Field.js';
+import { PasswordInput } from './PasswordInput.js';
 import { useToast } from '../lib/toast.js';
 
 /**
@@ -67,19 +68,18 @@ export function Level2PasswordModal({ onClose }: { onClose: () => void }): JSX.E
             <span>Mật khẩu cấp 2 được mã hóa sâu (một chiều) và dùng để <b>dọn sạch thùng rác</b> (xóa vĩnh viễn). Hãy đặt mật khẩu mạnh, khác mật khẩu đăng nhập.</span>
           </div>
           <Field label="Mật khẩu đăng nhập (cấp 1)" required>
-            <input type="password" className={inputCls} value={level1} onChange={(e) => setLevel1(e.target.value)} autoFocus />
+            <PasswordInput value={level1} onChange={(e) => setLevel1(e.target.value)} autoFocus />
           </Field>
           {hasLevel2 && (
             <Field label="Mật khẩu cấp 2 hiện tại" required>
-              <input type="password" className={inputCls} value={oldL2} onChange={(e) => setOldL2(e.target.value)} />
+              <PasswordInput value={oldL2} onChange={(e) => setOldL2(e.target.value)} />
             </Field>
           )}
           <Field label="Mật khẩu cấp 2 mới" required>
-            <input type="password" className={inputCls} value={next} onChange={(e) => setNext(e.target.value)} />
+            <PasswordInput value={next} onChange={(e) => setNext(e.target.value)} />
           </Field>
           <Field label="Xác nhận mật khẩu cấp 2 mới" required>
-            <input
-              type="password"
+            <PasswordInput
               className={inputCls + (mismatch ? ' border-danger focus:border-danger focus:ring-danger/20' : '')}
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}

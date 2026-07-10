@@ -3,6 +3,7 @@ import { KeyRound, Loader2, ShieldAlert } from 'lucide-react';
 import { Modal } from './Modal.js';
 import { Button } from './Button.js';
 import { Field, inputCls } from './Field.js';
+import { PasswordInput } from './PasswordInput.js';
 import { useToast } from '../lib/toast.js';
 
 /**
@@ -64,11 +65,10 @@ export function AdminResetPasswordModal({
           </span>
         </div>
         <Field label="Mật khẩu mới" required>
-          <input type="password" className={inputCls} value={next} onChange={(e) => setNext(e.target.value)} autoFocus />
+          <PasswordInput value={next} onChange={(e) => setNext(e.target.value)} autoFocus />
         </Field>
         <Field label="Xác nhận mật khẩu mới" required>
-          <input
-            type="password"
+          <PasswordInput
             className={inputCls + (mismatch ? ' border-danger focus:border-danger focus:ring-danger/20' : '')}
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}

@@ -9,6 +9,7 @@ import { Modal } from '../components/Modal.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { StatusPill, statusLabel } from '../components/StatusPill.js';
 import { Field, inputCls } from '../components/Field.js';
+import { PasswordInput } from '../components/PasswordInput.js';
 import { Button } from '../components/Button.js';
 import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../components/Selection.js';
 
@@ -460,7 +461,7 @@ function StaffForm({
           </Field>
           {!editing && (
             <Field label="Mật khẩu" required hint="≥8 ký tự, gồm chữ và số">
-              <input type="password" className={inputCls} value={password} onChange={(e) => setPassword(e.target.value)} />
+              <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} />
             </Field>
           )}
           <Field label="Ngày vào làm">

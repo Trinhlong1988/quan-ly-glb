@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Eye, EyeOff, Server, PlugZap, CheckCircle2, Loader2, XCircle } from 'lucide-react';
+import { Server, PlugZap, CheckCircle2, Loader2, XCircle } from 'lucide-react';
 import { Field, inputCls } from '../components/Field.js';
+import { PasswordInput } from '../components/PasswordInput.js';
 import { Button } from '../components/Button.js';
 import { useToast } from '../lib/toast.js';
 
@@ -21,7 +22,6 @@ export function ServerConfig({ onConfigured }: { onConfigured: () => void }): JS
   const [database, setDatabase] = useState('glb');
   const [user, setUser] = useState('postgres');
   const [password, setPassword] = useState('');
-  const [showPwd, setShowPwd] = useState(false);
   const [test, setTest] = useState<TestState>({ kind: 'idle' });
   const [saving, setSaving] = useState(false);
 
@@ -158,26 +158,14 @@ export function ServerConfig({ onConfigured }: { onConfigured: () => void }): JS
           </Field>
 
           <Field label="Mật khẩu" required>
-            <div className="relative">
-              <input
-                type={showPwd ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  setTest({ kind: 'idle' });
-                }}
-                className={inputCls + ' w-full pr-10'}
-                placeholder="••••••••"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPwd((s) => !s)}
-                aria-label={showPwd ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
-                className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 hover:text-brand"
-              >
-                {showPwd ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-              </button>
-            </div>
+            <PasswordInput
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                setTest({ kind: 'idle' });
+              }}
+              placeholder="••••••••"
+            />
           </Field>
 
           {test.kind === 'ok' && (
