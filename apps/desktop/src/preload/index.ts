@@ -219,7 +219,37 @@ const api = {
   // Bảo trì: quét sức khỏe toàn hệ thống + lịch sử bảo trì
   healthScan: (opts: { autoFix?: boolean }) => ipcRenderer.invoke('health:scan', opts),
   healthRuns: (limit?: number) => ipcRenderer.invoke('health:runs', limit),
-  healthRun: (id: number) => ipcRenderer.invoke('health:run', id)
+  healthRun: (id: number) => ipcRenderer.invoke('health:run', id),
+
+  // ── G11 Cập nhật phần mềm tích hợp (electron-updater) ──
+  // Lệnh (renderer → main):
+  getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
+  checkUpdate: () => ipcRenderer.invoke('update:check'),
+  startUpdate: () => ipcRenderer.invoke('update:start'),
+  installUpdateNow: () => ipcRenderer.invoke('update:installNow'),
+  // [H2] Kết quả BOOT (success/failed) lấy bằng PULL lúc mount (KHÔNG nghe push — push rơi trước mount).
+  getUpdateBootResult: () => ipcRenderer.invoke('update:getBootResult'),
+  // Sự kiện realtime (main → renderer). Trả hàm hủy đăng ký để cleanup lúc unmount ([M8]).
+  onUpdateAvailable: (cb: (p: { version: string }) => void) => {
+    const h = (_e: unknown, p: { version: string }): void => cb(p);
+    ipcRenderer.on('update-available', h);
+    return () => ipcRenderer.removeListener('update-available', h);
+  },
+  onDownloadProgress: (cb: (p: { percent: number }) => void) => {
+    const h = (_e: unknown, p: { percent: number }): void => cb(p);
+    ipcRenderer.on('download-progress', h);
+    return () => ipcRenderer.removeListener('download-progress', h);
+  },
+  onUpdateDownloaded: (cb: (p: { version: string }) => void) => {
+    const h = (_e: unknown, p: { version: string }): void => cb(p);
+    ipcRenderer.on('update-downloaded', h);
+    return () => ipcRenderer.removeListener('update-downloaded', h);
+  },
+  onUpdateError: (cb: (p: { message: string }) => void) => {
+    const h = (_e: unknown, p: { message: string }): void => cb(p);
+    ipcRenderer.on('update-error', h);
+    return () => ipcRenderer.removeListener('update-error', h);
+  }
 };
 
 export type GlbApi = typeof api;

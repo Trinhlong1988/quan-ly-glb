@@ -965,7 +965,25 @@ export interface GlbApi {
   healthScan(opts: { autoFix?: boolean }): Promise<{ ok: boolean; error?: string; message?: string; data?: ScanResult }>;
   healthRuns(limit?: number): Promise<{ ok: boolean; error?: string; message?: string; data?: MaintenanceRunDto[] }>;
   healthRun(id: number): Promise<{ ok: boolean; error?: string; message?: string; data?: MaintenanceRunDto }>;
+
+  // ── G11 Cập nhật phần mềm tích hợp (electron-updater) ──
+  getAppVersion(): Promise<string>;
+  checkUpdate(): Promise<void>;
+  startUpdate(): Promise<void>;
+  installUpdateNow(): Promise<void>;
+  /** [H2] Kết quả cập nhật lúc khởi động — PULL lúc mount (null nếu không có / đã tiêu thụ). */
+  getUpdateBootResult(): Promise<UpdateBootResult | null>;
+  /** Đăng ký sự kiện realtime; trả hàm hủy đăng ký để gọi lúc unmount ([M8]). */
+  onUpdateAvailable(cb: (p: { version: string }) => void): () => void;
+  onDownloadProgress(cb: (p: { percent: number }) => void): () => void;
+  onUpdateDownloaded(cb: (p: { version: string }) => void): () => void;
+  onUpdateError(cb: (p: { message: string }) => void): () => void;
 }
+
+// ── G11 DTO — kết quả cập nhật lúc khởi động (đọc từ marker userData/update-result.json) ──
+export type UpdateBootResult =
+  | { kind: 'success'; version: string; at: string }
+  | { kind: 'failed'; fromVersion: string; targetVersion: string };
 
 export type HealthSeverity = 'ERROR' | 'WARN' | 'INFO';
 export interface HealthFinding {

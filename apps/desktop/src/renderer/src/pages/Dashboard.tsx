@@ -50,6 +50,7 @@ import { RevenuePage } from './RevenuePage.js';
 import { DebtPage } from './DebtPage.js';
 import { ApprovalPage } from './ApprovalPage.js';
 import { MaintenancePage } from './MaintenancePage.js';
+import { UpdateBanner } from '../components/UpdateBanner.js';
 
 interface MenuItem {
   key: string;
@@ -98,6 +99,7 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
   const [unread, setUnread] = useState(0);
   const [storageOver, setStorageOver] = useState<{ pct: number | null; threshold: number } | null>(null);
   const [storageDismissed, setStorageDismissed] = useState(false);
+  const [appVersion, setAppVersion] = useState('');
 
   const canInbox = hasPermission(user, 'MESSAGE_VIEW');
   const canStorage = hasPermission(user, 'STORAGE_VIEW');
@@ -142,6 +144,11 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
     const id = setInterval(tick, 5 * 60 * 1000);
     return () => { alive = false; clearInterval(id); };
   }, [canStorage]);
+
+  // G11: phiên bản hiện tại (hiển thị ở footer sidebar — chỗ "trực quan" user thấy đã lên bản mới).
+  useEffect(() => {
+    window.api.getAppVersion().then((v) => setAppVersion(v));
+  }, []);
 
   const activeItem = visible.find((m) => m.key === active) ?? visible[0];
 
@@ -199,6 +206,10 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
             <LogOut className="h-[18px] w-[18px]" />
             Đăng xuất
           </button>
+          {/* G11: phiên bản hiện tại */}
+          <div className="mt-2 px-3 text-center text-[11px] text-sidebar-text/60">
+            {appVersion ? `Phiên bản v${appVersion}` : ''}
+          </div>
         </div>
       </aside>
 
@@ -313,6 +324,9 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
       )}
       {showChangePw && <ChangePasswordModal onClose={() => setShowChangePw(false)} />}
       {showLevel2 && <Level2PasswordModal onClose={() => setShowLevel2(false)} />}
+
+      {/* G11: banner cập nhật tích hợp (có bản mới / tải % / thành công / lỗi) */}
+      <UpdateBanner />
 
       {/* Dialog cảnh báo bộ nhớ vượt ngưỡng — yêu cầu dọn dẹp (Storage-Guard) */}
       {storageOver && !storageDismissed && canStorage && (

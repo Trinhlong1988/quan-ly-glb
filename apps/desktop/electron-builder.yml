@@ -36,4 +36,13 @@ nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
-  artifactName: ${productName}-${version}-setup.${ext}
+  # [M1] Tên file ASCII: productName "Quản Lý GLB" có dấu+space → tên phi-ASCII dễ gãy khi
+  # electron-updater tải qua HTTP. latest.yml sẽ tham chiếu tên ASCII này (giữ productName để hiển thị).
+  artifactName: glb-${version}-setup.${ext}
+
+# G11 — Feed cập nhật LAN (electron-updater). LEAD dựng HTTP tĩnh cổng 8686 phục vụ D:\glb-updates\.
+# quitAndInstall(true,…) truyền /S nên tự cập nhật vẫn cài IM dù oneClick=false (cài tay lần đầu).
+publish:
+  provider: generic
+  url: http://192.168.1.6:8686/updates/
+  channel: latest

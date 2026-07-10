@@ -8,6 +8,10 @@ import * as auth from './auth-service.js';
 
 const isDev = !app.isPackaged;
 
+// [H2] Giữ ref cửa sổ chính ở module để update-service gửi sự kiện (webContents.send).
+// `win` cục bộ trong createWindow không gửi được từ nơi khác.
+let mainWindow: BrowserWindow | null = null;
+
 async function createWindow(): Promise<void> {
   const win = new BrowserWindow({
     width: 1180,
@@ -24,6 +28,11 @@ async function createWindow(): Promise<void> {
       nodeIntegration: false,
       sandbox: false
     }
+  });
+
+  mainWindow = win;
+  win.on('closed', () => {
+    if (mainWindow === win) mainWindow = null;
   });
 
   win.once('ready-to-show', () => win.show());
@@ -46,8 +55,10 @@ app.whenReady().then(async () => {
   // Harness guard (B04, G10): self-test 2+ mutate the DB. Trên PostgreSQL mỗi selftest phải chạy trên
   // 1 DB throwaway RIÊNG (createdb → migrate deploy → drop) để không nhiễm DB dev/prod dùng chung.
   // Bắt buộc: GLB_DB_URL=postgresql://…<tmpdb> + GLB_ROLE=server (để initDb seed admin/permissions).
+  // [M3] selftest=23 (update wiring) test pure-unit + autoUpdater mock → KHÔNG đụng Postgres.
+  //      Miễn khỏi 2 gác GLB_DB_URL/GLB_ROLE (nếu không app.exit(2) trước khi test chạy).
   const st = process.env['GLB_SELFTEST'];
-  if (st && st !== '1' && !process.env['GLB_DB_URL']) {
+  if (st && st !== '1' && st !== '23' && !process.env['GLB_DB_URL']) {
     // eslint-disable-next-line no-console
     console.error(
       `SELFTEST${st} ABORT | phải set GLB_DB_URL trỏ tới DB PostgreSQL throwaway đã migrate ` +
@@ -57,7 +68,7 @@ app.whenReady().then(async () => {
     app.exit(2);
     return;
   }
-  if (st && st !== '1' && process.env['GLB_ROLE'] !== 'server') {
+  if (st && st !== '1' && st !== '23' && process.env['GLB_ROLE'] !== 'server') {
     // eslint-disable-next-line no-console
     console.error(
       `SELFTEST${st} ABORT | thiếu GLB_ROLE=server → initDb sẽ KHÔNG seed (admin/permissions rỗng) ` +
@@ -223,9 +234,30 @@ app.whenReady().then(async () => {
     app.exit(code);
     return;
   }
+  // G11 update wiring self-test (=23): pure-unit + autoUpdater mock (H3), KHÔNG cần DB/mạng/packaged (M3).
+  if (process.env['GLB_SELFTEST'] === '23') {
+    const { runUpdateSelfTest } = await import('./selftest-update.js');
+    const code = await runUpdateSelfTest();
+    app.exit(code);
+    return;
+  }
 
   await createWindow();
   startHousekeeping();
+
+  // G11: dịch vụ cập nhật tích hợp — đánh giá marker (H4) + IPC (H2 pull) + updater khi đóng gói.
+  // Lỗi được nuốt để KHÔNG làm chết app (offline-safe cực đoan).
+  try {
+    const { registerUpdateService } = await import('./update-service.js');
+    await registerUpdateService({
+      getWindow: () => (mainWindow && !mainWindow.isDestroyed() ? mainWindow : null),
+      isPackaged: app.isPackaged,
+      version: app.getVersion()
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[update] registerUpdateService failed', err);
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

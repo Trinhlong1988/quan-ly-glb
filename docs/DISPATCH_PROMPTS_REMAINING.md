@@ -48,7 +48,8 @@
 
 ## PROMPT G11 — Cập nhật phần mềm tích hợp (electron-updater, push→xác nhận→tải→thoát→mở lại→báo kết quả) — SẴN sau QA phản biện
 
-> Spec đầy đủ: `docs/PHASE_G11_AUTOUPDATE_SPEC.md`. Mở lại hoãn D01 (`DEFERRED_REGISTRY.md`).
+> Spec đầy đủ (ĐÃ VÁ theo QA phản biện 10/7): `docs/PHASE_G11_AUTOUPDATE_SPEC.md` — spec là chân lý, đọc kỹ. Mở lại hoãn D01 (`DEFERRED_REGISTRY.md`).
+> **4 điểm CHẾT NGƯỜI (QA bắt) — làm sai = reject:** (H1) `quitAndInstall(true, true)` KHÔNG phải `(false,true)` (sai = bung wizard NSIS, không im). (H2) `index.ts` lưu ref `mainWindow` để `webContents.send`; trạng thái boot success/failed cho renderer **pull qua `invoke('update:getBootResult')`** lúc mount, KHÔNG push (push sẽ rơi trước khi React mount → mất thông báo thành công). (H3) `update-service.ts` export **pure-unit** (`isNewer`/`evalMarker`/marker RW) + **autoUpdater injectable/mock** để selftest=23 test THẬT (không thì test giả). (H4) **xoá marker ở CẢ nhánh success VÀ failed** (không xoá nhánh failed = báo lỗi đỏ vô hạn mỗi lần mở app).
 
 **① Vai + repo:** Bạn = CMD_BUILD. Chỉ sửa ổ D `D:\TT HKD AI\tools\quan-ly-glb`. CẤM đụng bản C. CẤM git commit/tag/push. Bí/bất định → DỪNG hỏi, KHÔNG đoán. Đọc TRƯỚC toàn bộ: `docs/PHASE_G11_AUTOUPDATE_SPEC.md`, `docs/CMD_BUILD_DISPATCH_PROTOCOL.md`, `apps/desktop/electron-builder.yml`, `apps/desktop/src/main/db.ts` (mẫu IPC/service), `preload/index.d.ts`, cách toast/thông báo hiện có (`components/` + `Dashboard.tsx`).
 

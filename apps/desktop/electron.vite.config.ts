@@ -13,7 +13,10 @@ const mainExternals = [
   '@prisma/adapter-pg',
   '@prisma/client',
   '@prisma/client/runtime/client',
-  '@prisma/client/runtime/index-browser'
+  '@prisma/client/runtime/index-browser',
+  // G11 [L1]: electron-updater phải external (không bundle) — nạp bằng dynamic require lúc chạy,
+  // đọc app-update.yml trong tài nguyên đóng gói. Bundle vào sẽ vỡ resolve tài nguyên.
+  'electron-updater'
 ];
 
 export default defineConfig({
