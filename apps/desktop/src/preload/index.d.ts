@@ -765,6 +765,127 @@ export interface UpdateCashCategoryInput {
   affectsPnl?: boolean;
   active?: boolean;
 }
+// ── PHASE H2-core — Thu–Chi DTOs (Quỹ + Phiếu thu/chi §J/§D/§E) ──
+export interface FundDto extends AuditTrail {
+  id: number;
+  code: string;
+  name: string;
+  type: string; // CASH | BANK | EWALLET
+  keeperUserId: number | null;
+  keeperUserName: string | null;
+  openingBalance: number;
+  currentBalance: number; // running (KHÔNG lưu cứng) — I#1
+  active: boolean;
+  note: string | null;
+}
+export interface FundFilter {
+  search?: string;
+  active?: boolean;
+  type?: string;
+}
+export interface CreateFundInput {
+  name: string;
+  type: string;
+  keeperUserId?: number | null;
+  openingBalance?: number;
+  active?: boolean;
+  note?: string | null;
+}
+export interface UpdateFundInput {
+  name?: string;
+  type?: string;
+  keeperUserId?: number | null;
+  openingBalance?: number;
+  active?: boolean;
+  note?: string | null;
+}
+export interface CashflowUserLite {
+  id: number;
+  code: string | null;
+  name: string;
+}
+export interface CashEntryDto {
+  id: number;
+  code: string | null;
+  kind: string; // THU | CHI
+  categoryId: number;
+  categoryName: string | null;
+  sourceKind: string | null;
+  fundId: number;
+  fundCode: string | null;
+  fundName: string | null;
+  amount: number;
+  method: string; // CK | CASH
+  entryDate: string;
+  customerId: number | null;
+  customerName: string | null;
+  partnerId: number | null;
+  partnerName: string | null;
+  payerUserId: number | null;
+  payerUserName: string | null;
+  receiverUserId: number | null;
+  receiverUserName: string | null;
+  note: string | null;
+  status: string; // DRAFT | POSTED | CANCELLED
+  cancelReason: string | null;
+  cancelledAt: string | null;
+  createdBy: number | null;
+  createdByName: string | null;
+  createdAt: string;
+}
+export interface CashEntryFilter {
+  kind?: string;
+  categoryId?: number;
+  fundId?: number;
+  customerId?: number;
+  partnerId?: number;
+  status?: string;
+  fromDate?: string;
+  toDate?: string;
+}
+export interface CreateCashEntryInput {
+  kind: string;
+  categoryId: number;
+  fundId: number;
+  amount: number;
+  method: string;
+  entryDate: string;
+  customerId?: number | null;
+  partnerId?: number | null;
+  payerUserId?: number | null;
+  receiverUserId?: number | null;
+  note?: string | null;
+}
+export interface CashflowSummary {
+  count: number;
+  totalThu: number;
+  totalChi: number;
+  net: number;
+}
+export interface CashEntryListResult {
+  ok: boolean;
+  error?: string;
+  message?: string;
+  data?: CashEntryDto[];
+  summary?: CashflowSummary;
+}
+export interface EntryCategoryLite {
+  id: number;
+  kind: string;
+  name: string;
+  sourceKind: string;
+  affectsPnl: boolean;
+}
+export interface MonthProfit {
+  month: string;
+  revenueAccrual: number;
+  expense: number;
+  profit: number;
+}
+export interface ProfitStats {
+  current: MonthProfit;
+  previous: MonthProfit;
+}
 export interface PickImageResult {
   ok: boolean;
   path?: string;
@@ -996,6 +1117,18 @@ export interface GlbApi {
   cashCategoryUpdate(id: number, input: UpdateCashCategoryInput): Promise<MutationOutcome>;
   cashCategoryDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
 
+  // ── PHASE H2-core — Thu–Chi: Quỹ + Phiếu thu/chi (§J/§D/§E) ──
+  fundList(filter: FundFilter): Promise<ListResult<FundDto>>;
+  fundUserLite(): Promise<ListResult<CashflowUserLite>>;
+  fundCreate(input: CreateFundInput): Promise<MutationOutcome>;
+  fundUpdate(id: number, input: UpdateFundInput): Promise<MutationOutcome>;
+  fundDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
+  cashEntryList(filter: CashEntryFilter): Promise<CashEntryListResult>;
+  cashEntryReport(filter: CashEntryFilter): Promise<CashEntryListResult>;
+  cashEntryCategoryLite(): Promise<ListResult<EntryCategoryLite>>;
+  cashEntryCreate(input: CreateCashEntryInput): Promise<MutationOutcome>;
+  cashEntryCancel(id: number, reason: string, password: string): Promise<MutationOutcome>;
+
   // Thùng rác (E4)
   trashList(): Promise<{ ok: boolean; data?: TrashRow[]; error?: string; message?: string }>;
   trashRestore(entityType: string, id: number): Promise<MutationOutcome>;
@@ -1005,6 +1138,7 @@ export interface GlbApi {
 
   // Dashboard (Nhóm B — KPI realtime + tăng trưởng)
   dashboardStats(): Promise<{ ok: boolean; data?: DashboardStats; error?: string; message?: string }>;
+  dashboardProfit(): Promise<{ ok: boolean; data?: ProfitStats; error?: string; message?: string }>;
 
   // Hòm thư nội bộ + thông báo bảo mật (Nhóm A #2 / Nhóm C #7)
   messageInbox(): Promise<{ ok: boolean; data?: MessageDto[]; error?: string; message?: string }>;

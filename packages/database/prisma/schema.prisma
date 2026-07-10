@@ -763,3 +763,67 @@ model MaintenanceRun {
   @@index([startedAt])
   @@map("maintenance_runs")
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE H2-core — Thu–Chi (Cashflow): Quỹ (Fund §2.2/J) + Phiếu thu/chi (CashEntry §2.3/D+E).
+// Tiền = VND nguyên (KHÔNG ×1000). Mọi DateTime @db.Timestamptz(3) + @map snake_case (M6).
+// Số dư quỹ KHÔNG lưu cứng — tính running = openingBalance + Σ THU_POSTED − Σ CHI_POSTED theo fundId
+// (I#1, tránh drift R6). Mã QU/PT/PC sinh atomic trong $transaction (§D/R7). Phiếu CANCELLED KHÔNG
+// tính vào số dư. amount > 0 (I#4). kind=CHI bắt buộc payerUserId (I#3). Ngày local (I#10, B16).
+// ─────────────────────────────────────────────────────────────────────────────
+model Fund {
+  id             Int       @id @default(autoincrement())
+  code           String    @unique // QU01… (H6: prefix 2 ký tự — Q 1 ký tự vi phạm CODE_PREFIX_REGEX)
+  name           String // "Quỹ tiền mặt VP", "TK VCB 199…"
+  type           String // CASH | BANK | EWALLET
+  keeperUserId   Int?      @map("keeper_user_id") // ai giữ quỹ (mục J)
+  openingBalance Int       @default(0) @map("opening_balance") // VND — số dư đầu kỳ (KHÔNG lưu số dư hiện tại)
+  active         Boolean   @default(true)
+  note           String?
+  createdBy      Int?      @map("created_by")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedBy      Int?      @map("updated_by")
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(3)
+  deletedBy      Int?      @map("deleted_by")
+
+  @@map("funds")
+}
+
+// Phiếu thu/chi — chứng từ nguyên thủy (D + E). status DRAFT|POSTED|CANCELLED (mặc định POSTED).
+model CashEntry {
+  id             Int       @id @default(autoincrement())
+  code           String?   @unique // PT##### (THU) / PC##### (CHI)
+  kind           String // THU | CHI
+  categoryId     Int       @map("category_id")
+  fundId         Int       @map("fund_id") // quỹ tiền vào/ra (mục J liên thông)
+  amount         Int // VND nguyên, > 0
+  method         String // CK | CASH
+  entryDate      DateTime  @map("entry_date") @db.Timestamptz(3) // ngày thu/chi (local) — M6
+  customerId     Int?      @map("customer_id") // KH (mục D)
+  partnerId      Int?      @map("partner_id") // đối tác (mục D)
+  payerUserId    Int?      @map("payer_user_id") // NGƯỜI CHI — bắt buộc khi kind=CHI (mục E, I#3)
+  receiverUserId Int?      @map("receiver_user_id") // người nhận (thu hộ / hoàn cọc)
+  docPath        String?   @map("doc_path")
+  docName        String?   @map("doc_name")
+  sourceType     String?   @map("source_type") // ADVANCE | DEVICE_DEPOSIT | DEPOSIT_REFUND | SALARY | FUND_TRANSFER | null(thủ công)
+  sourceId       Int?      @map("source_id")
+  note           String?
+  status         String    @default("POSTED") // DRAFT | POSTED | CANCELLED
+  cancelReason   String?   @map("cancel_reason")
+  cancelledAt    DateTime? @map("cancelled_at") @db.Timestamptz(3)
+  createdBy      Int?      @map("created_by")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedBy      Int?      @map("updated_by")
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(3)
+  deletedBy      Int?      @map("deleted_by")
+
+  @@index([fundId])
+  @@index([categoryId])
+  @@index([entryDate])
+  @@index([status])
+  @@index([customerId])
+  @@index([partnerId])
+  @@map("cash_entries")
+}

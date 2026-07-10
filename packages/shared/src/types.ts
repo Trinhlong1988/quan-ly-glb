@@ -140,6 +140,13 @@ export type AuditAction =
   | 'CASH_CATEGORY_UPDATED'
   | 'CASH_CATEGORY_DELETED'
   | 'CASHCAT_PERMS_GRANTED'
+  // ── PHASE H2-core — Thu–Chi: Quỹ + Phiếu thu/chi ──
+  | 'FUND_CREATED'
+  | 'FUND_UPDATED'
+  | 'FUND_DELETED'
+  | 'CASH_ENTRY_CREATED'
+  | 'CASH_ENTRY_CANCELLED'
+  | 'CASHFLOW_PERMS_GRANTED'
   // ── Nhóm A — Bảo mật & tài khoản ──
   | 'USER_AUTO_LOCKED'
   | 'PASSWORD_RESET_BY_ADMIN'

@@ -90,6 +90,38 @@ export async function grantCashCatPermsToExistingRoles(db: Db): Promise<number> 
   return granted;
 }
 
+// ── PHASE H2-core — Thu–Chi: bug class "DB tiến hóa" (H7) ─────────────────────
+// Quyền quỹ + phiếu thu/chi MỚI (FUND_*/CASHENTRY_*) phải cấp cho role ĐÃ TỒN TẠI trên DB cũ
+// (không chỉ role tạo mới). Cùng khuôn CASHCAT: ADMIN tự đồng bộ mỗi boot (R_ADMIN_SUPERUSER);
+// MANAGER + ACCOUNTANT cấp 1 LẦN idempotent, guard bằng cờ AppSetting để KHÔNG cấp lại quyền admin
+// đã CHỦ ĐỘNG gỡ về sau. Kế toán (ACCOUNTANT) = vai chính thu-chi (spec §6.4).
+const CASHFLOW_PERM_CODES = ['FUND_VIEW', 'FUND_CREATE', 'FUND_UPDATE', 'FUND_DELETE', 'CASHENTRY_VIEW', 'CASHENTRY_CREATE', 'CASHENTRY_CANCEL'];
+const CASHFLOW_PERM_TARGET_ROLES = ['MANAGER', 'ACCOUNTANT'];
+const CASHFLOW_GRANT_FLAG = 'seed.cashflowPermsGrantedV1';
+
+/**
+ * Cấp (idempotent) quyền quỹ + phiếu thu/chi (FUND_* / CASHENTRY_*) cho các role đã có sẵn trên DB
+ * (db-evolution). Trả về số (role×quyền) vừa thêm mới. Bỏ qua cặp đã có → an toàn chạy lại.
+ * Không guard cờ ở đây (để selftest gọi trực tiếp mô phỏng DB tiến hóa); cờ guard nằm ở seedIfEmpty.
+ */
+export async function grantCashflowPermsToExistingRoles(db: Db): Promise<number> {
+  const perms = await db.permission.findMany({ where: { code: { in: CASHFLOW_PERM_CODES } }, select: { id: true } });
+  let granted = 0;
+  for (const roleCode of CASHFLOW_PERM_TARGET_ROLES) {
+    const role = await db.role.findUnique({ where: { code: roleCode }, select: { id: true } });
+    if (!role) continue;
+    for (const perm of perms) {
+      const existing = await db.rolePermission.findUnique({
+        where: { roleId_permissionId: { roleId: role.id, permissionId: perm.id } }
+      });
+      if (existing) continue;
+      await db.rolePermission.create({ data: { roleId: role.id, permissionId: perm.id } });
+      granted++;
+    }
+  }
+  return granted;
+}
+
 // ── PHASE H1 — Thu–Chi: seed danh mục thu/chi HỆ THỐNG (isSystem=true), idempotent ────────────
 // Khóa tự nhiên = (kind, name). Có → skip; chưa → tạo. Gán affectsPnl đúng bất biến §2.1/§5:
 //   sourceKind nội bộ (DEBT_*/DEPOSIT/DEPOSIT_REFUND/ADVANCE/DEVICE_DEPOSIT/FUND_TRANSFER) = false;
@@ -290,6 +322,29 @@ export async function seedIfEmpty(db: Db): Promise<void> {
           action: 'CASHCAT_PERMS_GRANTED',
           targetType: 'System',
           after: { granted, roles: CASHCAT_PERM_TARGET_ROLES, perms: CASHCAT_PERM_CODES }
+        });
+      }
+    }
+  }
+
+  // db-evolution (PHASE H2-core): cấp quyền quỹ + phiếu thu/chi (FUND_*/CASHENTRY_*) cho role CŨ
+  // (MANAGER/ACCOUNTANT) 1 lần/DB (cờ AppSetting). DB mới → role vừa tạo đã có quyền qua
+  // DEFAULT_ROLE_PERMISSIONS → grant=0 (no-op an toàn).
+  {
+    const flag = await db.appSetting.findUnique({ where: { key: CASHFLOW_GRANT_FLAG } });
+    if (!flag) {
+      const granted = await grantCashflowPermsToExistingRoles(db);
+      await db.appSetting.upsert({
+        where: { key: CASHFLOW_GRANT_FLAG },
+        update: {},
+        create: { key: CASHFLOW_GRANT_FLAG, value: new Date().toISOString() }
+      });
+      if (granted > 0) {
+        await writeAudit(db, {
+          actorUserId: null,
+          action: 'CASHFLOW_PERMS_GRANTED',
+          targetType: 'System',
+          after: { granted, roles: CASHFLOW_PERM_TARGET_ROLES, perms: CASHFLOW_PERM_CODES }
         });
       }
     }

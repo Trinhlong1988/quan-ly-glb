@@ -25,6 +25,8 @@ import {
   Wrench,
   ClipboardCheck,
   Tags,
+  Receipt,
+  PiggyBank,
   Loader2
 } from 'lucide-react';
 import type { DashboardStats } from '../../../preload/index.d';
@@ -49,6 +51,9 @@ import { DossierPage } from './DossierPage.js';
 import { TidConfigPage } from './TidConfigPage.js';
 import { IndustryConfigPage } from './IndustryConfigPage.js';
 import { CashCategoryConfigPage } from './CashCategoryConfigPage.js';
+import { FundPage } from './FundPage.js';
+import { CashEntryPage } from './CashEntryPage.js';
+import { CashflowReportPage } from './CashflowReportPage.js';
 import { RevenuePage } from './RevenuePage.js';
 import { DebtPage } from './DebtPage.js';
 import { ApprovalPage } from './ApprovalPage.js';
@@ -84,6 +89,10 @@ const MENU: MenuItem[] = [
   { key: 'tidcfg', label: 'Cấu hình TID', icon: <CreditCard className="h-[18px] w-[18px]" />, perms: ['CONFIG_TID_VIEW'] },
   { key: 'industrycfg', label: 'Cấu hình ngành nghề', icon: <Tags className="h-[18px] w-[18px]" />, perms: ['CONFIG_INDUSTRY_VIEW'] },
   { key: 'cashcatcfg', label: 'Cấu hình thu – chi', icon: <Wallet className="h-[18px] w-[18px]" />, perms: ['CASHCAT_VIEW'] },
+  { key: 'fund', label: 'Quỹ', icon: <PiggyBank className="h-[18px] w-[18px]" />, perms: ['FUND_VIEW'] },
+  { key: 'cashthu', label: 'Phiếu thu', icon: <Receipt className="h-[18px] w-[18px]" />, perms: ['CASHENTRY_VIEW'] },
+  { key: 'cashchi', label: 'Phiếu chi', icon: <Receipt className="h-[18px] w-[18px]" />, perms: ['CASHENTRY_VIEW'] },
+  { key: 'cashreport', label: 'Báo cáo thu – chi', icon: <BarChart3 className="h-[18px] w-[18px]" />, perms: ['CASHENTRY_VIEW'] },
   { key: 'tid', label: 'Quản Lý TID', icon: <CreditCard className="h-[18px] w-[18px]" />, perms: ['TID_VIEW'], badge: 'undeliveredTid' },
   { key: 'approval', label: 'Duyệt Hủy Bill', icon: <ClipboardCheck className="h-[18px] w-[18px]" />, perms: ['BILL_CANCEL_APPROVE'] },
   { key: 'audit', label: 'Nhật ký hệ thống', icon: <ScrollText className="h-[18px] w-[18px]" />, perms: ['AUDIT_LOG_VIEW'] },
@@ -308,6 +317,10 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
           {activeItem?.key === 'tidcfg' && <TidConfigPage user={user} />}
           {activeItem?.key === 'industrycfg' && <IndustryConfigPage user={user} />}
           {activeItem?.key === 'cashcatcfg' && <CashCategoryConfigPage user={user} />}
+          {activeItem?.key === 'fund' && <FundPage user={user} />}
+          {activeItem?.key === 'cashthu' && <CashEntryPage user={user} kind="THU" />}
+          {activeItem?.key === 'cashchi' && <CashEntryPage user={user} kind="CHI" />}
+          {activeItem?.key === 'cashreport' && <CashflowReportPage user={user} />}
           {activeItem?.key === 'revenue' && <RevenuePage user={user} />}
           {activeItem?.key === 'debt' && <DebtPage user={user} />}
           {activeItem?.key === 'approval' && <ApprovalPage user={user} />}
@@ -404,6 +417,9 @@ function Home({ user }: { user: AuthUser; visibleCount: number }): JSX.Element {
         </p>
       </div>
 
+      {/* Lợi nhuận accrual tháng (PHASE H2-core) — chỉ hiện với vai có quyền thu-chi */}
+      {hasPermission(user, 'CASHENTRY_VIEW') && <ProfitPanel />}
+
       {/* KPI realtime */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
         {kpis.map((k) => (
@@ -437,6 +453,72 @@ function Home({ user }: { user: AuthUser; visibleCount: number }): JSX.Element {
           <BreakdownCard title="Máy POS theo trạng thái" icon={<BarChart3 className="h-4 w-4" />} rows={stats?.posByStatus ?? []} loading={loading} unit="máy" />
         </div>
       </div>
+    </div>
+  );
+}
+
+/** VND cho KpiCard lợi nhuận — nhóm 3 số bằng dấu chấm (R_UI, KHÔNG toLocaleString). Giữ dấu âm. */
+function moneyVnd(n: number): string {
+  const neg = n < 0;
+  const s = Math.abs(Math.round(n)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return (neg ? '−' : '') + s + 'đ';
+}
+
+/**
+ * PHASE H2-core — Lợi nhuận accrual tháng hiện tại + so tháng trước (§5). ACCRUAL:
+ * Σ doanh thu ghi nhận (Transaction) + Σ CashEntry THU affectsPnl − Σ CashEntry CHI affectsPnl.
+ */
+function ProfitPanel(): JSX.Element | null {
+  const [data, setData] = useState<import('../../../preload/index.d').ProfitStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let alive = true;
+    const tick = (): void => {
+      window.api.dashboardProfit().then((r) => {
+        if (!alive) return;
+        if (r.ok && r.data) setData(r.data);
+        setLoading(false);
+      });
+    };
+    tick();
+    const id = setInterval(tick, 30000);
+    return () => { alive = false; clearInterval(id); };
+  }, []);
+
+  const cur = data?.current;
+  const prev = data?.previous;
+  const profit = cur?.profit ?? 0;
+  const prevProfit = prev?.profit ?? 0;
+  const delta = profit - prevProfit;
+  const cards: { label: string; value: number; icon: JSX.Element; tint: string; valueCls?: string }[] = [
+    { label: 'Doanh thu ghi nhận (tháng)', value: cur?.revenueAccrual ?? 0, icon: <TrendingUp className="h-5 w-5" />, tint: 'bg-brand/10 text-brand' },
+    { label: 'Chi phí (tháng)', value: cur?.expense ?? 0, icon: <Coins className="h-5 w-5" />, tint: 'bg-amber-500/10 text-amber-600' },
+    { label: 'Lợi nhuận (accrual)', value: profit, icon: <PiggyBank className="h-5 w-5" />, tint: profit >= 0 ? 'bg-emerald-500/10 text-emerald-600' : 'bg-rose-500/10 text-rose-600', valueCls: profit >= 0 ? 'text-emerald-600' : 'text-rose-600' }
+  ];
+
+  return (
+    <div className="rounded-2xl border border-line bg-white p-5 shadow-sm">
+      <div className="mb-3 flex items-center gap-2">
+        <PiggyBank className="h-5 w-5 text-brand" />
+        <h3 className="text-base font-semibold text-slate-800">Lợi nhuận tháng {cur?.month ?? ''}</h3>
+        {!loading && (
+          <span className={'ml-auto text-xs font-medium ' + (delta >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
+            {delta >= 0 ? '▲' : '▼'} {moneyVnd(Math.abs(delta))} so tháng trước ({moneyVnd(prevProfit)})
+          </span>
+        )}
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {cards.map((k) => (
+          <div key={k.label} className="rounded-xl border border-line bg-white p-4 shadow-sm">
+            <div className={'mb-3 flex h-10 w-10 items-center justify-center rounded-lg ' + k.tint}>{k.icon}</div>
+            <div className={'text-2xl font-bold tabular-nums ' + (k.valueCls ?? 'text-slate-800')}>
+              {loading ? <span className="text-slate-300">—</span> : moneyVnd(k.value)}
+            </div>
+            <div className="mt-0.5 text-xs font-medium text-slate-500">{k.label}</div>
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-xs text-slate-400">Lợi nhuận theo doanh thu ghi nhận (accrual). Thu công nợ / cọc / tạm ứng / chuyển quỹ KHÔNG tính (chống đếm trùng).</p>
     </div>
   );
 }

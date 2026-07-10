@@ -188,6 +188,17 @@ const api = {
   cashCategoryCreate: (input: unknown) => ipcRenderer.invoke('cashCategory:create', input),
   cashCategoryUpdate: (id: number, input: unknown) => ipcRenderer.invoke('cashCategory:update', { id, input }),
   cashCategoryDelete: (ids: number[], password: string) => ipcRenderer.invoke('cashCategory:remove', { ids, password }),
+  // ── PHASE H2-core — Thu–Chi: Quỹ + Phiếu thu/chi ──
+  fundList: (filter: unknown) => ipcRenderer.invoke('fund:list', filter),
+  fundUserLite: () => ipcRenderer.invoke('fund:userLite'),
+  fundCreate: (input: unknown) => ipcRenderer.invoke('fund:create', input),
+  fundUpdate: (id: number, input: unknown) => ipcRenderer.invoke('fund:update', { id, input }),
+  fundDelete: (ids: number[], password: string) => ipcRenderer.invoke('fund:remove', { ids, password }),
+  cashEntryList: (filter: unknown) => ipcRenderer.invoke('cashEntry:list', filter),
+  cashEntryReport: (filter: unknown) => ipcRenderer.invoke('cashEntry:report', filter),
+  cashEntryCategoryLite: () => ipcRenderer.invoke('cashEntry:categoryLite'),
+  cashEntryCreate: (input: unknown) => ipcRenderer.invoke('cashEntry:create', input),
+  cashEntryCancel: (id: number, reason: string, password: string) => ipcRenderer.invoke('cashEntry:cancel', { id, reason, password }),
 
   // Thùng rác (E4)
   trashList: () => ipcRenderer.invoke('trash:list'),
@@ -198,6 +209,7 @@ const api = {
 
   // Dashboard (Nhóm B)
   dashboardStats: () => ipcRenderer.invoke('dashboard:stats'),
+  dashboardProfit: () => ipcRenderer.invoke('dashboard:profit'),
 
   // Hòm thư nội bộ + thông báo bảo mật
   messageInbox: () => ipcRenderer.invoke('message:inbox'),

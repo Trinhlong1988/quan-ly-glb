@@ -22,4 +22,6 @@ export type {
   Partner,
   PartnerBank,
   Industry,
+  Fund,
+  CashEntry,
 } from "../generated/prisma/client.js";

@@ -80,3 +80,55 @@ export async function getStats(): Promise<{ ok: boolean; data?: DashboardStats; 
 
   return { ok: true, data: { counts: { tids, customers, posDevices, dossiers, users, banks, partners }, tidsByBank, posByStatus, monthly } };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE H2-core — Lợi nhuận Dashboard (ACCRUAL, §0 Q-A / §5). CHỐNG double-count (I#13):
+//   profit(tháng) = Σ Transaction.revenueAmount (POSTED, theo txnDate trong tháng)          ← accrual chênh phí quẹt thẻ
+//                 + Σ CashEntry POSTED THU affectsPnl=true (theo entryDate trong tháng)      ← doanh thu bán trực tiếp
+//                 − Σ CashEntry POSTED CHI affectsPnl=true (theo entryDate trong tháng)      ← chi phí thật
+// KHÔNG cộng CashEntry category DEBT_*/DEPOSIT/ADVANCE/FUND_TRANSFER (affectsPnl=false) —
+// thu công nợ đã nằm trong Transaction.revenueAmount (đếm lại = double-count). Ngày local (I#10).
+// ─────────────────────────────────────────────────────────────────────────────
+export interface MonthProfit {
+  month: string; // YYYY-MM
+  revenueAccrual: number;
+  expense: number;
+  profit: number;
+}
+export interface ProfitStats {
+  current: MonthProfit;
+  previous: MonthProfit;
+}
+
+/** Lợi nhuận accrual của khoảng [start, nextStart) (local). affectsIds = danh mục affectsPnl=true. */
+async function computeMonthProfit(db: import('@glb/database').Db, month: string, start: Date, nextStart: Date, affectsIds: number[]): Promise<MonthProfit> {
+  const [txAgg, thuAgg, chiAgg] = await Promise.all([
+    db.transaction.aggregate({ _sum: { revenueAmount: true }, where: { status: 'POSTED', deletedAt: null, txnDate: { gte: start, lt: nextStart } } }),
+    db.cashEntry.aggregate({ _sum: { amount: true }, where: { status: 'POSTED', deletedAt: null, kind: 'THU', categoryId: { in: affectsIds }, entryDate: { gte: start, lt: nextStart } } }),
+    db.cashEntry.aggregate({ _sum: { amount: true }, where: { status: 'POSTED', deletedAt: null, kind: 'CHI', categoryId: { in: affectsIds }, entryDate: { gte: start, lt: nextStart } } })
+  ]);
+  const revenueAccrual = (txAgg._sum.revenueAmount ?? 0) + (thuAgg._sum.amount ?? 0);
+  const expense = chiAgg._sum.amount ?? 0;
+  return { month, revenueAccrual, expense, profit: revenueAccrual - expense };
+}
+
+/** CASHENTRY_VIEW — lợi nhuận accrual tháng hiện tại + tháng trước (Dashboard KpiCard, §5). */
+export async function getMonthlyProfit(): Promise<{ ok: boolean; data?: ProfitStats; error?: string; message?: string }> {
+  const g = await requirePermission('CASHENTRY_VIEW', { action: 'CASHENTRY_VIEW' });
+  if (!g.ok) return g;
+  const db = g.db;
+  const affects = await db.cashCategory.findMany({ where: { affectsPnl: true, deletedAt: null }, select: { id: true } });
+  const affectsIds = affects.map((c) => c.id);
+
+  const now = new Date();
+  const curStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const nextStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const key = (d: Date): string => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+
+  const [current, previous] = await Promise.all([
+    computeMonthProfit(db, key(curStart), curStart, nextStart, affectsIds),
+    computeMonthProfit(db, key(prevStart), prevStart, curStart, affectsIds)
+  ]);
+  return { ok: true, data: { current, previous } };
+}

@@ -19,6 +19,8 @@ import * as dossierSvc from './dossier-service.js';
 import * as tidCfgSvc from './tid-config-service.js';
 import * as industryCfgSvc from './industry-service.js';
 import * as cashCatSvc from './cash-category-service.js';
+import * as fundSvc from './fund-service.js';
+import * as cashEntrySvc from './cash-entry-service.js';
 import { readAttachmentDataUrl } from './file-store.js';
 import * as trashSvc from './trash-service.js';
 import * as msgSvc from './message-service.js';
@@ -159,6 +161,7 @@ export function registerIpc(): void {
 
   // ---- Dashboard (Nhóm B — KPI realtime + tăng trưởng) ------------------
   ipcMain.handle('dashboard:stats', async () => dashboardSvc.getStats());
+  ipcMain.handle('dashboard:profit', async () => dashboardSvc.getMonthlyProfit());
 
   // ---- Notifications (undelivered TID — badge REAL, push STUB) -----------
   ipcMain.handle('notify:undeliveredSummary', async () => notifySvc.getUndeliveredSummary());
@@ -271,6 +274,20 @@ export function registerIpc(): void {
   ipcMain.handle('cashCategory:create', async (_e, input: cashCatSvc.CreateCashCategoryInput) => cashCatSvc.createCashCategory(input));
   ipcMain.handle('cashCategory:update', async (_e, args: { id: number; input: cashCatSvc.UpdateCashCategoryInput }) => cashCatSvc.updateCashCategory(args.id, args.input));
   ipcMain.handle('cashCategory:remove', async (_e, args: { ids: number[]; password: string }) => cashCatSvc.deleteCashCategories(args.ids, args.password));
+
+  // ── PHASE H2-core — Thu–Chi: Quỹ (Fund) ──
+  ipcMain.handle('fund:list', async (_e, filter: fundSvc.FundFilter) => fundSvc.listFunds(filter));
+  ipcMain.handle('fund:userLite', async () => fundSvc.listCashflowUsersLite());
+  ipcMain.handle('fund:create', async (_e, input: fundSvc.CreateFundInput) => fundSvc.createFund(input));
+  ipcMain.handle('fund:update', async (_e, args: { id: number; input: fundSvc.UpdateFundInput }) => fundSvc.updateFund(args.id, args.input));
+  ipcMain.handle('fund:remove', async (_e, args: { ids: number[]; password: string }) => fundSvc.deleteFunds(args.ids, args.password));
+
+  // ── PHASE H2-core — Thu–Chi: Phiếu thu/chi (CashEntry) + báo cáo dòng tiền ──
+  ipcMain.handle('cashEntry:list', async (_e, filter: cashEntrySvc.CashEntryFilter) => cashEntrySvc.listCashEntries(filter));
+  ipcMain.handle('cashEntry:report', async (_e, filter: cashEntrySvc.CashEntryFilter) => cashEntrySvc.cashflowReport(filter));
+  ipcMain.handle('cashEntry:categoryLite', async () => cashEntrySvc.listEntryCategoriesLite());
+  ipcMain.handle('cashEntry:create', async (_e, input: cashEntrySvc.CreateCashEntryInput) => cashEntrySvc.createCashEntry(input));
+  ipcMain.handle('cashEntry:cancel', async (_e, args: { id: number; reason: string; password: string }) => cashEntrySvc.cancelCashEntry(args.id, args.reason, args.password));
 
   // ── E4 Thùng rác ──
   ipcMain.handle('trash:list', async () => trashSvc.listTrash());

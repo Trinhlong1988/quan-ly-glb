@@ -258,6 +258,15 @@ app.whenReady().then(async () => {
     return;
   }
 
+  // PHASE H2-core Thu–Chi: Quỹ + Phiếu thu/chi + lợi nhuận accrual self-test (=26): I#1/I#3/I#4/I#10/I#13
+  // + mã QU/PT/PC + IN_USE + hủy phiếu + FORBIDDEN + "DB tiến hóa" quyền FUND_*/CASHENTRY_*.
+  if (process.env['GLB_SELFTEST'] === '26') {
+    const { runCashEntrySelfTest } = await import('./selftest-cashentry.js');
+    const code = await runCashEntrySelfTest();
+    app.exit(code);
+    return;
+  }
+
   await createWindow();
   startHousekeeping();
 

@@ -66,6 +66,14 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: 'CASHCAT_CREATE', name: 'Tạo danh mục thu – chi', group: 'Thu – Chi' },
   { code: 'CASHCAT_UPDATE', name: 'Sửa danh mục thu – chi', group: 'Thu – Chi' },
   { code: 'CASHCAT_DELETE', name: 'Xóa danh mục thu – chi', group: 'Thu – Chi' },
+  // ── PHASE H2-core (§J/§D/§E) — Quỹ + Phiếu thu/chi ──
+  { code: 'FUND_VIEW', name: 'Xem quỹ & số dư', group: 'Thu – Chi' },
+  { code: 'FUND_CREATE', name: 'Tạo quỹ', group: 'Thu – Chi' },
+  { code: 'FUND_UPDATE', name: 'Sửa quỹ', group: 'Thu – Chi' },
+  { code: 'FUND_DELETE', name: 'Xóa quỹ', group: 'Thu – Chi' },
+  { code: 'CASHENTRY_VIEW', name: 'Xem phiếu thu – chi & báo cáo dòng tiền', group: 'Thu – Chi' },
+  { code: 'CASHENTRY_CREATE', name: 'Lập phiếu thu / phiếu chi', group: 'Thu – Chi' },
+  { code: 'CASHENTRY_CANCEL', name: 'Hủy phiếu thu – chi', group: 'Thu – Chi' },
   // ── Thùng rác (R_TRASH_RESTORE) ──
   { code: 'TRASH_VIEW', name: 'Xem thùng rác (của mình)', group: 'Thùng rác' },
   { code: 'TRASH_VIEW_ALL', name: 'Xem thùng rác TỔNG (mọi người dùng)', group: 'Thùng rác' },
@@ -143,6 +151,14 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'CASHCAT_CREATE',
     'CASHCAT_UPDATE',
     'CASHCAT_DELETE',
+    // PHASE H2-core: managers quản lý quỹ + phiếu thu/chi.
+    'FUND_VIEW',
+    'FUND_CREATE',
+    'FUND_UPDATE',
+    'FUND_DELETE',
+    'CASHENTRY_VIEW',
+    'CASHENTRY_CREATE',
+    'CASHENTRY_CANCEL',
     // Nhóm A: managers đặt lại mật khẩu, đặt pass cấp 2, xem & dọn thùng rác tổng.
     'USER_RESET_PASSWORD',
     'LEVEL2_MANAGE',
@@ -162,7 +178,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'STORAGE_CLEANUP'
   ],
   D_MANAGER: ['DASHBOARD_VIEW', 'USER_READ', 'ROLE_READ', 'CUSTOMER_VIEW', 'POS_VIEW', 'TID_VIEW', 'CONFIG_BANK_VIEW'],
-  ACCOUNTANT: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW', 'CONFIG_BANK_VIEW', 'CONFIG_FEE_VIEW', 'CONFIG_FEE_MANAGE', 'CONFIG_RCV_ACCT_VIEW', 'CONFIG_RCV_ACCT_MANAGE', 'CONFIG_DOSSIER_VIEW', 'CONFIG_DOSSIER_MANAGE', 'REVENUE_VIEW', 'REVENUE_MANAGE', 'DEBT_VIEW', 'DEBT_SETTLE', 'BILL_CANCEL_REQUEST'],
+  ACCOUNTANT: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW', 'CONFIG_BANK_VIEW', 'CONFIG_FEE_VIEW', 'CONFIG_FEE_MANAGE', 'CONFIG_RCV_ACCT_VIEW', 'CONFIG_RCV_ACCT_MANAGE', 'CONFIG_DOSSIER_VIEW', 'CONFIG_DOSSIER_MANAGE', 'REVENUE_VIEW', 'REVENUE_MANAGE', 'DEBT_VIEW', 'DEBT_SETTLE', 'BILL_CANCEL_REQUEST',
+    // PHASE H2-core: kế toán = vai chính thu-chi (quỹ + phiếu thu/chi + báo cáo dòng tiền).
+    'FUND_VIEW', 'FUND_CREATE', 'FUND_UPDATE', 'FUND_DELETE', 'CASHENTRY_VIEW', 'CASHENTRY_CREATE', 'CASHENTRY_CANCEL'],
   TECHNICIAN: ['DASHBOARD_VIEW', 'POS_VIEW'],
   SUPPORT: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW'],
   WAREHOUSE: ['DASHBOARD_VIEW', 'POS_VIEW', 'TID_VIEW', 'CONFIG_POS_SUPPLY_VIEW', 'CONFIG_POS_SUPPLY_MANAGE', 'CONFIG_TID_VIEW', 'CONFIG_TID_MANAGE'],
