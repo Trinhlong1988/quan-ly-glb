@@ -8,7 +8,11 @@ import { Modal } from '../components/Modal.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
+import { StatBar } from '../components/StatBar.js';
 import { Button } from '../components/Button.js';
+
+// Tông màu luân phiên (palette design system) cho bộ đếm theo đại lý — không phải trạng thái.
+const AGENT_TONES = ['bg-indigo-50 text-indigo-600', 'bg-emerald-50 text-emerald-600', 'bg-amber-50 text-amber-600', 'bg-sky-50 text-sky-600', 'bg-violet-50 text-violet-600', 'bg-rose-50 text-rose-600'];
 
 /** Khách hàng (§D): hiển thị `KH## · biệt danh (tên thật)` + Số điện thoại. Mã tự sinh, nickname bắt buộc. */
 export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
@@ -96,6 +100,24 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
         ]}
         onApply={reload}
         onReset={resetFilters}
+      />
+
+      {/* Bộ đếm theo ĐẠI LÝ (đếm CLIENT từ customerList — trả full, không phân trang).
+          KH không có trường ACTIVE/INACTIVE → CHỈ tổng + theo đại lý (không bịa hoạt động/không). */}
+      <StatBar
+        items={[
+          { label: 'Tổng khách', value: rows.length, tone: 'bg-brand-tint text-brand' },
+          ...agents
+            .map((a, i) => ({
+              label: a.name,
+              value: rows.filter((c) => c.agentId === a.id).length,
+              tone: AGENT_TONES[i % AGENT_TONES.length]
+            }))
+            .filter((it) => it.value > 0),
+          ...(rows.some((c) => c.agentId == null)
+            ? [{ label: 'Chưa gán đại lý', value: rows.filter((c) => c.agentId == null).length, tone: 'bg-slate-100 text-slate-500' }]
+            : [])
+        ]}
       />
 
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">

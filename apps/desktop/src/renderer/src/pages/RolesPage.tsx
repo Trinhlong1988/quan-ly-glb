@@ -7,7 +7,8 @@ import { useToast } from '../lib/toast.js';
 import { Modal } from '../components/Modal.js';
 import { Button } from '../components/Button.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
-import { StatusPill } from '../components/StatusPill.js';
+import { StatusPill, statusLabel, statusTone } from '../components/StatusPill.js';
+import { StatBar } from '../components/StatBar.js';
 import { Field, inputCls } from '../components/Field.js';
 
 export function RolesPage({ user }: { user: AuthUser }): JSX.Element {
@@ -66,6 +67,17 @@ export function RolesPage({ user }: { user: AuthUser }): JSX.Element {
           </Button>
         )}
       </div>
+
+      {/* Bộ đếm (đếm CLIENT từ roleList — trả full, không phân trang). userCount sẵn trong RoleDto
+          dùng cho tổng nhân sự đang gán vai trò. */}
+      <StatBar
+        items={[
+          { label: 'Tổng vai trò', value: roles.length, tone: 'bg-brand-tint text-brand' },
+          { label: statusLabel('ACTIVE'), value: roles.filter((r) => r.status === 'ACTIVE').length, tone: statusTone('ACTIVE') },
+          { label: statusLabel('LOCKED'), value: roles.filter((r) => r.status === 'LOCKED').length, tone: statusTone('LOCKED') },
+          { label: 'Nhân sự đã gán', value: roles.reduce((s, r) => s + r.userCount, 0), tone: statusTone('DISABLED') }
+        ]}
+      />
 
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">

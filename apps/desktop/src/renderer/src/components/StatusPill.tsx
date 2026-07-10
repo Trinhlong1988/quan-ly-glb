@@ -29,3 +29,11 @@ export function StatusPill({ status }: { status: string }): JSX.Element {
 export function statusLabel(status: string): string {
   return MAP[status]?.label ?? status;
 }
+
+/**
+ * Bộ class màu (tint nền + chữ) của một mã trạng thái — nguồn màu DUY NHẤT để StatBar/badge
+ * tô màu bộ đếm trạng thái đồng bộ với StatusPill (R_UI_STANDARD: không hardcode lại màu).
+ */
+export function statusTone(status: string): string {
+  return MAP[status]?.cls ?? 'bg-slate-100 text-slate-500';
+}

@@ -8,6 +8,8 @@ import { Modal } from '../components/Modal.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { Field, inputCls } from '../components/Field.js';
 import { Button } from '../components/Button.js';
+import { StatBar } from '../components/StatBar.js';
+import { statusTone } from '../components/StatusPill.js';
 import { useRowSelection, SelectAllCell, SelectCell } from '../components/Selection.js';
 
 /** VND, nhóm 3 số bằng dấu chấm (KHÔNG toLocaleString — R_UI QA gate). */
@@ -32,15 +34,26 @@ type Dialog =
 export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
   const toast = useToast();
   const [rows, setRows] = useState<CancelRequestDto[]>([]);
+  const [stats, setStats] = useState({ total: 0, pending: 0, approved: 0, rejected: 0 });
   const [loading, setLoading] = useState(true);
   const [dialog, setDialog] = useState<Dialog>(null);
   const sel = useRowSelection();
 
   async function reload(): Promise<void> {
     setLoading(true);
-    const res = await window.api.cancelRequestList('PENDING');
-    if (res.ok && res.data) setRows(res.data.filter((r) => r.canApprove));
-    else if (res.message) toast.alert(res.message);
+    // Bảng chỉ hiển thị PENDING mà bạn được duyệt; nhưng bộ đếm là TOÀN HỆ THỐNG theo trạng thái.
+    // Đếm CLIENT từ 3 danh sách đầy đủ (cancelRequestList trả full, KHÔNG phân trang) — không cần API mới.
+    const [pend, appr, rej] = await Promise.all([
+      window.api.cancelRequestList('PENDING'),
+      window.api.cancelRequestList('APPROVED'),
+      window.api.cancelRequestList('REJECTED')
+    ]);
+    if (pend.ok && pend.data) setRows(pend.data.filter((r) => r.canApprove));
+    else if (pend.message) toast.alert(pend.message);
+    const pc = pend.ok && pend.data ? pend.data.length : 0;
+    const ac = appr.ok && appr.data ? appr.data.length : 0;
+    const rc = rej.ok && rej.data ? rej.data.length : 0;
+    setStats({ total: pc + ac + rc, pending: pc, approved: ac, rejected: rc });
     sel.clear();
     setLoading(false);
   }
@@ -94,6 +107,15 @@ export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
         <h2 className="text-lg font-semibold text-slate-800">Duyệt hủy bill</h2>
         <p className="text-sm text-slate-500">Các yêu cầu hủy bill đang chờ bạn duyệt — người tạo yêu cầu khác người duyệt (phân vai theo cấp).</p>
       </div>
+
+      <StatBar
+        items={[
+          { label: 'Tổng yêu cầu', value: stats.total, tone: 'bg-brand-tint text-brand' },
+          { label: 'Chờ duyệt', value: stats.pending, tone: statusTone('PENDING') },
+          { label: 'Đã duyệt', value: stats.approved, tone: statusTone('ACTIVE') },
+          { label: 'Từ chối', value: stats.rejected, tone: statusTone('LOCKED') }
+        ]}
+      />
 
       {/* Thanh thao tác hàng loạt */}
       {sel.count > 0 && (

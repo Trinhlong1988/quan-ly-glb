@@ -17,6 +17,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { Field, inputCls } from '../components/Field.js';
 import { Button } from '../components/Button.js';
 import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../components/Selection.js';
+import { StatBar } from '../components/StatBar.js';
 import { exportCsv } from '../lib/exportCsv.js';
 
 /** VND, nhóm 3 số bằng dấu chấm (KHÔNG toLocaleString — R_UI QA gate). Giữ dấu âm. */
@@ -40,18 +41,6 @@ function BillStatusBadge({ status }: { status: string }): JSX.Element {
   };
   const s = map[status] ?? { label: status, cls: 'bg-slate-100 text-slate-500' };
   return <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${s.cls}`}>{s.label}</span>;
-}
-
-function KpiCard({ icon, label, value, tone }: { icon: JSX.Element; label: string; value: string; tone: string }): JSX.Element {
-  return (
-    <div className="rounded-xl border border-line bg-white p-4 shadow-sm">
-      <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-        <span className={'flex h-7 w-7 items-center justify-center rounded-lg ' + tone}>{icon}</span>
-        {label}
-      </div>
-      <div className="mt-2 text-right text-xl font-semibold tabular-nums text-slate-800">{value}</div>
-    </div>
-  );
 }
 
 const emptySummary: RevenueSummary = { count: 0, totalAmount: 0, totalRevenuePartner: 0, totalRevenueSell: 0, totalRevenue: 0 };
@@ -179,13 +168,16 @@ export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
         )}
       </div>
 
-      {/* KPI realtime — theo bộ lọc hiện tại */}
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard icon={<TrendingUp className="h-4 w-4 text-brand" />} tone="bg-brand-tint text-brand" label="Tổng doanh thu" value={money(summary.totalRevenue)} />
-        <KpiCard icon={<Handshake className="h-4 w-4 text-indigo-500" />} tone="bg-indigo-50 text-indigo-500" label="Chênh đối tác" value={money(summary.totalRevenuePartner)} />
-        <KpiCard icon={<Users className="h-4 w-4 text-emerald-500" />} tone="bg-emerald-50 text-emerald-500" label="Chênh bán" value={money(summary.totalRevenueSell)} />
-        <KpiCard icon={<Receipt className="h-4 w-4 text-slate-500" />} tone="bg-slate-100 text-slate-500" label="Số giao dịch" value={summary.count.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')} />
-      </div>
+      {/* KPI realtime — GIÁ TRỊ TỪ summary (đếm ở MAIN trên toàn bộ theo bộ lọc, KHÔNG từ mảng đã
+          phân trang) → tránh count-pagination-drift. StatBar dùng CHUNG mọi trang. */}
+      <StatBar
+        items={[
+          { icon: <TrendingUp className="h-4 w-4" />, tone: 'bg-brand-tint text-brand', label: 'Tổng doanh thu', value: money(summary.totalRevenue) },
+          { icon: <Handshake className="h-4 w-4" />, tone: 'bg-indigo-50 text-indigo-500', label: 'Chênh đối tác', value: money(summary.totalRevenuePartner) },
+          { icon: <Users className="h-4 w-4" />, tone: 'bg-emerald-50 text-emerald-500', label: 'Chênh bán', value: money(summary.totalRevenueSell) },
+          { icon: <Receipt className="h-4 w-4" />, tone: 'bg-slate-100 text-slate-500', label: 'Số giao dịch', value: summary.count }
+        ]}
+      />
 
       {/* Bộ lọc đa chiều — mỗi chiều một ô riêng */}
       <div className="mb-3 rounded-xl border border-line bg-white p-3 shadow-sm">

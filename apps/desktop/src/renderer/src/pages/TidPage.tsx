@@ -6,7 +6,8 @@ import type { TidDto, UndeliveredTidDto, PosDto, CustomerDto } from '../../../pr
 import { useToast } from '../lib/toast.js';
 import { Modal } from '../components/Modal.js';
 import { Button } from '../components/Button.js';
-import { StatusPill, statusLabel } from '../components/StatusPill.js';
+import { StatusPill, statusLabel, statusTone } from '../components/StatusPill.js';
+import { StatBar } from '../components/StatBar.js';
 import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
 
@@ -92,6 +93,22 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
           TID chưa giao {undelivered.length > 0 && <span className="ml-1 rounded-full bg-danger px-1.5 text-xs text-white">{undelivered.length}</span>}
         </TabBtn>
       </div>
+
+      {/* Bộ đếm tab "Tất cả TID" (đếm CLIENT từ tidList — trả full, không phân trang).
+          "Chưa giao" = TID đang ACTIVE nhưng chưa có deliveredAt (theo tập kết quả lọc hiện tại). */}
+      {tab === 'all' && (
+        <StatBar
+          items={[
+            { label: 'Tổng TID', value: rows.length, tone: 'bg-brand-tint text-brand' },
+            { label: 'Chưa giao', value: rows.filter((t) => t.status === 'ACTIVE' && !t.deliveredAt).length, tone: statusTone('UNASSIGNED') },
+            ...TID_STATUSES.map((s) => ({
+              label: statusLabel(s),
+              value: rows.filter((t) => t.status === s).length,
+              tone: statusTone(s)
+            }))
+          ]}
+        />
+      )}
 
       {tab === 'all' && (
         <FilterBar

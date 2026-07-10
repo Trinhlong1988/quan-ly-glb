@@ -7,7 +7,9 @@ import type { UserDto, RoleDto } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
 import { Modal } from '../components/Modal.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
-import { StatusPill, statusLabel } from '../components/StatusPill.js';
+import { StatusPill, statusLabel, statusTone } from '../components/StatusPill.js';
+import { StatBar } from '../components/StatBar.js';
+import { RoleBadge } from '../components/RoleBadge.js';
 import { Field, inputCls } from '../components/Field.js';
 import { PasswordInput } from '../components/PasswordInput.js';
 import { Button } from '../components/Button.js';
@@ -101,6 +103,17 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
         )}
       </div>
 
+      {/* Bộ đếm (đếm CLIENT từ danh sách đã tải — userList trả full, không phân trang;
+          phản ánh đúng tập kết quả theo bộ lọc hiện tại). */}
+      <StatBar
+        items={[
+          { label: 'Tổng nhân sự', value: rows.length, tone: 'bg-brand-tint text-brand' },
+          { label: statusLabel('ACTIVE'), value: rows.filter((u) => u.status === 'ACTIVE').length, tone: statusTone('ACTIVE') },
+          { label: statusLabel('LOCKED'), value: rows.filter((u) => u.status === 'LOCKED').length, tone: statusTone('LOCKED') },
+          { label: 'Chờ/Ngưng', value: rows.filter((u) => u.status === 'PENDING' || u.status === 'DISABLED').length, tone: statusTone('PENDING') }
+        ]}
+      />
+
       {/* Filters */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <div className="relative">
@@ -170,7 +183,12 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
               rows.map((u) => (
                 <tr key={u.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(u.id) ? 'bg-brand-tint/40' : '')}>
                   {canDelete && (u.status !== 'DELETED' ? <SelectCell id={u.id} sel={sel} /> : <td className="px-4 py-3" />)}
-                  <td className="px-4 py-3 font-mono text-xs font-semibold text-brand">{u.employeeCode ?? '—'}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono text-xs font-semibold text-brand">{u.employeeCode ?? '—'}</span>
+                      <RoleBadge roles={u.roles} />
+                    </div>
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2.5">
                       <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-tint text-xs font-semibold text-brand">

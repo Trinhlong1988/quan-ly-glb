@@ -7,7 +7,8 @@ import { useToast } from '../lib/toast.js';
 import { Modal } from '../components/Modal.js';
 import { Button } from '../components/Button.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
-import { StatusPill, statusLabel } from '../components/StatusPill.js';
+import { StatusPill, statusLabel, statusTone } from '../components/StatusPill.js';
+import { StatBar } from '../components/StatBar.js';
 import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
 
@@ -109,6 +110,18 @@ export function PosPage({ user }: { user: AuthUser }): JSX.Element {
         ]}
         onApply={reload}
         onReset={resetFilters}
+      />
+
+      {/* Bộ đếm (đếm CLIENT từ posList — trả full, không phân trang; theo tập kết quả lọc hiện tại). */}
+      <StatBar
+        items={[
+          { label: 'Tổng máy', value: rows.length, tone: 'bg-brand-tint text-brand' },
+          ...POS_STATUSES.map((s) => ({
+            label: statusLabel(s),
+            value: rows.filter((d) => d.status === s).length,
+            tone: statusTone(s)
+          }))
+        ]}
       />
 
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">

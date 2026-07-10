@@ -7,6 +7,7 @@ import { useToast } from '../lib/toast.js';
 import { inputCls } from '../components/Field.js';
 import { Button } from '../components/Button.js';
 import { useRowSelection, SelectAllCell, SelectCell } from '../components/Selection.js';
+import { StatBar } from '../components/StatBar.js';
 import { exportCsv } from '../lib/exportCsv.js';
 
 /** VND, nhóm 3 số bằng dấu chấm (KHÔNG toLocaleString). Giữ dấu âm. */
@@ -14,19 +15,6 @@ function money(n: number): string {
   const neg = n < 0;
   const s = Math.abs(Math.round(n)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   return (neg ? '−' : '') + s + 'đ';
-}
-
-function KpiCard({ icon, label, value, tone, sub }: { icon: JSX.Element; label: string; value: string; tone: string; sub?: string }): JSX.Element {
-  return (
-    <div className="rounded-xl border border-line bg-white p-4 shadow-sm">
-      <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-        <span className={'flex h-7 w-7 items-center justify-center rounded-lg ' + tone}>{icon}</span>
-        {label}
-      </div>
-      <div className="mt-2 text-right text-xl font-semibold tabular-nums text-slate-800">{value}</div>
-      {sub && <div className="mt-0.5 text-right text-xs text-slate-400">{sub}</div>}
-    </div>
-  );
 }
 
 const emptyDebt: DebtSummary = { count: 0, debtPartner: 0, debtSell: 0, debtTotal: 0 };
@@ -111,12 +99,16 @@ export function DebtPage({ user }: { user: AuthUser }): JSX.Element {
         <p className="text-sm text-slate-500">Công nợ thu về = 2 khoản chênh (đối tác + bán) của các giao dịch chưa đối soát. Đánh dấu đã thu để tất toán.</p>
       </div>
 
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard icon={<Coins className="h-4 w-4 text-brand" />} tone="bg-brand-tint text-brand" label="Tổng công nợ thu về" value={money(debt.debtTotal)} sub={`${debt.count} giao dịch chưa đối soát`} />
-        <KpiCard icon={<Handshake className="h-4 w-4 text-indigo-500" />} tone="bg-indigo-50 text-indigo-500" label="Công nợ đối tác" value={money(debt.debtPartner)} />
-        <KpiCard icon={<Users className="h-4 w-4 text-emerald-500" />} tone="bg-emerald-50 text-emerald-500" label="Công nợ khách/bán" value={money(debt.debtSell)} />
-        <KpiCard icon={<CheckCircle2 className="h-4 w-4 text-slate-500" />} tone="bg-slate-100 text-slate-500" label="Đã chọn" value={sel.count.toString()} sub={canSettle ? 'Chọn để đối soát' : 'Chỉ xem'} />
-      </div>
+      {/* KPI công nợ — GIÁ TRỊ TỪ debtSummary (đếm ở MAIN trên toàn bộ theo bộ lọc, KHÔNG từ mảng
+          đã phân trang) → tránh count-pagination-drift. StatBar dùng CHUNG mọi trang. */}
+      <StatBar
+        items={[
+          { icon: <Coins className="h-4 w-4" />, tone: 'bg-brand-tint text-brand', label: 'Tổng công nợ thu về', value: money(debt.debtTotal), sub: `${debt.count} giao dịch chưa đối soát` },
+          { icon: <Handshake className="h-4 w-4" />, tone: 'bg-indigo-50 text-indigo-500', label: 'Công nợ đối tác', value: money(debt.debtPartner) },
+          { icon: <Users className="h-4 w-4" />, tone: 'bg-emerald-50 text-emerald-500', label: 'Công nợ khách/bán', value: money(debt.debtSell) },
+          { icon: <CheckCircle2 className="h-4 w-4" />, tone: 'bg-slate-100 text-slate-500', label: 'Đã chọn', value: sel.count, sub: canSettle ? 'Chọn để đối soát' : 'Chỉ xem' }
+        ]}
+      />
 
       <div className="mb-3 rounded-xl border border-line bg-white p-3 shadow-sm">
         <div className="flex flex-wrap items-end gap-2">

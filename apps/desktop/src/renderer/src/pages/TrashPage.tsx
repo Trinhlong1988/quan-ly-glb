@@ -6,6 +6,7 @@ import type { TrashRow } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { Button } from '../components/Button.js';
+import { StatBar } from '../components/StatBar.js';
 import { Modal } from '../components/Modal.js';
 import { Field } from '../components/Field.js';
 import { PasswordInput } from '../components/PasswordInput.js';
@@ -22,6 +23,12 @@ export function TrashPage({ user }: { user: AuthUser }): JSX.Element {
   const canPurge = hasPermission(user, 'TRASH_PURGE');
   const canViewAll = hasPermission(user, 'TRASH_VIEW_ALL');
   const cols = canViewAll ? 7 : 6;
+  // Tông màu luân phiên (palette) cho bộ đếm theo LOẠI dữ liệu.
+  const KIND_TONES = ['bg-indigo-50 text-indigo-600', 'bg-emerald-50 text-emerald-600', 'bg-amber-50 text-amber-600', 'bg-sky-50 text-sky-600', 'bg-violet-50 text-violet-600', 'bg-rose-50 text-rose-600'];
+  // Gộp theo entityLabel (kind) — đếm CLIENT từ trashList (trả full, không phân trang).
+  const byKind = Array.from(
+    rows.reduce((m, r) => m.set(r.entityLabel, (m.get(r.entityLabel) ?? 0) + 1), new Map<string, number>())
+  ).map(([label, value], i) => ({ label, value, tone: KIND_TONES[i % KIND_TONES.length] }));
 
   async function reload(): Promise<void> {
     setLoading(true);
@@ -66,6 +73,8 @@ export function TrashPage({ user }: { user: AuthUser }): JSX.Element {
           </Button>
         )}
       </div>
+
+      <StatBar items={[{ label: 'Tổng mục', value: rows.length, tone: 'bg-brand-tint text-brand' }, ...byKind]} />
 
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">
