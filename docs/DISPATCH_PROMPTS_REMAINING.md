@@ -46,6 +46,35 @@
 
 ---
 
+## PROMPT G11 — Cập nhật phần mềm tích hợp (electron-updater, push→xác nhận→tải→thoát→mở lại→báo kết quả) — SẴN sau QA phản biện
+
+> Spec đầy đủ: `docs/PHASE_G11_AUTOUPDATE_SPEC.md`. Mở lại hoãn D01 (`DEFERRED_REGISTRY.md`).
+
+**① Vai + repo:** Bạn = CMD_BUILD. Chỉ sửa ổ D `D:\TT HKD AI\tools\quan-ly-glb`. CẤM đụng bản C. CẤM git commit/tag/push. Bí/bất định → DỪNG hỏi, KHÔNG đoán. Đọc TRƯỚC toàn bộ: `docs/PHASE_G11_AUTOUPDATE_SPEC.md`, `docs/CMD_BUILD_DISPATCH_PROTOCOL.md`, `apps/desktop/electron-builder.yml`, `apps/desktop/src/main/db.ts` (mẫu IPC/service), `preload/index.d.ts`, cách toast/thông báo hiện có (`components/` + `Dashboard.tsx`).
+
+**② Đo lường trước bug (gate phòng ngừa — bắt buộc thoả):**
+- `offline-safe` (RỦI RO CAO NHẤT): server cập nhật tắt/không với tới → `checkForUpdates`/download ném lỗi phải bị **nuốt trong try/catch**, app **vẫn khởi động + đăng nhập + dùng bình thường**, KHÔNG popup đỏ, KHÔNG crash. Gate: selftest ca (c).
+- `dev-guard`: `!app.isPackaged` → KHÔNG khởi động updater (tránh crash dev/selftest). Gate: selftest ca (a).
+- `no-auto-without-consent`: `autoDownload=false` — chỉ tải khi user bấm "Cập nhật ngay". KHÔNG tự tải ngầm.
+- `semver-compare`: dùng so sánh semver chuẩn (0.1.10 > 0.1.9), KHÔNG so chuỗi. Gate: selftest ca (b).
+- `stuck-state`: sau lỗi phải bấm **Cập nhật lại** để thử lại được (không kẹt cờ "đang tải"). Gate: selftest ca (f).
+- `emit-trap`: verify LUÔN `npm run typecheck` (--noEmit). CẤM `tsc -p` trần. Sau verify `git status` sạch (không phun .js/.d.ts vào src/).
+- `type-mirror-drift`: thêm DTO/method vào `preload/index.d.ts` → web typecheck 0 + `audit:protected` PASS. CHỈ Edit chèn, KHÔNG Write đè.
+
+**③ File được bảo vệ:** `preload/index.d.ts` (chỉ Edit chèn). `electron-builder.yml` (thêm block `publish`, KHÔNG đổi phần khác). Sau sửa `npm run audit:protected` PASS.
+
+**④ Việc (ĐÚNG spec §1–§2 + §5 — CẤM over-reach):**
+1. Thêm `electron-updater` dependency trực tiếp `apps/desktop`.
+2. `electron-builder.yml`: thêm `publish: {provider: generic, url: http://192.168.1.6:8686/updates/, channel: latest}`. Giữ `nsis.perMachine:false`.
+3. `apps/desktop/src/main/update-service.ts` (MỚI): theo spec §2 — autoDownload=false, autoInstallOnAppQuit=true, `app.isPackaged` guard, check lúc ready + mỗi 60', try/catch nuốt lỗi, IPC events + handlers (`update:check`/`update:start`/`update:installNow`), marker `userData/update-result.json` (ghi trước quitAndInstall; đọc+xoá lúc boot → success/failed).
+4. Renderer: banner "có bản mới" + [Cập nhật ngay]/[Để sau], thanh tiến trình %, thông báo **thành công rõ version+ngày** (bước 6), banner **lỗi + lý do + [Cập nhật lại]** (bước 7). Dùng toast/design system sẵn có, KHÔNG dựng chuông mới. Hiện **version hiện tại** ở footer Dashboard (IPC `app:getVersion`).
+5. `preload/index.d.ts`: chèn method + DTO (onUpdateAvailable/onDownloadProgress/onUpdateDownloaded/onUpdateError/onUpdateSuccess/onUpdateFailed, checkUpdate/startUpdate/installUpdateNow/getAppVersion).
+   **CẤM:** dựng server cập nhật (việc LEAD); đổi cơ chế cài (giữ nsis); tự tải khi chưa bấm; mở rộng ngoài 5 bước.
+
+**⑤ Bằng chứng (dán THÔ; AUDIT rerun sạch):** `npm run typecheck`=0 · `npm run build`=0 · `npm test`≥205 · **selftest=23** (6 ca a–f spec §5) pass đủ/fail 0 · `npm run audit:protected` PASS · `git status` sạch. Liệt kê file đổi + chỗ suy luận + cách kiểm tay E2E. KHÔNG commit.
+
+---
+
 ## PROMPT F-STATBAR — Thanh bộ đếm trực quan đầu MỌI trang danh sách (Mr.Long 10/7) — SẴN, chạy SAU con-mắt-mật-khẩu
 
 > Cơ sở: Explore map code thật 10/7. **CẤM over-reach**: KHÔNG dựng lại KpiCard ở Debt/Revenue (đã có), KHÔNG bịa trường active/inactive cho thực thể không có.

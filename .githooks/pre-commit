@@ -6,4 +6,9 @@ node tools/audit/protected_artifacts_guard.mjs || {
   echo "[pre-commit] BLOCKED — file hand-maintained bị clobber. Khôi phục rồi commit lại."
   exit 1
 }
+echo "[pre-commit] Guard hoãn ngầm (PF-01)..."
+node tools/audit/deferred_guard.mjs || {
+  echo "[pre-commit] BLOCKED — có hạng mục HOÃN/TODO chưa khai báo DEFERRED_REGISTRY. Khai báo rồi commit lại."
+  exit 1
+}
 echo "[pre-commit] OK."

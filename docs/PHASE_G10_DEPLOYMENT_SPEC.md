@@ -27,7 +27,7 @@
 | Q1 | Phiên bản Postgres + cách cài | **PostgreSQL 16, installer chính thức trên máy này** | adapter Prisma `@prisma/adapter-pg` + `pg`; provider `postgresql` |
 | Q2 | Data cũ SQLite | **BỎ — khởi tạo Postgres rỗng + seed adminroot** | KHÔNG migrate dev.db |
 | Q3+Q4 | Mô hình kết nối/credential (đã gỡ mâu thuẫn — **Mr.Long chốt A 10/7**) | **A — Client nối THẲNG Postgres.** Màn "Cấu hình máy chủ" nhập IP:port + **1 tài khoản pg chung (mật khẩu LƯU trong config máy client)**. Chấp nhận rủi ro LAN nội bộ tin cậy. Đăng nhập app-level giữ nguyên; audit ghi user APP. | **Ràng buộc từ QA:** chỉ **máy chủ** chạy seed/migrate (client chỉ connect — tách server-init/client-init); tranh chấp duyệt = conditional transition (I-G3). Không chọn B (API layer) / C (pg trust). |
-| Q5 | Auto-update .exe | **HOÃN — cài tay bản mới** | |
+| Q5 | Auto-update .exe | ~~HOÃN — cài tay~~ → **MỞ LẠI (D01)**: build tích hợp G11 (`PHASE_G11_AUTOUPDATE_SPEC.md`) — Mr.Long yêu cầu 10/7 | electron-updater generic LAN. Xem `DEFERRED_REGISTRY.md` D01 |
 | Q6 | Khóa ghi đồng thời | **Transaction Postgres + optimistic (updatedAt) cho sửa; test 2 client song song** | Xem §4 I-G2/I-G3 |
 
 > Quyết định đã chốt → G10 được phép code SAU KHI F-NOTIF freeze+tag (thứ tự pipeline). Không còn mục TENTATIVE nào chặn.

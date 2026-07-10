@@ -3,7 +3,13 @@
 > Rule: mỗi bug do LEAD/AUDIT phát hiện = **thất bại của quy trình test** → BẮT BUỘC thêm test/rule chặn tái diễn trước khi đóng.
 > Format: `### B<NN> — <mô tả> [FIXED|PENDING]` · Phát hiện bởi · Nguyên nhân · Fix · **Regression** (test/rule chặn tái diễn).
 
-Counter: B = 18. Last audit: 2026-07-10 (… P1.2 approval + B17 emit-trap/clobber + B18 TOCTOU tương tranh approval — phát hiện khi chuẩn bị G10 đa-client Postgres).
+Counter: B = 18. PF (process-failure) = 1. Last audit: 2026-07-10 (… P1.2 approval + B17 emit-trap/clobber + B18 TOCTOU tương tranh approval — phát hiện khi chuẩn bị G10 đa-client Postgres; + PF-01 sót auto-update do duyệt gộp).
+
+### PF-01 — Auto-update .exe bị BỎ SÓT do "duyệt gộp chôn việc lớn" [FIXED-PROCESS]
+- **Phát hiện bởi:** Mr.Long 10/7 — "cập nhật hệ thống nằm ở đâu? user khác tải bản cập nhật kiểu gì?" → truy ra app KHÔNG có cơ chế cập nhật.
+- **Nguyên nhân (quy trình, KHÔNG phải code):** `PHASE_G10_DEPLOYMENT_SPEC.md` Q5 = *"Auto-update .exe | HOÃN — cài tay bản mới"* do **LEAD tự đặt mặc định** rồi **gộp chung vào lô "chốt Q1–Q6"**. Mr.Long gật cả cụm → một hạng mục LỚN (đụng triển khai đa máy) bị **quyết ngầm trong lô**, không được đưa ra hỏi riêng. Lỗi thuộc LEAD: nhét việc lớn vào dòng mặc định của lô duyệt.
+- **Fix:** mở lại D01, build G11 (electron-updater tích hợp, spec `PHASE_G11_AUTOUPDATE_SPEC.md`).
+- **Regression (chặn tái diễn) — HARDLOCK QUY TRÌNH:** (a) lập `docs/DEFERRED_REGISTRY.md` — mọi ô HOÃN/TODO/tạm trong `docs/*_SPEC.md` PHẢI khai báo 1 dòng trong sổ (id + lý do + điều kiện mở lại); (b) **guard** `tools/audit/deferred_guard.mjs` quét token HOÃN/TODO chưa khai báo → fail (thêm vào `verify` + pre-commit); (c) **luật LEAD:** CẤM gói ≥2 quyết định lớn vào 1 lời "chốt"; việc đụng hạ tầng/đa máy/bảo mật/dữ liệu phải hỏi 1 câu RIÊNG, duyệt riêng. **Bài học:** "chốt" một lô ≠ Mr.Long đã cân nhắc từng dòng — LEAD chịu trách nhiệm phơi bày việc lớn, không để trôi theo mặc định.
 
 ### B16 — Ngày hiệu lực biểu phí LỆCH −1 NGÀY trên máy UTC+7 (production) [FIXED]
 - **Phát hiện bởi:** CMD_AUDIT (audit P1.1 giá theo kỳ) — máy production chạy UTC+7. User nhập "Hiệu lực từ = 01/07/2026" nhưng bảng biểu phí hiển thị/lưu **30/06/2026**.
