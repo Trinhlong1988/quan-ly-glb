@@ -22,9 +22,42 @@ import {
 } from '@glb/shared';
 import { hashPassword } from '@glb/business-rules';
 import { backfillEmployeeCodes } from './code-service.js';
+import { writeAudit } from './audit.js';
 
 const ADMIN_USERNAME = 'adminroot';
 const ADMIN_DEFAULT_PASSWORD = 'Admin@123456';
+
+// ── G-CFG.7 §11 Pha I1 — bug class "DB tiến hóa" (memory 9/7 H7) ──────────────
+// Quyền ngành nghề MỚI phải được cấp cho role ĐÃ TỒN TẠI trên DB cũ (không chỉ role tạo mới
+// hay ADMIN). ADMIN đã tự đồng bộ ĐỦ quyền mỗi boot (R_ADMIN_SUPERUSER). MANAGER (+ role
+// quản-lý-cấu-hình) cần cấp 1 LẦN — idempotent, guard bằng cờ AppSetting để KHÔNG cấp lại quyền
+// admin đã CHỦ ĐỘNG gỡ về sau (tôn trọng G-POS-A01: reboot không tự bật lại quyền đã tắt).
+const INDUSTRY_PERM_CODES = ['CONFIG_INDUSTRY_VIEW', 'CONFIG_INDUSTRY_CREATE', 'CONFIG_INDUSTRY_UPDATE', 'CONFIG_INDUSTRY_DELETE'];
+const INDUSTRY_PERM_TARGET_ROLES = ['MANAGER'];
+const INDUSTRY_GRANT_FLAG = 'seed.industryPermsGrantedV1';
+
+/**
+ * Cấp (idempotent) quyền ngành nghề cho các role đã có sẵn trên DB (db-evolution).
+ * Trả về số (role×quyền) vừa được thêm mới. Bỏ qua cặp đã có → an toàn chạy lại.
+ * Không guard cờ ở đây (để selftest gọi trực tiếp mô phỏng DB tiến hóa); cờ guard nằm ở seedIfEmpty.
+ */
+export async function grantIndustryPermsToExistingRoles(db: Db): Promise<number> {
+  const perms = await db.permission.findMany({ where: { code: { in: INDUSTRY_PERM_CODES } }, select: { id: true } });
+  let granted = 0;
+  for (const roleCode of INDUSTRY_PERM_TARGET_ROLES) {
+    const role = await db.role.findUnique({ where: { code: roleCode }, select: { id: true } });
+    if (!role) continue;
+    for (const perm of perms) {
+      const existing = await db.rolePermission.findUnique({
+        where: { roleId_permissionId: { roleId: role.id, permissionId: perm.id } }
+      });
+      if (existing) continue;
+      await db.rolePermission.create({ data: { roleId: role.id, permissionId: perm.id } });
+      granted++;
+    }
+  }
+  return granted;
+}
 
 let prisma: Db | undefined;
 
@@ -143,6 +176,28 @@ export async function seedIfEmpty(db: Db): Promise<void> {
           where: { roleId_permissionId: { roleId: adminRoleForSync.id, permissionId: perm.id } },
           update: {},
           create: { roleId: adminRoleForSync.id, permissionId: perm.id }
+        });
+      }
+    }
+  }
+
+  // db-evolution (G-CFG.7 I1): cấp quyền ngành nghề cho role CŨ 1 lần/DB (cờ AppSetting). Trên DB
+  // mới, role vừa tạo đã có quyền qua DEFAULT_ROLE_PERMISSIONS → bước này grant=0 (an toàn no-op).
+  {
+    const flag = await db.appSetting.findUnique({ where: { key: INDUSTRY_GRANT_FLAG } });
+    if (!flag) {
+      const granted = await grantIndustryPermsToExistingRoles(db);
+      await db.appSetting.upsert({
+        where: { key: INDUSTRY_GRANT_FLAG },
+        update: {},
+        create: { key: INDUSTRY_GRANT_FLAG, value: new Date().toISOString() }
+      });
+      if (granted > 0) {
+        await writeAudit(db, {
+          actorUserId: null,
+          action: 'INDUSTRY_PERMS_GRANTED',
+          targetType: 'System',
+          after: { granted, roles: INDUSTRY_PERM_TARGET_ROLES, perms: INDUSTRY_PERM_CODES }
         });
       }
     }

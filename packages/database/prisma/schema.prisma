@@ -688,6 +688,28 @@ model Dossier {
   @@map("dossiers")
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// G-CFG.7 — Ngành nghề (master, §11 Pha I1). Vận tải, tạp hóa, cà phê… theo ĐKKD.
+// PHA I1 = CHỈ master data + trang cấu hình RIÊNG. KHÔNG gắn industryId vào FeeRate/Tid
+// ở pha này (đó là I2 — chờ Mr.Long duyệt). Khuôn F10: mã @unique (CodeCounter prefix 'NGH'),
+// soft-delete (deletedAt) + audit (createdBy/updatedBy) + DUPLICATE_TRASH + P2002 guard ở service.
+// ─────────────────────────────────────────────────────────────────────────────
+model Industry {
+  id        Int       @id @default(autoincrement())
+  code      String    @unique // NGH01, NGH02... (CodeCounter prefix 'NGH')
+  name      String
+  active    Boolean   @default(true) // đang dùng / ngừng dùng (giữ lịch sử, không xóa cứng)
+  note      String?
+  createdBy Int?      @map("created_by")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedBy Int?      @map("updated_by")
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
+  deletedBy Int?      @map("deleted_by")
+
+  @@map("industries")
+}
+
 // Lịch sử BẢO TRÌ / quét sức khỏe hệ thống (Nhóm E, LEAD 9/7). Mỗi lần quét lưu 1 dòng +
 // báo cáo JSON (danh sách phát hiện lỗi/bug + đề xuất fix). Giữ vết để đối chiếu về sau.
 model MaintenanceRun {

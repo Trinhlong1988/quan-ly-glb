@@ -704,6 +704,30 @@ export interface ConfigTidInput {
   dossierSourceId?: number | null;
   note?: string | null;
 }
+// ── G-CFG.7 DTOs (Cấu hình ngành nghề §11 Pha I1) ──
+export interface IndustryDto extends AuditTrail {
+  id: number;
+  code: string;
+  name: string;
+  active: boolean;
+  note: string | null;
+}
+export interface IndustryFilter {
+  search?: string;
+  active?: boolean;
+  fromDate?: string;
+  toDate?: string;
+}
+export interface CreateIndustryInput {
+  name: string;
+  active?: boolean;
+  note?: string | null;
+}
+export interface UpdateIndustryInput {
+  name?: string;
+  active?: boolean;
+  note?: string | null;
+}
 export interface PickImageResult {
   ok: boolean;
   path?: string;
@@ -922,6 +946,12 @@ export interface GlbApi {
   tidConfigCreate(input: ConfigTidInput): Promise<MutationOutcome>;
   tidConfigUpdate(id: number, input: ConfigTidInput): Promise<MutationOutcome>;
   tidConfigDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
+
+  // ── Cấu hình ngành nghề (G-CFG.7 §11 Pha I1) ──
+  industryList(filter: IndustryFilter): Promise<ListResult<IndustryDto>>;
+  industryCreate(input: CreateIndustryInput): Promise<MutationOutcome>;
+  industryUpdate(id: number, input: UpdateIndustryInput): Promise<MutationOutcome>;
+  industryDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
 
   // Thùng rác (E4)
   trashList(): Promise<{ ok: boolean; data?: TrashRow[]; error?: string; message?: string }>;

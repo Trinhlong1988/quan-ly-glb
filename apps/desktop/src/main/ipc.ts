@@ -17,6 +17,7 @@ import * as feeCfgSvc from './fee-config-service.js';
 import * as rcvAcctSvc from './receive-account-service.js';
 import * as dossierSvc from './dossier-service.js';
 import * as tidCfgSvc from './tid-config-service.js';
+import * as industryCfgSvc from './industry-service.js';
 import { readAttachmentDataUrl } from './file-store.js';
 import * as trashSvc from './trash-service.js';
 import * as msgSvc from './message-service.js';
@@ -257,6 +258,12 @@ export function registerIpc(): void {
   ipcMain.handle('tidConfig:create', async (_e, input: tidCfgSvc.ConfigTidInput) => tidCfgSvc.createConfigTid(input));
   ipcMain.handle('tidConfig:update', async (_e, args: { id: number; input: tidCfgSvc.ConfigTidInput }) => tidCfgSvc.updateConfigTid(args.id, args.input));
   ipcMain.handle('tidConfig:delete', async (_e, args: { ids: number[]; password: string }) => tidCfgSvc.deleteConfigTids(args.ids, args.password));
+
+  // ── G-CFG.7 (§11 Pha I1) Cấu hình ngành nghề (master) ──
+  ipcMain.handle('industry:list', async (_e, filter: industryCfgSvc.IndustryFilter) => industryCfgSvc.listIndustries(filter));
+  ipcMain.handle('industry:create', async (_e, input: industryCfgSvc.CreateIndustryInput) => industryCfgSvc.createIndustry(input));
+  ipcMain.handle('industry:update', async (_e, args: { id: number; input: industryCfgSvc.UpdateIndustryInput }) => industryCfgSvc.updateIndustry(args.id, args.input));
+  ipcMain.handle('industry:delete', async (_e, args: { ids: number[]; password: string }) => industryCfgSvc.deleteIndustries(args.ids, args.password));
 
   // ── E4 Thùng rác ──
   ipcMain.handle('trash:list', async () => trashSvc.listTrash());

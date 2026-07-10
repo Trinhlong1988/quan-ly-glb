@@ -21,4 +21,5 @@ export type {
   CardType,
   Partner,
   PartnerBank,
+  Industry,
 } from "../generated/prisma/client.js";

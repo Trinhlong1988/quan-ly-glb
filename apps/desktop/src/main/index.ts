@@ -241,6 +241,13 @@ app.whenReady().then(async () => {
     app.exit(code);
     return;
   }
+  // G-CFG.7 §11 Pha I1 Cấu hình ngành nghề self-test (=24): CRUD + audit + FORBIDDEN + "DB tiến hóa" quyền.
+  if (process.env['GLB_SELFTEST'] === '24') {
+    const { runIndustrySelfTest } = await import('./selftest-industry.js');
+    const code = await runIndustrySelfTest();
+    app.exit(code);
+    return;
+  }
 
   await createWindow();
   startHousekeeping();

@@ -130,6 +130,11 @@ export type AuditAction =
   | 'TID_CONFIG_CREATED'
   | 'TID_CONFIG_UPDATED'
   | 'TID_CONFIG_DELETED'
+  // ── G-CFG.7 (§11 Pha I1) — Cấu hình ngành nghề ──
+  | 'INDUSTRY_CREATED'
+  | 'INDUSTRY_UPDATED'
+  | 'INDUSTRY_DELETED'
+  | 'INDUSTRY_PERMS_GRANTED'
   // ── Nhóm A — Bảo mật & tài khoản ──
   | 'USER_AUTO_LOCKED'
   | 'PASSWORD_RESET_BY_ADMIN'

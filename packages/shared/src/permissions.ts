@@ -56,6 +56,11 @@ export const PERMISSIONS: PermissionDef[] = [
   // ── G-CFG.6 (§9) — Cấu hình TID ──
   { code: 'CONFIG_TID_VIEW', name: 'Xem cấu hình TID (trạng thái + TID)', group: 'Cấu hình TID' },
   { code: 'CONFIG_TID_MANAGE', name: 'Quản lý cấu hình TID (trạng thái + TID)', group: 'Cấu hình TID' },
+  // ── G-CFG.7 (§11 Pha I1) — Cấu hình ngành nghề (master) ──
+  { code: 'CONFIG_INDUSTRY_VIEW', name: 'Xem cấu hình ngành nghề', group: 'Cấu hình ngành nghề' },
+  { code: 'CONFIG_INDUSTRY_CREATE', name: 'Tạo ngành nghề', group: 'Cấu hình ngành nghề' },
+  { code: 'CONFIG_INDUSTRY_UPDATE', name: 'Sửa ngành nghề', group: 'Cấu hình ngành nghề' },
+  { code: 'CONFIG_INDUSTRY_DELETE', name: 'Xóa ngành nghề', group: 'Cấu hình ngành nghề' },
   // ── Thùng rác (R_TRASH_RESTORE) ──
   { code: 'TRASH_VIEW', name: 'Xem thùng rác (của mình)', group: 'Thùng rác' },
   { code: 'TRASH_VIEW_ALL', name: 'Xem thùng rác TỔNG (mọi người dùng)', group: 'Thùng rác' },
@@ -123,6 +128,11 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     // G-CFG.6: managers quản lý cấu hình TID.
     'CONFIG_TID_VIEW',
     'CONFIG_TID_MANAGE',
+    // G-CFG.7: managers quản lý cấu hình ngành nghề (§11 Pha I1).
+    'CONFIG_INDUSTRY_VIEW',
+    'CONFIG_INDUSTRY_CREATE',
+    'CONFIG_INDUSTRY_UPDATE',
+    'CONFIG_INDUSTRY_DELETE',
     // Nhóm A: managers đặt lại mật khẩu, đặt pass cấp 2, xem & dọn thùng rác tổng.
     'USER_RESET_PASSWORD',
     'LEVEL2_MANAGE',

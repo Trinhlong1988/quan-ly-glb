@@ -178,6 +178,12 @@ const api = {
   tidConfigUpdate: (id: number, input: unknown) => ipcRenderer.invoke('tidConfig:update', { id, input }),
   tidConfigDelete: (ids: number[], password: string) => ipcRenderer.invoke('tidConfig:delete', { ids, password }),
 
+  // Cấu hình ngành nghề (G-CFG.7 §11 Pha I1)
+  industryList: (filter: unknown) => ipcRenderer.invoke('industry:list', filter),
+  industryCreate: (input: unknown) => ipcRenderer.invoke('industry:create', input),
+  industryUpdate: (id: number, input: unknown) => ipcRenderer.invoke('industry:update', { id, input }),
+  industryDelete: (ids: number[], password: string) => ipcRenderer.invoke('industry:delete', { ids, password }),
+
   // Thùng rác (E4)
   trashList: () => ipcRenderer.invoke('trash:list'),
   trashRestore: (entityType: string, id: number) => ipcRenderer.invoke('trash:restore', { entityType, id }),
