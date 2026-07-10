@@ -1,0 +1,234 @@
+// P1.2 — Approval Engine + bill BẤT BIẾN (main). LEAD chốt 10/7: ghi bill tính ngay; CHỈ HỦY cần duyệt.
+// Phân vai (②B): người tạo yêu cầu ≠ người duyệt; requester cấp Manager/Admin (có BILL_CANCEL_APPROVE)
+// cần approver cấp Admin (BILL_CANCEL_APPROVE_ELEVATED); fallback: 1-Admin duy nhất tự duyệt được.
+// Kiểm quyền bằng PERMISSION, KHÔNG bằng tên role. Mọi nhánh từ chối vẫn ghi audit (R_AUDIT_003).
+import { auditSnapshot } from '@glb/business-rules';
+import { hasPermission, type AuthUser } from '@glb/shared';
+import type { Db } from '@glb/database';
+import { requirePermission } from './guard.js';
+import { writeAudit } from './audit.js';
+
+const REQUEST = 'BILL_CANCEL_REQUEST';
+const APPROVE = 'BILL_CANCEL_APPROVE';
+const ELEVATED = 'BILL_CANCEL_APPROVE_ELEVATED';
+
+export interface MutationResult {
+  ok: boolean;
+  error?: string;
+  message?: string;
+  id?: number;
+}
+export interface BulkResult {
+  ok: boolean;
+  error?: string;
+  message?: string;
+  done: number; // số approve/reject thành công
+  skipped: { id: number; reason: string; message?: string }[];
+}
+
+/** Tập quyền hiệu lực của 1 user (theo id) — user → roles → role.permissions. */
+async function userPermSet(db: Db, userId: number): Promise<Set<string>> {
+  const u = await db.user.findUnique({
+    where: { id: userId },
+    include: { roles: { include: { role: { include: { permissions: { include: { permission: true } } } } } } }
+  });
+  const s = new Set<string>();
+  if (u) for (const ur of u.roles) for (const rp of ur.role.permissions) s.add(rp.permission.code);
+  return s;
+}
+
+/** Số user CÒN SỐNG có 1 quyền cụ thể (để xét fallback "Admin duy nhất"). */
+async function countUsersWithPerm(db: Db, code: string): Promise<number> {
+  const users = await db.user.findMany({
+    where: { deletedAt: null },
+    include: { roles: { include: { role: { include: { permissions: { include: { permission: true } } } } } } }
+  });
+  let n = 0;
+  for (const u of users) if (u.roles.some((ur) => ur.role.permissions.some((rp) => rp.permission.code === code))) n++;
+  return n;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// TẠO YÊU CẦU HỦY
+// ═════════════════════════════════════════════════════════════════════════════
+export async function requestCancelBill(transactionId: number, reason: string): Promise<MutationResult> {
+  const g = await requirePermission(REQUEST, { action: 'BILL_CANCEL_REQUESTED', targetType: 'Transaction', targetId: String(transactionId) });
+  if (!g.ok) return g;
+  const { db, user } = g;
+  const r = (reason ?? '').trim();
+  if (!r) return { ok: false, error: 'VALIDATION', message: 'Vui lòng nhập lý do hủy bill.' };
+  const tx = await db.transaction.findUnique({ where: { id: transactionId } });
+  if (!tx || tx.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Giao dịch không tồn tại.' };
+  if (tx.status !== 'POSTED')
+    return { ok: false, error: 'INVALID_STATE', message: 'Chỉ bill đang hiệu lực mới tạo được yêu cầu hủy (đang chờ duyệt hoặc đã hủy).' };
+  const req = await db.approvalRequest.create({
+    data: { entityType: 'Transaction', entityId: tx.id, action: 'CANCEL', reason: r, requestedBy: user.id }
+  });
+  await db.transaction.update({ where: { id: tx.id }, data: { status: 'CANCEL_PENDING', updatedBy: user.id } });
+  await writeAudit(db, {
+    actorUserId: user.id,
+    action: 'BILL_CANCEL_REQUESTED',
+    targetType: 'Transaction',
+    targetId: String(tx.id),
+    after: auditSnapshot({ requestId: req.id, code: tx.code, reason: r })
+  });
+  return { ok: true, id: req.id };
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// DUYỆT / TỪ CHỐI (single) — phân vai
+// ═════════════════════════════════════════════════════════════════════════════
+type OneResult = { ok: true; id: number } | { ok: false; error: string; message: string };
+
+/** Lõi duyệt 1 yêu cầu (đã có db + approver). Áp phân vai, ghi audit cả nhánh từ chối. */
+async function approveOne(db: Db, user: AuthUser, requestId: number, decisionNote?: string): Promise<OneResult> {
+  const req = await db.approvalRequest.findUnique({ where: { id: requestId } });
+  if (!req || req.action !== 'CANCEL' || req.entityType !== 'Transaction')
+    return { ok: false, error: 'NOT_FOUND', message: 'Yêu cầu hủy không tồn tại.' };
+  if (req.status !== 'PENDING') {
+    await writeAudit(db, { actorUserId: user.id, action: 'BILL_CANCEL_APPROVED', targetType: 'ApprovalRequest', targetId: String(req.id), after: { denied: true, reason: 'INVALID_STATE', status: req.status } });
+    return { ok: false, error: 'INVALID_STATE', message: 'Yêu cầu đã được xử lý (không còn chờ duyệt).' };
+  }
+  const requesterPerms = await userPermSet(db, req.requestedBy);
+  const requesterIsApprover = requesterPerms.has(APPROVE); // requester là Manager/Admin
+  const approverElevated = hasPermission(user, ELEVATED); // approver là Admin
+  const isSelf = user.id === req.requestedBy;
+  let selfNote: string | null = null;
+
+  if (isSelf) {
+    const elevatedCount = await countUsersWithPerm(db, ELEVATED);
+    if (approverElevated && elevatedCount === 1) {
+      selfNote = 'tự duyệt do Admin duy nhất';
+    } else {
+      await writeAudit(db, { actorUserId: user.id, action: 'BILL_CANCEL_APPROVED', targetType: 'ApprovalRequest', targetId: String(req.id), after: { denied: true, reason: 'SELF_APPROVAL_FORBIDDEN' } });
+      return { ok: false, error: 'SELF_APPROVAL_FORBIDDEN', message: 'Không được tự duyệt yêu cầu của chính mình (cần người khác duyệt).' };
+    }
+  } else if (requesterIsApprover && !approverElevated) {
+    // Yêu cầu do Manager/Admin tạo → cần cấp Admin (ELEVATED) duyệt.
+    await writeAudit(db, { actorUserId: user.id, action: 'BILL_CANCEL_APPROVED', targetType: 'ApprovalRequest', targetId: String(req.id), after: { denied: true, reason: 'NEED_ELEVATED', requestedBy: req.requestedBy } });
+    return { ok: false, error: 'NEED_ELEVATED', message: 'Yêu cầu do Quản lý/Admin tạo — cần cấp Admin duyệt.' };
+  }
+
+  const tx = await db.transaction.findUnique({ where: { id: req.entityId } });
+  if (!tx || tx.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Bill không tồn tại.' };
+  const note = [decisionNote?.trim() || null, selfNote].filter(Boolean).join(' · ') || null;
+  await db.transaction.update({
+    where: { id: tx.id },
+    data: { status: 'CANCELLED', cancelledAt: new Date(), cancelReason: req.reason, cancelRequestId: req.id, updatedBy: user.id }
+  });
+  await db.approvalRequest.update({ where: { id: req.id }, data: { status: 'APPROVED', decidedBy: user.id, decidedAt: new Date(), decisionNote: note } });
+  await writeAudit(db, { actorUserId: user.id, action: 'BILL_CANCEL_APPROVED', targetType: 'Transaction', targetId: String(tx.id), before: auditSnapshot({ status: tx.status, revenueAmount: tx.revenueAmount }), after: auditSnapshot({ status: 'CANCELLED', requestId: req.id, note }) });
+  return { ok: true, id: req.id };
+}
+
+async function rejectOne(db: Db, user: AuthUser, requestId: number, decisionNote: string): Promise<OneResult> {
+  const req = await db.approvalRequest.findUnique({ where: { id: requestId } });
+  if (!req || req.action !== 'CANCEL' || req.entityType !== 'Transaction') return { ok: false, error: 'NOT_FOUND', message: 'Yêu cầu hủy không tồn tại.' };
+  if (req.status !== 'PENDING') {
+    await writeAudit(db, { actorUserId: user.id, action: 'BILL_CANCEL_REJECTED', targetType: 'ApprovalRequest', targetId: String(req.id), after: { denied: true, reason: 'INVALID_STATE', status: req.status } });
+    return { ok: false, error: 'INVALID_STATE', message: 'Yêu cầu đã được xử lý.' };
+  }
+  const note = (decisionNote ?? '').trim();
+  if (!note) return { ok: false, error: 'VALIDATION', message: 'Vui lòng nhập lý do từ chối.' };
+  await db.approvalRequest.update({ where: { id: req.id }, data: { status: 'REJECTED', decidedBy: user.id, decidedAt: new Date(), decisionNote: note } });
+  await db.transaction.update({ where: { id: req.entityId }, data: { status: 'POSTED', updatedBy: user.id } });
+  await writeAudit(db, { actorUserId: user.id, action: 'BILL_CANCEL_REJECTED', targetType: 'Transaction', targetId: String(req.entityId), after: auditSnapshot({ requestId: req.id, note }) });
+  return { ok: true, id: req.id };
+}
+
+export async function approveCancelBill(requestId: number, decisionNote?: string): Promise<MutationResult> {
+  const g = await requirePermission(APPROVE, { action: 'BILL_CANCEL_APPROVED', targetType: 'ApprovalRequest', targetId: String(requestId) });
+  if (!g.ok) return g;
+  const r = await approveOne(g.db, g.user, requestId, decisionNote);
+  return r.ok ? { ok: true, id: r.id } : { ok: false, error: r.error, message: r.message };
+}
+
+export async function rejectCancelBill(requestId: number, decisionNote: string): Promise<MutationResult> {
+  const g = await requirePermission(APPROVE, { action: 'BILL_CANCEL_REJECTED', targetType: 'ApprovalRequest', targetId: String(requestId) });
+  if (!g.ok) return g;
+  const r = await rejectOne(g.db, g.user, requestId, decisionNote);
+  return r.ok ? { ok: true, id: r.id } : { ok: false, error: r.error, message: r.message };
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// DUYỆT / TỪ CHỐI HÀNG LOẠT (§4.4b) — mỗi cái áp phân vai riêng, cái không được phép thì SKIP
+// ═════════════════════════════════════════════════════════════════════════════
+export async function approveCancelBills(requestIds: number[], decisionNote?: string): Promise<BulkResult> {
+  const g = await requirePermission(APPROVE, { action: 'BILL_CANCEL_APPROVED', targetType: 'ApprovalRequest' });
+  if (!g.ok) return { ...g, done: 0, skipped: [] };
+  if (!requestIds || requestIds.length === 0) return { ok: false, error: 'VALIDATION', message: 'Chưa chọn yêu cầu.', done: 0, skipped: [] };
+  let done = 0;
+  const skipped: BulkResult['skipped'] = [];
+  for (const id of requestIds) {
+    const r = await approveOne(g.db, g.user, id, decisionNote);
+    if (r.ok) done++;
+    else skipped.push({ id, reason: r.error, message: r.message });
+  }
+  return { ok: true, done, skipped };
+}
+
+export async function rejectCancelBills(requestIds: number[], decisionNote: string): Promise<BulkResult> {
+  const g = await requirePermission(APPROVE, { action: 'BILL_CANCEL_REJECTED', targetType: 'ApprovalRequest' });
+  if (!g.ok) return { ...g, done: 0, skipped: [] };
+  if (!requestIds || requestIds.length === 0) return { ok: false, error: 'VALIDATION', message: 'Chưa chọn yêu cầu.', done: 0, skipped: [] };
+  let done = 0;
+  const skipped: BulkResult['skipped'] = [];
+  for (const id of requestIds) {
+    const r = await rejectOne(g.db, g.user, id, decisionNote);
+    if (r.ok) done++;
+    else skipped.push({ id, reason: r.error, message: r.message });
+  }
+  return { ok: true, done, skipped };
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// DANH SÁCH yêu cầu (cho UI Duyệt hủy) — lọc theo phân vai: chỉ trả yêu cầu approver ĐƯỢC PHÉP duyệt.
+// ═════════════════════════════════════════════════════════════════════════════
+export interface CancelRequestDto {
+  id: number;
+  transactionId: number;
+  billCode: string | null;
+  amount: number;
+  reason: string;
+  status: string;
+  requestedBy: number;
+  requestedByName: string | null;
+  requestedAt: string;
+  canApprove: boolean; // approver hiện tại có được duyệt cái này không (phân vai)
+}
+
+export async function listCancelRequests(status = 'PENDING'): Promise<{ ok: boolean; error?: string; message?: string; data?: CancelRequestDto[] }> {
+  const g = await requirePermission(APPROVE, { action: APPROVE });
+  if (!g.ok) return g;
+  const { db, user } = g;
+  const approverElevated = hasPermission(user, ELEVATED);
+  const rows = await db.approvalRequest.findMany({ where: { entityType: 'Transaction', action: 'CANCEL', status }, orderBy: { requestedAt: 'desc' } });
+  const txIds = [...new Set(rows.map((r) => r.entityId))];
+  const txs = new Map((await db.transaction.findMany({ where: { id: { in: txIds } }, select: { id: true, code: true, amount: true } })).map((t) => [t.id, t]));
+  const reqUserIds = [...new Set(rows.map((r) => r.requestedBy))];
+  const names = new Map((await db.user.findMany({ where: { id: { in: reqUserIds } }, select: { id: true, fullName: true, username: true } })).map((u) => [u.id, u.fullName || u.username]));
+  const data: CancelRequestDto[] = [];
+  for (const r of rows) {
+    const requesterPerms = await userPermSet(db, r.requestedBy);
+    const requesterIsApprover = requesterPerms.has(APPROVE);
+    const isSelf = user.id === r.requestedBy;
+    // canApprove theo phân vai (bỏ qua fallback 1-Admin cho gọn hiển thị; backend vẫn xử lý khi bấm).
+    let canApprove = true;
+    if (isSelf) canApprove = false;
+    else if (requesterIsApprover && !approverElevated) canApprove = false;
+    const t = txs.get(r.entityId);
+    data.push({
+      id: r.id,
+      transactionId: r.entityId,
+      billCode: t?.code ?? null,
+      amount: t?.amount ?? 0,
+      reason: r.reason,
+      status: r.status,
+      requestedBy: r.requestedBy,
+      requestedByName: names.get(r.requestedBy) ?? null,
+      requestedAt: r.requestedAt.toISOString(),
+      canApprove
+    });
+  }
+  return { ok: true, data };
+}

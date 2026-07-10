@@ -405,6 +405,71 @@ export async function deleteUser(id: number, password: string): Promise<Mutation
   return { ok: true, id };
 }
 
+export interface BulkDeleteUsersResult {
+  ok: boolean;
+  error?: string;
+  message?: string;
+  deleted?: number;
+  skipped?: { id: number; reason: string; message?: string }[];
+}
+
+/**
+ * XÓA HÀNG LOẠT nhân sự (LEAD 10/7, spec §5). Xác thực mật khẩu MỘT LẦN cho cả loạt (§14) rồi
+ * lặp guard giống `deleteUser` cho TỪNG user: KHÔNG tự xóa mình, KHÔNG xóa Admin cuối còn hoạt động,
+ * Manager không xóa được Admin. User vướng guard bị SKIP kèm lý do (không làm hỏng cả loạt) và ghi
+ * audit nhánh từ chối (B14). Mỗi user xóa thành công ghi 1 audit USER_DELETED. Xóa mềm (R_USER_STATUS_006).
+ * Đếm Admin làm mới mỗi vòng lặp → chọn nhiều Admin trong 1 loạt vẫn không thể xóa Admin cuối cùng.
+ */
+export async function deleteUsers(ids: number[], password: string): Promise<BulkDeleteUsersResult> {
+  const g = await requirePermission('USER_DELETE', { action: 'USER_DELETED', targetType: 'User' });
+  if (!g.ok) return g;
+  const { db, user } = g;
+  if (!ids || ids.length === 0) return { ok: false, error: 'VALIDATION', message: 'Chưa chọn nhân sự để xóa.' };
+
+  if (!(await verifyActorPassword(user, password))) {
+    await auditDenied(db, user, 'USER_DELETED', 'WRONG_PASSWORD');
+    return { ok: false, error: 'WRONG_PASSWORD', message: 'Mật khẩu xác nhận không đúng.' };
+  }
+
+  let deleted = 0;
+  const skipped: { id: number; reason: string; message?: string }[] = [];
+  for (const id of [...new Set(ids)]) {
+    // KHÔNG tự xóa tài khoản của chính mình.
+    if (id === user.id) {
+      await auditDenied(db, user, 'USER_DELETED', 'SELF_DELETE', String(id));
+      skipped.push({ id, reason: 'SELF_DELETE', message: 'Không thể tự xóa tài khoản của chính mình.' });
+      continue;
+    }
+    const row = await db.user.findUnique({ where: { id } });
+    if (!row || row.deletedAt) {
+      skipped.push({ id, reason: 'NOT_FOUND', message: 'Nhân sự không tồn tại hoặc đã bị xóa.' });
+      continue;
+    }
+    const isAdmin = await targetIsAdmin(db, id);
+    const remaining = await countActiveAdmins(db, id);
+    if (!canRemoveOrLockAdmin(isAdmin, remaining + (isAdmin && row.status === 'ACTIVE' ? 1 : 0))) {
+      skipped.push({ id, reason: 'LAST_ADMIN', message: `Không thể xóa Admin cuối cùng (${row.username}).` });
+      continue;
+    }
+    // R_MANAGER_005: manager không được xóa Admin.
+    if (isAdmin && !user.roles.includes(ADMIN_ROLE_CODE)) {
+      await auditDenied(db, user, 'USER_DELETED', 'MANAGER_SCOPE', String(id));
+      skipped.push({ id, reason: 'MANAGER_SCOPE', message: `Bạn không được xóa tài khoản Admin (${row.username}).` });
+      continue;
+    }
+    await db.user.update({ where: { id }, data: { status: 'DELETED', deletedAt: new Date() } });
+    await writeAudit(db, {
+      actorUserId: user.id,
+      action: 'USER_DELETED',
+      targetType: 'User',
+      targetId: String(id),
+      before: auditSnapshot({ username: row.username, fullName: row.fullName })
+    });
+    deleted++;
+  }
+  return { ok: true, deleted, skipped };
+}
+
 // --- helpers -------------------------------------------------------------
 
 async function auditDenied(db: Db, user: AuthUser, action: 'USER_CREATED' | 'USER_UPDATED' | 'USER_DELETED', reason: string, targetId?: string): Promise<void> {

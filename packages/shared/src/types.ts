@@ -144,6 +144,10 @@ export type AuditAction =
   | 'TRANSACTION_UPDATED'
   | 'TRANSACTION_DELETED'
   | 'DEBT_SETTLED'
+  // ── P1.2 — Duyệt hủy bill ──
+  | 'BILL_CANCEL_REQUESTED'
+  | 'BILL_CANCEL_APPROVED'
+  | 'BILL_CANCEL_REJECTED'
   // ── Nhóm E — Bảo trì & Bộ nhớ ──
   | 'AUTO_BACKUP'
   | 'STORAGE_ALERT'

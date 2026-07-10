@@ -38,6 +38,7 @@ const api = {
   userLock: (id: number) => ipcRenderer.invoke('user:lock', id),
   userUnlock: (id: number) => ipcRenderer.invoke('user:unlock', id),
   userDelete: (id: number, password: string) => ipcRenderer.invoke('user:delete', { id, password }),
+  userDeleteMany: (ids: number[], password: string) => ipcRenderer.invoke('user:deleteMany', { ids, password }),
 
   // Audit
   auditList: (query: unknown) => ipcRenderer.invoke('audit:list', query),
@@ -196,6 +197,14 @@ const api = {
   transactionDelete: (ids: number[], password: string) => ipcRenderer.invoke('transaction:delete', { ids, password }),
   transactionSettle: (ids: number[], settled: boolean) => ipcRenderer.invoke('transaction:settle', { ids, settled }),
   debtSummary: (filter: unknown) => ipcRenderer.invoke('debt:summary', filter),
+
+  // Duyệt hủy bill (P1.2 Approval Engine)
+  cancelRequest: (transactionId: number, reason: string) => ipcRenderer.invoke('approval:requestCancel', { transactionId, reason }),
+  cancelRequestList: (status?: string) => ipcRenderer.invoke('approval:list', status),
+  cancelApprove: (requestId: number, note?: string) => ipcRenderer.invoke('approval:approve', { requestId, note }),
+  cancelReject: (requestId: number, note: string) => ipcRenderer.invoke('approval:reject', { requestId, note }),
+  cancelApproveBulk: (requestIds: number[], note?: string) => ipcRenderer.invoke('approval:approveBulk', { requestIds, note }),
+  cancelRejectBulk: (requestIds: number[], note: string) => ipcRenderer.invoke('approval:rejectBulk', { requestIds, note }),
 
   // Bảo trì & Bộ nhớ (Nhóm E — Storage-Guard)
   storageStatus: () => ipcRenderer.invoke('storage:status'),

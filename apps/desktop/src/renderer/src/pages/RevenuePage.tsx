@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2, Loader2, TrendingUp, Download, Receipt, Landmark, Handshake, Users } from 'lucide-react';
+import { Plus, Ban, Trash2, Loader2, TrendingUp, Download, Receipt, Handshake, Users } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate } from '@glb/shared';
 import type {
@@ -31,6 +31,17 @@ function IconBtn({ children, title, variant, onClick }: { children: JSX.Element;
   return <button title={title} onClick={onClick} className={'rounded-md p-1.5 transition ' + tone}>{children}</button>;
 }
 
+/** Badge trạng thái bill (P1.2): Đã ghi / Chờ duyệt hủy / Đã hủy — theo R_UI màu. */
+function BillStatusBadge({ status }: { status: string }): JSX.Element {
+  const map: Record<string, { label: string; cls: string }> = {
+    POSTED: { label: 'Đã ghi', cls: 'bg-success/10 text-success' },
+    CANCEL_PENDING: { label: 'Chờ duyệt hủy', cls: 'bg-warning/10 text-warning' },
+    CANCELLED: { label: 'Đã hủy', cls: 'bg-slate-200 text-slate-500' }
+  };
+  const s = map[status] ?? { label: status, cls: 'bg-slate-100 text-slate-500' };
+  return <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${s.cls}`}>{s.label}</span>;
+}
+
 function KpiCard({ icon, label, value, tone }: { icon: JSX.Element; label: string; value: string; tone: string }): JSX.Element {
   return (
     <div className="rounded-xl border border-line bg-white p-4 shadow-sm">
@@ -48,6 +59,7 @@ const emptySummary: RevenueSummary = { count: 0, totalAmount: 0, totalRevenuePar
 export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
   const toast = useToast();
   const canManage = hasPermission(user, 'REVENUE_MANAGE');
+  const canRequestCancel = hasPermission(user, 'BILL_CANCEL_REQUEST');
   const [rows, setRows] = useState<TransactionDto[]>([]);
   const [summary, setSummary] = useState<RevenueSummary>(emptySummary);
   const [total, setTotal] = useState(0);
@@ -75,6 +87,7 @@ export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
   const [form, setForm] = useState<{ mode: 'create' | 'edit'; row?: TransactionDto } | null>(null);
   const [del, setDel] = useState<TransactionDto | null>(null);
   const [bulkDel, setBulkDel] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState<TransactionDto | null>(null);
   const sel = useRowSelection();
 
   function buildFilter(pg: number): Record<string, unknown> {
@@ -141,7 +154,18 @@ export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
     setBulkDel(false); await reload();
   }
 
+  async function doRequestCancel(t: TransactionDto, reason: string): Promise<void> {
+    const res = await window.api.cancelRequest(t.id, reason);
+    if (res.ok) toast.success(`Đã gửi yêu cầu hủy bill ${t.code ?? t.id} — chờ Quản lý/Admin duyệt.`);
+    else toast.alert(res.message ?? 'Không gửi được yêu cầu hủy.', 'Yêu cầu hủy thất bại');
+    setCancelTarget(null);
+    await reload();
+  }
+
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const showActions = canManage || canRequestCancel;
+  // 12 cột dữ liệu + ô chọn (canManage) + ô thao tác (showActions).
+  const colCount = 12 + (canManage ? 1 : 0) + (showActions ? 1 : 0);
 
   return (
     <div>
@@ -216,15 +240,18 @@ export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
               <th className="px-3 py-3 text-right">Chênh đối tác</th>
               <th className="px-3 py-3 text-right">Chênh bán</th>
               <th className="px-3 py-3 text-right">Doanh thu</th>
+              <th className="px-3 py-3 text-center">Trạng thái</th>
               <th className="px-3 py-3 text-center">Đối soát</th>
-              {canManage && <th className="px-3 py-3 text-right">Thao tác</th>}
+              {(canManage || canRequestCancel) && <th className="px-3 py-3 text-right">Thao tác</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {loading && <tr><td colSpan={canManage ? 13 : 11} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
-            {!loading && rows.length === 0 && <tr><td colSpan={canManage ? 13 : 11} className="px-4 py-10 text-center text-slate-400"><Receipt className="mx-auto mb-2 h-6 w-6" /> Chưa có giao dịch nào khớp bộ lọc.</td></tr>}
-            {!loading && rows.map((r) => (
-              <tr key={r.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(r.id) ? 'bg-brand-tint/40' : '')}>
+            {loading && <tr><td colSpan={colCount} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+            {!loading && rows.length === 0 && <tr><td colSpan={colCount} className="px-4 py-10 text-center text-slate-400"><Receipt className="mx-auto mb-2 h-6 w-6" /> Chưa có giao dịch nào khớp bộ lọc.</td></tr>}
+            {!loading && rows.map((r) => {
+              const cancelled = r.status === 'CANCELLED';
+              return (
+              <tr key={r.id} className={'hover:bg-appbg/60 ' + (cancelled ? 'opacity-50 ' : '') + (sel.isSelected(r.id) ? 'bg-brand-tint/40' : '')}>
                 {canManage && <SelectCell id={r.id} sel={sel} />}
                 <td className="px-3 py-3 font-mono text-xs font-medium text-slate-700">{r.code ?? '—'}</td>
                 <td className="px-3 py-3 text-xs text-slate-500">{fmtDate(r.txnDate)}</td>
@@ -236,15 +263,19 @@ export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
                 <td className="px-3 py-3 text-right tabular-nums text-indigo-600">{money(r.revenuePartner)}</td>
                 <td className="px-3 py-3 text-right tabular-nums text-emerald-600">{money(r.revenueSell)}</td>
                 <td className="px-3 py-3 text-right font-semibold tabular-nums text-slate-800">{money(r.revenueAmount)}</td>
+                <td className="px-3 py-3 text-center"><BillStatusBadge status={r.status} /></td>
                 <td className="px-3 py-3 text-center">{r.settled ? <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-xs font-medium text-emerald-600">Đã thu</span> : <span className="rounded bg-amber-50 px-1.5 py-0.5 text-xs font-medium text-amber-600">Chưa</span>}</td>
-                {canManage && (
+                {showActions && (
                   <td className="px-3 py-3"><div className="flex justify-end gap-1">
-                    <IconBtn title="Sửa" variant="edit" onClick={() => setForm({ mode: 'edit', row: r })}><Pencil className="h-4 w-4" /></IconBtn>
-                    <IconBtn title="Xóa" variant="danger" onClick={() => setDel(r)}><Trash2 className="h-4 w-4" /></IconBtn>
+                    {canRequestCancel && r.status === 'POSTED' && (
+                      <IconBtn title="Yêu cầu hủy bill" variant="edit" onClick={() => setCancelTarget(r)}><Ban className="h-4 w-4" /></IconBtn>
+                    )}
+                    {canManage && <IconBtn title="Xóa" variant="danger" onClick={() => setDel(r)}><Trash2 className="h-4 w-4" /></IconBtn>}
                   </div></td>
                 )}
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -263,7 +294,32 @@ export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
       {form && <TransactionForm mode={form.mode} row={form.row} tids={tids} customers={customers} onClose={() => setForm(null)} onSaved={() => { setForm(null); void reload(); }} />}
       {del && <ConfirmDialog title="Xóa giao dịch" message={`Giao dịch "${del.code ?? del.id}" (${money(del.amount)}) sẽ vào Thùng rác (có thể phục hồi). Nhập lại mật khẩu để xác nhận.`} confirmLabel="Xóa" danger requirePassword onCancel={() => setDel(null)} onConfirm={(pwd) => doDelete(del, pwd)} />}
       {bulkDel && <ConfirmDialog title="Xóa nhiều giao dịch" message={`${sel.count} giao dịch đã chọn sẽ vào Thùng rác (có thể phục hồi). Nhập lại mật khẩu để xác nhận.`} confirmLabel={`Xóa ${sel.count} mục`} danger requirePassword onCancel={() => setBulkDel(false)} onConfirm={(pwd) => doBulkDelete(pwd)} />}
+      {cancelTarget && <CancelReasonModal bill={cancelTarget} onClose={() => setCancelTarget(null)} onSubmit={(reason) => doRequestCancel(cancelTarget, reason)} />}
     </div>
+  );
+}
+
+/** Ô nhập lý do hủy bill (bắt buộc) — gửi yêu cầu hủy cho Quản lý/Admin duyệt (P1.2 §5). */
+function CancelReasonModal({ bill, onClose, onSubmit }: { bill: TransactionDto; onClose: () => void; onSubmit: (reason: string) => Promise<void> }): JSX.Element {
+  const toast = useToast();
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  async function submit(): Promise<void> {
+    if (!reason.trim()) return toast.alert('Vui lòng nhập lý do hủy bill.', 'Thiếu lý do');
+    setBusy(true);
+    try { await onSubmit(reason.trim()); } finally { setBusy(false); }
+  }
+  return (
+    <Modal title={`Yêu cầu hủy bill ${bill.code ?? bill.id}`} onClose={onClose} width="max-w-md">
+      <p className="mb-3 text-sm text-slate-600">Bill đã ghi là <b>bất biến</b> — không sửa được. Gửi yêu cầu hủy (kèm lý do) để Quản lý/Admin duyệt; duyệt xong bill mới chuyển sang <b>Đã hủy</b> và không còn tính vào doanh thu.</p>
+      <Field label="Lý do hủy" required>
+        <textarea className={inputCls + ' min-h-[80px] resize-y'} value={reason} autoFocus onChange={(e) => setReason(e.target.value)} placeholder="Ví dụ: nhập nhầm số tiền / sai loại thẻ…" />
+      </Field>
+      <div className="mt-6 flex justify-end gap-2">
+        <Button variant="neutral" onClick={onClose}>Hủy</Button>
+        <Button variant="confirm" onClick={submit} disabled={busy} icon={busy ? <Loader2 className="h-4 w-4 animate-spin" /> : undefined}>Gửi yêu cầu hủy</Button>
+      </div>
+    </Modal>
   );
 }
 

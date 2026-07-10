@@ -3,7 +3,7 @@
 > Rule: mỗi bug do LEAD/AUDIT phát hiện = **thất bại của quy trình test** → BẮT BUỘC thêm test/rule chặn tái diễn trước khi đóng.
 > Format: `### B<NN> — <mô tả> [FIXED|PENDING]` · Phát hiện bởi · Nguyên nhân · Fix · **Regression** (test/rule chặn tái diễn).
 
-Counter: B = 16. Last audit: 2026-07-10 (Nhóm B doanh thu + Nhóm E bảo trì + 3 agent phản biện song song; P1.1 giá theo kỳ + F1 lệch ngày UTC+7).
+Counter: B = 17. Last audit: 2026-07-10 (Nhóm B doanh thu + Nhóm E bảo trì + 3 agent phản biện song song; P1.1 giá theo kỳ + F1 lệch ngày UTC+7; P1.2 approval + B17 emit-trap/clobber).
 
 ### B16 — Ngày hiệu lực biểu phí LỆCH −1 NGÀY trên máy UTC+7 (production) [FIXED]
 - **Phát hiện bởi:** CMD_AUDIT (audit P1.1 giá theo kỳ) — máy production chạy UTC+7. User nhập "Hiệu lực từ = 01/07/2026" nhưng bảng biểu phí hiển thị/lưu **30/06/2026**.
@@ -132,3 +132,13 @@ Counter: B = 16. Last audit: 2026-07-10 (Nhóm B doanh thu + Nhóm E bảo trì 
 - **Phát hiện bởi:** CMD_AUDIT (`DebtPage.tsx:76,182-190` + clamp `listTransactions:387`).
 - **Nguyên nhân:** bảng nạp `pageSize:500` (bị clamp), footer/KPI dùng aggregate toàn bộ → >500 GD chưa đối soát thì tổng không khớp dòng hiển thị và không có cách xem/đối soát phần vượt.
 - **Hướng fix:** thêm phân trang trang Công nợ + thống kê đã/chưa thu 2 chiều (Phase 1, mục công nợ).
+
+### B17 — Cạm bẫy tsconfig emit → `tsc -p` trần phun `.d.ts` đè `src/`, clobber `preload/index.d.ts` (1115→174 dòng, mất DTO) [FIXED]
+- **Phát hiện bởi:** CMD_AUDIT (verify độc lập P1.2: web typecheck vỡ dù CMD_BUILD báo PASS). CMD_BUILD điều tra ra root cause thật.
+- **Nguyên nhân:** `apps/desktop/tsconfig.node.json`+`tsconfig.web.json` đặt `declaration:true`+`composite:true`, **KHÔNG `noEmit`/`outDir`**, và `include` phủ cả `src/preload/index.d.ts` (file hand-maintained). Chạy `tsc -p` **trần (thiếu `--noEmit`)** → TS EMIT ~200 `.js/.d.ts` **đè co-located vào `src/`**, clobber file DTO hand-maintained. CẢ CMD_BUILD LẪN AUDIT đều kích hoạt khi verify bằng `tsc -p` trần. Thất bại kép: (a) bẫy build-infra, (b) lệnh verify của chính auditor không an toàn, (c) gate `npm run typecheck` cũ (`tsc -b || tsc -p tsconfig.json` — file root không tồn tại) không bắt lỗi web nên false-PASS sống được.
+- **Fix:** (1) thêm `"outDir": "../../out/tsc-typecheck"` vào 2 tsconfig → emit lỡ tay rơi ra ngoài `src/`. (2) `.gitignore` thêm `apps/desktop/src/**/*.js|*.js.map|*.d.ts.map`. (3) sửa `npm run typecheck` → gate thật node+web (`--noEmit`). (4) `preload/index.d.ts` re-apply đúng cách (Edit chèn, không Write đè) → 1147 dòng, đủ DTO + Window augmentation.
+- **Regression (chặn tái diễn — HARDLOCK VẬT LÝ):**
+  - **Guard** `tools/audit/protected_artifacts_guard.mjs` + registry `protected_artifacts.json` (3 lớp: sàn dòng / %thu-nhỏ-vs-HEAD / anchor DTO). `npm run audit:protected`. Tự-kiểm-thử: PASS thật / FAIL clobber.
+  - **Pre-commit hook** `.githooks/pre-commit` + `core.hooksPath=.githooks` → commit file clobber BỊ CHẶN (đã test).
+  - **Đã tái hiện độc lập neutralize:** `tsc -p` trần → 0 rác trong `src/` (emit rơi `out/`), index.d.ts nguyên 1147.
+- **Đề xuất quy trình (bug class "emit-trap" + "false-PASS"):** MỌI verify typecheck dùng `--noEmit`/`npm run typecheck`, **CẤM `tsc -p` trần**. AUDIT không tin số agent — rerun 100% gate từ trạng thái sạch. File hand-maintained vào registry được bảo vệ, chỉ Edit không Write. Chi tiết `docs/CMD_BUILD_DISPATCH_PROTOCOL.md`. Áp global mọi project TS đa-agent.

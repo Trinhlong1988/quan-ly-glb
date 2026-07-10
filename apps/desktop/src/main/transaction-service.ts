@@ -73,6 +73,7 @@ export interface TransactionDto {
   revenueAmount: number; // VND (tổng)
   settled: boolean;
   settledAt: string | null;
+  status: string; // P1.2: POSTED | CANCEL_PENDING | CANCELLED
   txnDate: string;
   note: string | null;
   createdBy: number | null;
@@ -226,68 +227,12 @@ export interface UpdateTransactionInput {
   note?: string;
 }
 
-export async function updateTransaction(id: number, input: UpdateTransactionInput): Promise<MutationResult> {
+export async function updateTransaction(id: number, _input: UpdateTransactionInput): Promise<MutationResult> {
+  // P1.2 — BILL BẤT BIẾN (LEAD 10/7): bill KHÔNG sửa được. Sai thì tạo yêu cầu hủy (requestCancelBill,
+  // approval-service) → duyệt Manager/Admin → tạo bill mới. Giữ permission-guard: thao tác trái phép vẫn FORBIDDEN+audit.
   const g = await requirePermission(MANAGE, { action: 'TRANSACTION_UPDATED', targetType: 'Transaction', targetId: String(id) });
   if (!g.ok) return g;
-  const { db, user } = g;
-  const row = await db.transaction.findUnique({ where: { id } });
-  if (!row || row.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Giao dịch không tồn tại.' };
-
-  const amount = input.amount !== undefined ? parseAmount(input.amount) : row.amount;
-  if (amount === null) return { ok: false, error: 'VALIDATION', message: 'Số tiền không hợp lệ (số nguyên ≥ 0).' };
-  let txnDate = row.txnDate;
-  if (input.txnDate !== undefined) {
-    const d = parseDate(input.txnDate);
-    if (!d) return { ok: false, error: 'VALIDATION', message: 'Ngày giao dịch không hợp lệ.' };
-    txnDate = d;
-  }
-  const cardTypeId = input.cardTypeId ?? row.cardTypeId;
-  if (!cardTypeId) return { ok: false, error: 'VALIDATION', message: 'Thiếu loại thẻ.' };
-
-  // SNAPSHOT phí (LEAD): GIỮ NGUYÊN margin đã lưu — sửa ghi chú/ngày/khách/số tiền KHÔNG tái định giá
-  // theo biểu phí hiện tại. CHỈ tra lại phí khi người dùng ĐỔI LOẠI THẺ (phí phụ thuộc loại thẻ).
-  // P1.1: khi đổi loại thẻ, tra lại theo KỲ giá tại `txnDate` của CHÍNH GD (không ăn giá hôm nay — I-P2).
-  const cardChanged = input.cardTypeId !== undefined && input.cardTypeId !== row.cardTypeId;
-  let partnerMarginMilli = row.partnerMarginMilli;
-  let sellMarginMilli = row.sellMarginMilli;
-  if (cardChanged) {
-    const tid = await db.tid.findUnique({ where: { id: row.tidId } });
-    if (!tid || tid.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'TID không tồn tại.' };
-    const fee = await resolveFeeForTxn(db, tid, cardTypeId, txnDate);
-    if (!fee.ok) return fee;
-    partnerMarginMilli = fee.fee.partnerMarginMilli;
-    sellMarginMilli = fee.fee.sellMarginMilli;
-  }
-
-  const rev = computeRevenue(amount, partnerMarginMilli, sellMarginMilli);
-  const customerId = input.customerId === undefined ? row.customerId : input.customerId;
-  const before = auditSnapshot({ amount: row.amount, cardTypeId: row.cardTypeId, revenueAmount: row.revenueAmount });
-
-  await db.transaction.update({
-    where: { id },
-    data: {
-      cardTypeId,
-      amount,
-      partnerMarginMilli,
-      sellMarginMilli,
-      revenuePartner: rev.revenuePartner,
-      revenueSell: rev.revenueSell,
-      revenueAmount: rev.revenueAmount,
-      txnDate,
-      customerId: customerId ?? null,
-      note: input.note !== undefined ? input.note.trim() || null : row.note,
-      updatedBy: user.id
-    }
-  });
-  await writeAudit(db, {
-    actorUserId: user.id,
-    action: 'TRANSACTION_UPDATED',
-    targetType: 'Transaction',
-    targetId: String(id),
-    before,
-    after: auditSnapshot({ amount, cardTypeId, revenueAmount: rev.revenueAmount })
-  });
-  return { ok: true, id };
+  return { ok: false, error: 'BILL_IMMUTABLE', message: 'Bill bất biến — không sửa được. Hãy tạo yêu cầu hủy rồi tạo bill mới.' };
 }
 
 export async function deleteTransactions(ids: number[], password: string): Promise<MutationResult & { deleted?: number }> {
@@ -401,13 +346,16 @@ export async function listTransactions(filter: TransactionFilter = {}): Promise<
   const page = Math.max(1, filter.page ?? 1);
   const pageSize = Math.min(500, Math.max(1, filter.pageSize ?? 50));
 
-  // Summary trên TOÀN BỘ dòng khớp (aggregate ở DB — không tải hết về).
+  // Summary trên TOÀN BỘ dòng khớp (aggregate ở DB). P1.2: LOẠI bill đã HỦY (status CANCELLED) khỏi
+  // tổng doanh thu — bill cancelled vẫn HIỂN THỊ trong danh sách nhưng đóng góp 0 vào tổng.
+  const revenueWhere = { ...where, status: { not: 'CANCELLED' } };
   const agg = await db.transaction.aggregate({
-    where,
-    _sum: { amount: true, revenuePartner: true, revenueSell: true, revenueAmount: true }
+    where: revenueWhere,
+    _sum: { amount: true, revenuePartner: true, revenueSell: true, revenueAmount: true },
+    _count: true
   });
   const summary: RevenueSummary = {
-    count: total,
+    count: agg._count,
     totalAmount: agg._sum.amount ?? 0,
     totalRevenuePartner: agg._sum.revenuePartner ?? 0,
     totalRevenueSell: agg._sum.revenueSell ?? 0,
@@ -461,6 +409,7 @@ export async function listTransactions(filter: TransactionFilter = {}): Promise<
       revenueAmount: r.revenueAmount,
       settled: r.settled,
       settledAt: r.settledAt ? r.settledAt.toISOString() : null,
+      status: r.status,
       txnDate: r.txnDate.toISOString(),
       note: r.note,
       createdBy: r.createdBy,
@@ -482,6 +431,7 @@ export async function debtSummary(filter: TransactionFilter = {}): Promise<{ ok:
   const db = g.db;
   const where = await buildWhere(db, { ...filter, settled: false });
   if (where === null) return { ok: true, data: { count: 0, debtPartner: 0, debtSell: 0, debtTotal: 0 } };
+  where.status = { not: 'CANCELLED' }; // P1.2: bill đã hủy không còn là công nợ
   const agg = await db.transaction.aggregate({ where, _sum: { revenuePartner: true, revenueSell: true, revenueAmount: true }, _count: true });
   return {
     ok: true,

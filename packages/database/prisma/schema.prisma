@@ -276,6 +276,11 @@ model Transaction {
   settledAt          DateTime? @map("settled_at")
   txnDate            DateTime  @map("txn_date")
   note               String?
+  // P1.2 — chứng từ bất biến: bill không sửa; sai thì HỦY qua duyệt. status POSTED|CANCEL_PENDING|CANCELLED.
+  status             String    @default("POSTED")
+  cancelReason       String?   @map("cancel_reason")
+  cancelledAt        DateTime? @map("cancelled_at")
+  cancelRequestId    Int?      @map("cancel_request_id")
   createdBy          Int?      @map("created_by")
   updatedBy          Int?      @map("updated_by")
   createdAt          DateTime  @default(now()) @map("created_at")
@@ -286,7 +291,30 @@ model Transaction {
   @@index([tidId])
   @@index([customerId])
   @@index([txnDate])
+  @@index([status])
   @@map("transactions")
+}
+
+// P1.2 — Approval Engine (generic). 1 dòng = 1 yêu cầu duyệt trên 1 thực thể (P1.2 = Transaction, action CANCEL).
+// Sau tái dùng cho phiếu thu/chi/nhập/xuất. status PENDING|APPROVED|REJECTED. KHÔNG @@unique.
+model ApprovalRequest {
+  id           Int       @id @default(autoincrement())
+  entityType   String    @map("entity_type") // 'Transaction'
+  entityId     Int       @map("entity_id")
+  action       String // 'CANCEL'
+  reason       String
+  status       String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  requestedBy  Int       @map("requested_by")
+  requestedAt  DateTime  @default(now()) @map("requested_at")
+  decidedBy    Int?      @map("decided_by")
+  decidedAt    DateTime? @map("decided_at")
+  decisionNote String?   @map("decision_note")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@index([entityType, entityId])
+  @@index([status])
+  @@map("approval_requests")
 }
 
 // Trạng thái TID cấu hình (§9a) — ví dụ: mới cấp, thu hồi, đổi cho đối tác. Khác status vận hành.

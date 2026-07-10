@@ -332,6 +332,28 @@ export interface BulkDeleteOutcome extends MutationOutcome {
   deleted?: number;
 }
 
+/** Kết quả thao tác hàng loạt có bỏ qua từng phần (xóa user / duyệt–từ chối hủy bill). */
+export interface BulkSkipOutcome extends MutationOutcome {
+  /** Số bản ghi xử lý thành công (xóa / duyệt / từ chối). */
+  deleted?: number;
+  done?: number;
+  skipped?: { id: number; reason: string; message?: string }[];
+}
+
+/** 1 yêu cầu hủy bill đang chờ duyệt (P1.2). */
+export interface CancelRequestDto {
+  id: number;
+  transactionId: number;
+  billCode: string | null;
+  amount: number;
+  reason: string;
+  status: string;
+  requestedBy: number;
+  requestedByName: string | null;
+  requestedAt: string;
+  canApprove: boolean;
+}
+
 // ── G-CFG.2 DTOs (Cấu hình cung ứng POS §C6–C8) ──
 export interface SupplierDto extends AuditTrail {
   id: number;
@@ -745,6 +767,7 @@ export interface GlbApi {
   userLock(id: number): Promise<MutationOutcome>;
   userUnlock(id: number): Promise<MutationOutcome>;
   userDelete(id: number, password: string): Promise<MutationOutcome>;
+  userDeleteMany(ids: number[], password: string): Promise<BulkSkipOutcome>;
 
   auditList(query: AuditQuery): Promise<ListResult<AuditRowDto>>;
 
@@ -897,6 +920,14 @@ export interface GlbApi {
   transactionSettle(ids: number[], settled: boolean): Promise<{ ok: boolean; changed?: number; error?: string; message?: string }>;
   debtSummary(filter: TransactionFilter): Promise<{ ok: boolean; data?: DebtSummary; error?: string; message?: string }>;
 
+  // ── P1.2 Approval Engine (hủy bill có duyệt) ──
+  cancelRequest(transactionId: number, reason: string): Promise<MutationOutcome>;
+  cancelRequestList(status?: string): Promise<ListResult<CancelRequestDto>>;
+  cancelApprove(requestId: number, note?: string): Promise<MutationOutcome>;
+  cancelReject(requestId: number, note: string): Promise<MutationOutcome>;
+  cancelApproveBulk(requestIds: number[], note?: string): Promise<BulkSkipOutcome>;
+  cancelRejectBulk(requestIds: number[], note: string): Promise<BulkSkipOutcome>;
+
   // Bảo trì & Bộ nhớ (Nhóm E — Storage-Guard)
   storageStatus(): Promise<{ ok: boolean; data?: StorageStatus; error?: string; message?: string }>;
   storageCleanup(opts: { clearHistory?: boolean; purgeTrash?: boolean; password: string }): Promise<{ ok: boolean; error?: string; message?: string; backupFile?: string; auditDeleted?: number; trashDeleted?: number }>;
@@ -1007,6 +1038,7 @@ export interface TransactionDto {
   revenueAmount: number;
   settled: boolean;
   settledAt: string | null;
+  status: string; // P1.2: POSTED | CANCEL_PENDING | CANCELLED
   txnDate: string;
   note: string | null;
   createdBy: number | null;

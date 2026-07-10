@@ -23,6 +23,7 @@ import {
   BarChart3,
   Coins,
   Wrench,
+  ClipboardCheck,
   Loader2
 } from 'lucide-react';
 import type { DashboardStats } from '../../../preload/index.d';
@@ -47,6 +48,7 @@ import { DossierPage } from './DossierPage.js';
 import { TidConfigPage } from './TidConfigPage.js';
 import { RevenuePage } from './RevenuePage.js';
 import { DebtPage } from './DebtPage.js';
+import { ApprovalPage } from './ApprovalPage.js';
 import { MaintenancePage } from './MaintenancePage.js';
 
 interface MenuItem {
@@ -73,6 +75,7 @@ const MENU: MenuItem[] = [
   { key: 'tid', label: 'Quản Lý TID', icon: <CreditCard className="h-[18px] w-[18px]" />, perms: ['TID_VIEW'], badge: 'undeliveredTid' },
   { key: 'revenue', label: 'Quản Lý Doanh Thu', icon: <TrendingUp className="h-[18px] w-[18px]" />, perms: ['REVENUE_VIEW'] },
   { key: 'debt', label: 'Quản Lý Công Nợ', icon: <Coins className="h-[18px] w-[18px]" />, perms: ['DEBT_VIEW'] },
+  { key: 'approval', label: 'Duyệt Hủy Bill', icon: <ClipboardCheck className="h-[18px] w-[18px]" />, perms: ['BILL_CANCEL_APPROVE'] },
   { key: 'feecfg', label: 'Cấu hình phí', icon: <Percent className="h-[18px] w-[18px]" />, perms: ['CONFIG_FEE_VIEW'] },
   { key: 'rcvacct', label: 'Quản Lý Tài Khoản Nhận Tiền', icon: <Wallet className="h-[18px] w-[18px]" />, perms: ['CONFIG_RCV_ACCT_VIEW'] },
   { key: 'dossier', label: 'Quản Lý Hồ Sơ HKD', icon: <FolderKanban className="h-[18px] w-[18px]" />, perms: ['CONFIG_DOSSIER_VIEW'] },
@@ -289,6 +292,7 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
           {activeItem?.key === 'tidcfg' && <TidConfigPage user={user} />}
           {activeItem?.key === 'revenue' && <RevenuePage user={user} />}
           {activeItem?.key === 'debt' && <DebtPage user={user} />}
+          {activeItem?.key === 'approval' && <ApprovalPage user={user} />}
           {activeItem?.key === 'trash' && <TrashPage user={user} />}
           {activeItem?.key === 'settings' && <SettingsPage user={user} />}
           {activeItem?.key === 'backup' && <BackupPage user={user} />}

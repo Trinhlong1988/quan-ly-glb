@@ -22,6 +22,7 @@ import * as trashSvc from './trash-service.js';
 import * as msgSvc from './message-service.js';
 import * as dashboardSvc from './dashboard-service.js';
 import * as txnSvc from './transaction-service.js';
+import * as approvalSvc from './approval-service.js';
 import * as storageSvc from './storage-service.js';
 import * as healthSvc from './health-scan.js';
 import { getRemembered, saveRemembered, clearRemembered } from './remember.js';
@@ -93,6 +94,10 @@ export function registerIpc(): void {
   ipcMain.handle('user:unlock', async (_e, id: number) => userSvc.unlockUser(id));
   ipcMain.handle('user:delete', async (_e, args: { id: number; password: string }) =>
     userSvc.deleteUser(args.id, args.password)
+  );
+  // Xóa hàng loạt nhân sự (P1.2 §5) — xác thực mật khẩu 1 lần, lặp guard, skip kèm lý do.
+  ipcMain.handle('user:deleteMany', async (_e, args: { ids: number[]; password: string }) =>
+    userSvc.deleteUsers(args.ids, args.password)
   );
 
   // ---- Audit (Phase B, §16) ---------------------------------------------
@@ -267,6 +272,14 @@ export function registerIpc(): void {
   ipcMain.handle('transaction:delete', async (_e, args: { ids: number[]; password: string }) => txnSvc.deleteTransactions(args.ids, args.password));
   ipcMain.handle('transaction:settle', async (_e, args: { ids: number[]; settled: boolean }) => txnSvc.settleTransactions(args.ids, args.settled));
   ipcMain.handle('debt:summary', async (_e, filter: txnSvc.TransactionFilter) => txnSvc.debtSummary(filter));
+
+  // ── P1.2 Approval Engine — hủy bill có duyệt (phân vai trong service) ──
+  ipcMain.handle('approval:requestCancel', async (_e, args: { transactionId: number; reason: string }) => approvalSvc.requestCancelBill(args.transactionId, args.reason));
+  ipcMain.handle('approval:list', async (_e, status?: string) => approvalSvc.listCancelRequests(status));
+  ipcMain.handle('approval:approve', async (_e, args: { requestId: number; note?: string }) => approvalSvc.approveCancelBill(args.requestId, args.note));
+  ipcMain.handle('approval:reject', async (_e, args: { requestId: number; note: string }) => approvalSvc.rejectCancelBill(args.requestId, args.note));
+  ipcMain.handle('approval:approveBulk', async (_e, args: { requestIds: number[]; note?: string }) => approvalSvc.approveCancelBills(args.requestIds, args.note));
+  ipcMain.handle('approval:rejectBulk', async (_e, args: { requestIds: number[]; note: string }) => approvalSvc.rejectCancelBills(args.requestIds, args.note));
 
   // ── Nhóm E — Bảo trì & Bộ nhớ (Storage-Guard) ──
   ipcMain.handle('storage:status', async () => storageSvc.getStorageStatus());

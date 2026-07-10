@@ -1,0 +1,9 @@
+#!/bin/sh
+# HARDLOCK pre-commit (chỉ LEAD commit). Chặn commit nếu file hand-maintained bị clobber/thu nhỏ.
+# Sinh từ sự cố 10/7: preload/index.d.ts 1115→174 dòng lọt qua vì gate không bắt. CẤM lặp lại.
+echo "[pre-commit] Guard file được bảo vệ..."
+node tools/audit/protected_artifacts_guard.mjs || {
+  echo "[pre-commit] BLOCKED — file hand-maintained bị clobber. Khôi phục rồi commit lại."
+  exit 1
+}
+echo "[pre-commit] OK."

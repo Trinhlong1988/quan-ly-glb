@@ -175,6 +175,12 @@ app.whenReady().then(async () => {
     app.exit(code);
     return;
   }
+  if (process.env['GLB_SELFTEST'] === '18') {
+    const { runApprovalSelfTest } = await import('./selftest-approval.js');
+    const code = await runApprovalSelfTest();
+    app.exit(code);
+    return;
+  }
 
   await createWindow();
   startHousekeeping();

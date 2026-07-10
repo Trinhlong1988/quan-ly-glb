@@ -3,6 +3,7 @@
   "compilerOptions": {
     "composite": true,
     "declaration": true,
+    "outDir": "../../out/tsc-typecheck",
     "moduleResolution": "Bundler",
     "types": ["node"],
     "lib": ["ES2022"]

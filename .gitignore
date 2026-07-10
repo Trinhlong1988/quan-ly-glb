@@ -43,6 +43,12 @@ coverage/
 # ts build info
 *.tsbuildinfo
 
+# TS emit lỡ tay vào src (bẫy: bare `tsc -p` không --noEmit với declaration+composite).
+# index.d.ts hand-maintained KHÔNG match (nó là input, không sinh .js/.d.ts.map).
+apps/desktop/src/**/*.js
+apps/desktop/src/**/*.js.map
+apps/desktop/src/**/*.d.ts.map
+
 # DB artifacts / backups (không commit binary DB)
 .backup_phase1/
 *.db.restored

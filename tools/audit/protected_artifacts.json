@@ -1,0 +1,18 @@
+{
+  "_doc": "Registry file hand-maintained CẤM bị clobber/thu nhỏ. Guard: tools/audit/protected_artifacts_guard.mjs. Sinh từ sự cố 10/7: CMD_BUILD ghi đè preload/index.d.ts 1115→174 dòng, xóa toàn bộ DTO, web typecheck vỡ nhưng agent báo PASS. minLines = sàn tuyệt đối; mustContain = export/anchor bắt buộc; shrinkPctMax = % giảm dòng tối đa so với git HEAD.",
+  "artifacts": [
+    {
+      "path": "apps/desktop/src/preload/index.d.ts",
+      "reason": "Hand-maintained type contract IPC (DTO + Window augmentation). KHÔNG auto-generated — build không sinh lại.",
+      "minLines": 1000,
+      "shrinkPctMax": 10,
+      "mustContain": [
+        "export interface UserDto",
+        "export interface TransactionDto",
+        "export interface MessageDto",
+        "declare global",
+        "interface Window"
+      ]
+    }
+  ]
+}

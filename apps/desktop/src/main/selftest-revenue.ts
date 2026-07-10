@@ -136,21 +136,24 @@ export async function runRevenueSelfTest(): Promise<number> {
   const fBadAmount = await createTransaction({ tidId: tid.id, cardTypeId: card.id, amount: -5, txnDate: '2026-07-03T00:00:00.000Z' });
   ok('số tiền âm → VALIDATION', fBadAmount.ok === false && fBadAmount.error === 'VALIDATION', fBadAmount);
 
-  // ═══════════ G) SỬA GIAO DỊCH → TÍNH LẠI theo SNAPSHOT (không tra biểu phí hiện tại) ═══════════
+  // ═══════════ G) BILL BẤT BIẾN (P1.2): mọi sửa GD → BILL_IMMUTABLE, snapshot đóng băng ═══════════
+  // P1.2 thay thế hành vi cũ "sửa GD → tính lại": bill đã POSTED KHÔNG sửa được nữa
+  // (muốn đổi thì tạo yêu cầu hủy → duyệt → tạo bill mới). Regression khóa hành vi mới này.
+  const t2Before = await db.transaction.findUnique({ where: { id: c2.id! } });
   const up = await updateTransaction(c2.id!, { amount: 20_000_000 });
-  ok('sửa số tiền GD2 → ok', up.ok === true, up);
+  ok('sửa số tiền GD2 → BILL_IMMUTABLE', up.ok === false && up.error === 'BILL_IMMUTABLE', up);
   const t2b = await db.transaction.findUnique({ where: { id: c2.id! } });
-  ok('GD2 sau sửa: 20tr × snapshot 2%+1.5% → 700.000 (400.000+300.000)', t2b?.revenueAmount === 700_000, { got: t2b?.revenueAmount });
+  ok('GD2 KHÔNG đổi số tiền/doanh thu sau khi bị từ chối sửa', t2b?.amount === t2Before?.amount && t2b?.revenueAmount === t2Before?.revenueAmount, { amount: t2b?.amount, rev: t2b?.revenueAmount });
 
-  // G2) BẤT BIẾN SNAPSHOT KHI EDIT (regression Defect 1 audit): đổi biểu phí rồi CHỈ sửa ghi chú GD cũ
-  //     → doanh thu GD KHÔNG được đổi (dùng margin đã snapshot, không tra phí mới).
+  // G2) BẤT BIẾN SNAPSHOT (regression Defect 1 audit): đổi biểu phí rồi thử sửa ghi chú GD cũ
+  //     → sửa bị chặn BILL_IMMUTABLE, doanh thu + margin đã snapshot giữ nguyên (không tra phí mới).
   await db.feeRate.update({ where: { id: rate.id }, data: { phiMua: 9000, phiCaiMay: 0, phiBan: 9000 } });
   const rC1 = await db.transaction.findUnique({ where: { id: c1.id! } });
   const upNote = await updateTransaction(c1.id!, { note: 'ghi chú mới' });
-  ok('sửa ghi chú GD1 (đã đối soát) → ok', upNote.ok === true, upNote);
+  ok('sửa ghi chú GD1 (đã đối soát) → BILL_IMMUTABLE', upNote.ok === false && upNote.error === 'BILL_IMMUTABLE', upNote);
   const c1After = await db.transaction.findUnique({ where: { id: c1.id! } });
-  ok('SNAPSHOT: sửa ghi chú KHÔNG đổi doanh thu (giữ 350.000 dù biểu phí đã đổi)', c1After?.revenueAmount === rC1?.revenueAmount && c1After?.revenueAmount === 350_000, { before: rC1?.revenueAmount, after: c1After?.revenueAmount });
-  ok('SNAPSHOT: margin đã lưu giữ nguyên sau khi sửa ghi chú', c1After?.partnerMarginMilli === 2000 && c1After?.sellMarginMilli === 1500, { p: c1After?.partnerMarginMilli, s: c1After?.sellMarginMilli });
+  ok('SNAPSHOT: bill bất biến giữ nguyên doanh thu (350.000 dù biểu phí đã đổi)', c1After?.revenueAmount === rC1?.revenueAmount && c1After?.revenueAmount === 350_000, { before: rC1?.revenueAmount, after: c1After?.revenueAmount });
+  ok('SNAPSHOT: margin đã lưu giữ nguyên (bill bất biến)', c1After?.partnerMarginMilli === 2000 && c1After?.sellMarginMilli === 1500, { p: c1After?.partnerMarginMilli, s: c1After?.sellMarginMilli });
   await db.feeRate.update({ where: { id: rate.id }, data: { phiMua: 3000, phiCaiMay: 1000, phiBan: 2500 } });
 
   // G3) LỌC bao gồm GD của TID đã XÓA MỀM (regression Defect 2): GD phải vẫn hiện khi lọc.
