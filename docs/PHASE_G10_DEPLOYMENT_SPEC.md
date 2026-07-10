@@ -90,24 +90,44 @@ Thứ tự cuốn chiếu, mỗi mục có gate ở §5:
 
 ---
 
-## §8. Chi tiết thực thi (đã đủ quyết định — runway cho CMD_BUILD)
+## §8. Chi tiết thực thi (mô hình A + đã sửa theo 13 QA findings §9)
 
-### G10.1 — Đóng gói .exe (electron-builder)
-- Thêm dev-dep `electron-builder` vào `apps/desktop`; thêm script `"dist": "electron-vite build && electron-builder --win"`.
-- `electron-builder.yml`: `appId: com.globeway.glb`, `productName: "Quản Lý GLB"`, target `nsis` (installer) cho Windows.
-- **Native/Prisma trong gói** (rủi ro chính): `asarUnpack` cho Prisma query engine + `@prisma/adapter-pg`/`pg`; `extraResources` copy thư mục `migrations` + `schema.prisma` để `migrate deploy` chạy được ở máy client-server. Kiểm engine path khi `app.isPackaged`.
-- Gate G-G10.1: chạy installer sinh ra → cài trên 1 máy sạch (hoặc thư mục portable) → app mở, đăng nhập adminroot OK.
+> Thứ tự cuốn chiếu: **G10.1 (.exe, low-risk, độc lập DB) → G10.2 (swap Postgres) → G10.3 (migration squash + server config) → G10.4 (regression on pg) → G10.5 (concurrency) → I-G6 (backup) → G10.6 (LAN thật)**. Mỗi bước gate riêng.
 
-### G10.2/G10.3 — SQLite → PostgreSQL (rủi ro cao nhất)
-- Đổi `datasource` provider `sqlite`→`postgresql`; thay `@prisma/adapter-better-sqlite3` → `@prisma/adapter-pg` + `pg` trong `db.ts`.
-- **Migration KHÔNG tự tương thích:** tạo baseline migration MỚI cho Postgres (KHÔNG sửa migration SQLite đã tag). Cần map: `AUTOINCREMENT`→`SERIAL/IDENTITY`, `DATETIME`→`TIMESTAMPTZ`, boolean SQLite (0/1)→`boolean`, `PRAGMA`/rebuild-table pattern (B05) → cách Postgres. Cân nhắc `prisma migrate diff` từ schema để sinh SQL Postgres, rồi rà tay.
-- **TZ (B16/F1):** `TIMESTAMPTZ` + máy UTC+7 → chạy lại ca giá-theo-kỳ (REV15) trên Postgres, xác nhận không tái lệch ngày.
-- Gate G-G10.3: `migrate deploy` lên Postgres rỗng = 0 lỗi, đủ bảng. G-G10.4: selftest 1–19 + REV15 chạy với `GLB_DB_URL` trỏ Postgres → 0 fail.
+### G10.1 — Đóng gói .exe (electron-builder) — làm TRƯỚC, chưa đụng Postgres
+- Thêm dev-dep `electron-builder`; script `"dist": "electron-vite build && electron-builder --win"`.
+- `electron-builder.yml`: `appId: com.globeway.glb`, `productName: "Quản Lý GLB"`, target `nsis`.
+- **Đóng gói đúng (QA #10):** generator = `prisma-client` (queryCompiler, **KHÔNG có query-engine binary**) → KHÔNG asarUnpack engine. Đóng gói generated Prisma client (Wasm) + native `better-sqlite3` HIỆN TẠI (bước này vẫn SQLite). `asarUnpack` cho `better-sqlite3` (.node). Kiểm path khi `app.isPackaged`.
+- Gate G-G10.1: installer sinh ra → cài máy sạch → app mở, đăng nhập adminroot OK (vẫn SQLite local — chỉ kiểm đóng gói).
 
-### G10.4/G10.5 — concurrency
-- selftest **=20**: 2 "phiên" ghi song song (2 kết nối) → tạo 2 bill khác nhau đồng thời (I-G2: cả 2 vào, mã chứng từ không trùng); 2 phiên cùng hủy/sửa 1 bản ghi (I-G3: 1 thắng, 1 nhận lỗi optimistic rõ ràng).
+### G10.2 — Swap adapter SQLite → Postgres (mô hình A: client nối thẳng)
+- Sửa **`packages/database/src/client.ts`** (QA #3 — KHÔNG phải db.ts): `PrismaBetterSqlite3` → `@prisma/adapter-pg` (`PrismaPg`) + `pg`. Đổi `datasource` provider `sqlite`→`postgresql`. Gỡ dep native `better-sqlite3` + `adapter-better-sqlite3` khỏi `package.json`; sửa `electron.vite.config.ts` externals → `pg`/`adapter-pg`.
+- **Tách init (QA #4, mô hình A):** `db.ts` `resolveDatabaseUrl` đọc IP:port từ file cấu hình máy client (màn "Cấu hình máy chủ") + tài khoản pg chung → dựng `postgresql://`. **CHỈ máy chủ chạy `seedIfEmpty`+migrate+`backfillEmployeeCodes` (1 lần)**; client boot **chỉ connect** (bỏ `existsSync(file:)`/seed mỗi boot). Cờ phân biệt server vs client (vd biến môi trường/cấu hình `GLB_ROLE=server|client`).
 
-### Nguồn cấp số selftest (chống đụng số): 1–18 cũ · 19 = F-NOTIF · **20 = G10 concurrency** · kế tiếp cấp tăng dần.
+### G10.3 — Migration squash Postgres + cấu hình server (QA #1, #12)
+- **SQUASH bắt buộc:** 13/15 migration cũ dính `PRAGMA/AUTOINCREMENT/DATETIME` → `migrate deploy` lên pg FAIL. Tạo **thư mục migrations MỚI cho Postgres** (1 baseline) sinh từ `prisma migrate diff --from-empty --to-schema-datamodel` → rà tay; đổi `migration_lock.toml` provider=postgresql. **Riêng frame này ĐƯỢC phép thay migrations** (gỡ luật "chỉ thêm mới" — QA #1). Migration SQLite cũ giữ nguyên trong lịch sử/tag, không dùng cho pg.
+- **TZ (QA #7):** Prisma map `DateTime`→`timestamp` KHÔNG tz → ép `@db.Timestamptz(3)` tường minh cho các field ngày, HOẶC xác nhận xử lý UTC ở app. Gate: REV15-on-pg không tái lệch ngày (B16/F1).
+- **Server config (QA #12):** `postgresql.conf` `listen_addresses='*'` (hoặc IP LAN) + `pg_hba.conf` `host all <user> <LAN_subnet> scram-sha-256` + mở firewall port 5432. Gate: máy B ping/psql nối được.
+- Gate G-G10.3: `migrate deploy` lên Postgres rỗng = 0 lỗi, đủ bảng.
+
+### G10.4 — Regression trên Postgres (QA #5)
+- Test-harness đổi: SQLite copy-file throwaway KHÔNG dùng được. Mỗi selftest: tạo schema/DB tạm trên Postgres (createdb hoặc schema riêng) → migrate → chạy → drop. selftest 1–19 + REV15 với `GLB_DB_URL` trỏ pg → 0 fail. **`code_counter` (QA #8):** verify SQL `upsert{increment}` sinh ra; nếu không phải `INSERT..ON CONFLICT..RETURNING` native → dùng raw để atomic; gate concurrency N-cao assert mã unique.
+
+### G10.5 — Concurrency (selftest =20, QA #8/#9)
+- I-G2: N client tạo bill đồng thời → không trùng mã chứng từ (code_counter atomic).
+- I-G3 (QA #9 — bill BẤT BIẾN nên race là ở duyệt hủy): 2 client cùng duyệt 1 `ApprovalRequest` → **conditional transition** `updateMany WHERE status='PENDING'` (count=0 → thua nhận lỗi "đã được xử lý"), KHÔNG optimistic updatedAt.
+
+### I-G6 — Backup/Bảo trì trên Postgres (QA #6)
+- Backup cũ = zip file SQLite + `VACUUM` → vỡ trên pg. Thay bằng `pg_dump`/`pg_restore` (script phía server; đóng gói hoặc gọi pg_dump cài sẵn). `MaintenanceRun.vacuumed` (VACUUM) → map sang `VACUUM (ANALYZE)` pg hoặc bỏ. Gate: dump→drop→restore→so hàng khớp.
+
+### ② Lớp bug thêm cho G10 (QA #11): `type-mirror-drift`, `test-orphan` (selftest cũ khẳng định hành vi SQLite: throwaway copy, P2002/DUPLICATE_TRASH), `db-evolution-gap`.
+
+### Nguồn cấp số selftest (chống đụng số): 1–18 cũ · 19 = F-NOTIF · **20 = G10 concurrency** · kế tiếp tăng dần.
+
+### GAP fresh-install (G10.1 phát hiện — TỐI THƯỢNG GLOBAL: thiếu test class)
+- **Triệu chứng:** máy sạch → gói mở ra, `userData/glb.db` rỗng, chưa migrate → `seedIfEmpty` throw → login FAIL. G10.1 chứng minh native-load OK bằng cách trỏ DB đã migrate, nhưng luồng end-to-end máy trắng chưa chạy.
+- **Giải theo mô hình A:** client .exe **KHÔNG** dùng DB local — first-run mở màn "Cấu hình máy chủ" (Q3) nhập IP:port → connect Postgres máy chủ (đã migrate 1 lần ở G10.3). App **không được crash** khi chưa có cấu hình (hiện màn config thay vì throw). Vậy gap này do **G10.2 (client-init) + G10.3 (server migrate)** đóng, KHÔNG ship template SQLite.
+- **Test class MỚI (bổ sung, chống lọt lại):** `packaged-fresh-install` — chạy binary đóng gói với `userData` RỖNG + CHƯA cấu hình máy chủ → phải ra màn config (không throw); sau khi trỏ server đã migrate → login OK. Gate bắt buộc ở **G10.6** (Production Validation LAN thật, Mr.Long).
 
 ---
 

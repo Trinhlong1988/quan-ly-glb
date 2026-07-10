@@ -1,0 +1,42 @@
+# electron-builder — G10.1 (.exe packaging). VẪN dùng SQLite (better-sqlite3) ở bước này.
+# Generator Prisma = prisma-client (queryCompiler): KHÔNG có query-engine binary.
+# - Generated client + sqlite query-compiler wasm (base64) đã được electron-vite BUNDLE vào out/main
+#   (chunk query_compiler_fast_bg.sqlite.wasm-base64-*.js) → nằm trong asar, load bằng WebAssembly
+#   từ base64 (không đọc file) nên KHÔNG cần asarUnpack.
+# - Runtime external duy nhất cần trong node_modules: @prisma/adapter-better-sqlite3, @prisma/client
+#   (pure-JS, chạy từ asar), và better-sqlite3 (native .node) → PHẢI asarUnpack.
+appId: com.globeway.glb
+productName: Quản Lý GLB
+# electron hoisted lên node_modules gốc (monorepo) + devDep khai báo dạng range "^33.2.0"
+# → electron-builder 26 không tự suy ra được exact version. Ghim theo bản ĐANG cài (verified 33.4.11).
+electronVersion: 33.4.11
+
+directories:
+  output: dist
+  buildResources: build
+
+# App code đã được electron-vite bundle vào out/. node_modules production deps
+# (better-sqlite3, @prisma/*) được electron-builder tự thu thập theo dependency graph
+# (kể cả khi hoisted lên node_modules gốc của monorepo npm workspaces).
+files:
+  - out/**/*
+  - package.json
+  # Không đóng gói file DB dev (packaged app dùng userData/glb.db, seed rỗng khi trống).
+  - "!**/*.db"
+  - "!**/*.db.*"
+  - "!**/*.map"
+
+# Native addon better-sqlite3 (.node) KHÔNG chạy được từ trong asar → phải giải nén.
+asarUnpack:
+  - "**/*.node"
+  - "**/node_modules/better-sqlite3/**"
+
+win:
+  target:
+    - nsis
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  artifactName: ${productName}-${version}-setup.${ext}
