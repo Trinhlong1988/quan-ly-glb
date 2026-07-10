@@ -106,12 +106,22 @@ export async function createBackup(note?: string): Promise<MutationResult> {
   }
 }
 
+/** Metadata của 1 dòng backup_logs vừa ghi — đủ để RE-INSERT lại sau pg_restore (B20). */
+interface BackupLogSnapshot {
+  filePath: string;
+  fileSize: number | null;
+  checksum: string | null;
+  createdBy: number | null;
+  note: string | null;
+  createdAt: Date;
+}
+
 /** Core archive writer (also reused by restore's pre-backup). Records backup_logs. */
 async function writeBackupArchive(
   db: import('@glb/database').Db,
   actorUsername: string,
   note?: string
-): Promise<{ filePath: string; size: number; checksum: string }> {
+): Promise<{ filePath: string; size: number; checksum: string; logRow: BackupLogSnapshot }> {
   const conn = pgConn();
   const bin = pgToolPath('pg_dump');
   const dumpTmp = join(backupsDir(), `.pgdump_${Date.now()}_${process.pid}.tmp`);
@@ -142,7 +152,7 @@ async function writeBackupArchive(
   const filePath = join(backupsDir(), fileName);
   writeFileSync(filePath, zip);
 
-  await db.backupLog.create({
+  const logRow = await db.backupLog.create({
     data: {
       filePath,
       fileSize: zip.length,
@@ -151,7 +161,19 @@ async function writeBackupArchive(
       note: note ?? null
     }
   });
-  return { filePath, size: zip.length, checksum };
+  return {
+    filePath,
+    size: zip.length,
+    checksum,
+    logRow: {
+      filePath: logRow.filePath,
+      fileSize: logRow.fileSize,
+      checksum: logRow.checksum,
+      createdBy: logRow.createdBy,
+      note: logRow.note,
+      createdAt: logRow.createdAt
+    }
+  };
 }
 
 /**
@@ -225,8 +247,9 @@ export async function restoreBackup(filePath: string, password: string): Promise
       }
     }
 
-    // R_BACKUP_003: snapshot current state BEFORE overwriting.
-    await writeBackupArchive(db, user.username, 'auto pre-restore snapshot');
+    // R_BACKUP_003: snapshot current state BEFORE overwriting. Giữ metadata dòng backup_logs
+    // để RE-INSERT lại sau pg_restore (bug B20 — xem ghi chú bên dưới).
+    const preRestore = await writeBackupArchive(db, user.username, 'auto pre-restore snapshot');
 
     // pg_restore --clean --if-exists --single-transaction: drop+recreate objects rồi nạp dữ liệu.
     // Khác SQLite (không swap-on-restart): Postgres áp dụng NGAY, không cần khởi động lại.
@@ -247,12 +270,28 @@ export async function restoreBackup(filePath: string, password: string): Promise
     if (res.error) return { ok: false, error: 'RESTORE_FAILED', message: `Không chạy được pg_restore (${bin}): ${res.error.message}` };
     if (res.status !== 0) return { ok: false, error: 'RESTORE_FAILED', message: `pg_restore lỗi (exit ${res.status}): ${(res.stderr || '').toString().trim()}` };
 
+    // B20 (data-safety): pg_restore --clean --if-exists DROP+CREATE lại bảng `backup_logs` rồi nạp
+    // các dòng CŨ từ dump → dòng backup_logs của "auto pre-restore snapshot" (ghi ngay trên) BỊ GHI ĐÈ
+    // MẤT. File ZIP an-toàn VẪN còn trên đĩa, chỉ mất BẢN GHI log → không tra cứu/undo được nữa.
+    // → RE-INSERT lại dòng pre-restore snapshot (giữ nguyên createdAt) để bản sao lưu an-toàn lại
+    // xuất hiện trong listBackups. Prisma client vẫn hoạt động: schema y hệt, chỉ dữ liệu đổi.
+    await db.backupLog.create({
+      data: {
+        filePath: preRestore.logRow.filePath,
+        fileSize: preRestore.logRow.fileSize,
+        checksum: preRestore.logRow.checksum,
+        createdBy: preRestore.logRow.createdBy,
+        note: preRestore.logRow.note,
+        createdAt: preRestore.logRow.createdAt
+      }
+    });
+
     await writeAudit(db, {
       actorUserId: user.id,
       action: 'RESTORE_EXECUTED',
       targetType: 'System',
       targetId: basename(filePath),
-      after: { file: basename(filePath), note: 'pre-restore snapshot created; pg_restore applied' }
+      after: { file: basename(filePath), note: 'pre-restore snapshot created; pg_restore applied; snapshot log re-inserted (B20)' }
     });
     return {
       ok: true,

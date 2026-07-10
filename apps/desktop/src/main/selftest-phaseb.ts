@@ -105,11 +105,26 @@ export async function runServiceSelfTest(): Promise<number> {
   const backupsBeforeRestore = ((await backupSvc.listBackups()).data ?? []).length;
   const restoreOk = await backupSvc.restoreBackup(backupFile, ADMIN.p);
   assert('restore correct password ok', restoreOk.ok === true, restoreOk.error);
-  const backupsAfterRestore = ((await backupSvc.listBackups()).data ?? []).length;
-  assert('restore auto-created pre-restore backup (R_BACKUP_003)', backupsAfterRestore > backupsBeforeRestore, {
-    backupsBeforeRestore,
-    backupsAfterRestore
-  });
+  // B20: pg_restore --clean ghi đè bảng backup_logs bằng rows CŨ của dump → dòng "auto pre-restore
+  // snapshot" bị mất. restoreBackup PHẢI re-insert lại. Verify: (1) vẫn còn ≥1 backup tra cứu được
+  // sau restore; (2) bản ghi mới nhất (id desc → phần tử [0]) ĐÚNG là pre-restore snapshot + file khớp.
+  const afterList = (await backupSvc.listBackups()).data ?? [];
+  const backupsAfterRestore = afterList.length;
+  const preRestoreRow = afterList[0];
+  assert(
+    'restore preserves pre-restore snapshot log after pg_restore (R_BACKUP_003 / B20)',
+    backupsAfterRestore >= 1 &&
+      !!preRestoreRow &&
+      preRestoreRow.note === 'auto pre-restore snapshot' &&
+      preRestoreRow.exists === true,
+    {
+      backupsBeforeRestore,
+      backupsAfterRestore,
+      note: preRestoreRow?.note,
+      exists: preRestoreRow?.exists,
+      file: preRestoreRow?.fileName
+    }
+  );
 
   const auditBefore = await auditSvc.listAudit({ action: 'PERMISSION_DENIED', limit: 1000 });
   const deniedBefore = auditBefore.ok ? (auditBefore.data ?? []).length : -1;
