@@ -11,11 +11,15 @@
 |---|---|---|
 | Q-A | **Lợi nhuận Dashboard** | **Theo DOANH THU GHI NHẬN (accrual)**: `Lợi nhuận tháng = Σ chênh lệch GD (Transaction, theo txnDate trong tháng) − Σ phiếu chi thực (CashEntry CHI trong tháng)`. **KHÔNG** cash-basis. Thu công nợ = chuyển "phải thu → tiền", KHÔNG tính là doanh thu mới (chống đếm trùng). |
 | Q-B | **Phiếu chi có cần duyệt?** | **KHÔNG cần duyệt.** Chỉ ghi audit đầy đủ (người chi, danh mục, số tiền, ngày, hình thức). (KHÁC hủy bill — không qua Approval Engine.) |
-| Q-C | **Nợ "không thu hồi được" (BAD)** | **Chỉ CỜ CẢNH BÁO ĐỎ** trên DebtPage + Dashboard. **KHÔNG tự ghi giảm** lợi nhuận. (Muốn ghi giảm = thao tác riêng sau, chưa làm.) |
+| Q-C | **Nợ "không thu hồi được" (BAD)** | **Cờ CẢNH BÁO ĐỎ** trên DebtPage + Dashboard, KHÔNG **tự động** ghi giảm. Ghi giảm = **thao tác TAY** qua nút "Ghi giảm nợ xấu" (xem Q-F, đã chốt LÀM đợt này). |
 | Q-D | **Admin đặt lại MK user khác** (lỗ hổng an ninh) | Bắt admin **nhập lại MK ĐĂNG NHẬP của chính mình** (re-auth) → backend verify trước khi reset. *(việc security riêng, không thuộc module thu-chi nhưng ghi ở đây để không quên.)* |
 | Q-E | **Mã theo vai trò** | **C: giữ mã NV ổn định + badge vai trò màu (AD/QL/NV) cạnh mã.** KHÔNG ghép chữ vai vào mã (tránh lỗi mã-cố-định-khi-đổi-vai). |
+| Q-F | **Ghi giảm nợ xấu (write-off)** — Mr.Long chốt **B 10/7** | **LÀM nút "Ghi giảm nợ xấu"** đợt này. Trên công nợ BAD: thao tác **quyền cao `DEBT_WRITEOFF` + `verifyActorPassword`** → sinh 1 `CashEntry` CHI danh mục hệ thống **"Chi phí nợ xấu"** (`sourceKind=BAD_DEBT`, `affectsPnl=true`) = **công nợ còn lại net-of-settlement** → **trừ thẳng lợi nhuận** + đánh dấu GD đã ghi-giảm (rớt khỏi công nợ, CẤM ghi giảm 2 lần, idempotent). Audit đủ. KHÔNG tự động. Pha **H2b**. Invariant + selftest (đúng số dư còn lại + idempotent). |
+| Q-lương | **Chi lương trừ lợi nhuận** — chốt **CÓ** | Chi lương = chi phí thật, `affectsPnl=true`, trừ vào lợi nhuận. |
+| Q-cọc | **Cọc/hoàn cọc nhiều máy** — chốt | Cọc = **đơn giá × số máy** (1 máy 5tr → 3 máy 15tr). Hoàn = **số máy thu hồi × đơn giá** (thu 2/3 → hoàn 10tr, giữ 1 máy). Per-máy, hoàn từng phần theo số máy thu hồi. |
+| Q6 | **"Số máy chưa cọc" (mục I)** — mặc định | = máy đang giao khách/đại lý (deployed) mà CHƯA có khoản cọc. (đổi mẫu số sau nếu cần.) |
 
-> Các câu §9 còn lại (định nghĩa "số máy chưa cọc" Q6...) vẫn chờ; agent build tới pha liên quan sẽ hỏi.
+> Các câu chờ còn lại sẽ hỏi khi build tới pha liên quan.
 
 ---
 
