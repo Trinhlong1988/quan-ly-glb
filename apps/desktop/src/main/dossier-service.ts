@@ -240,7 +240,7 @@ export async function listDossiers(filter: DossierFilter = {}): Promise<{ ok: bo
       sourceId: filter.sourceId ?? undefined,
       createdAt: dateRange(filter.fromDate, filter.toDate),
       OR: filter.search
-        ? [{ hkdName: { contains: filter.search } }, { ownerName: { contains: filter.search } }, { taxCode: { contains: filter.search } }, { cccdNumber: { contains: filter.search } }]
+        ? [{ hkdName: { contains: filter.search, mode: 'insensitive' } }, { ownerName: { contains: filter.search, mode: 'insensitive' } }, { taxCode: { contains: filter.search, mode: 'insensitive' } }, { cccdNumber: { contains: filter.search, mode: 'insensitive' } }]
         : undefined
     },
     orderBy: { id: 'asc' }

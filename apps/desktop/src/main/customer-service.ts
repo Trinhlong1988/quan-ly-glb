@@ -93,10 +93,10 @@ export async function listCustomers(
       createdAt: dateRange(filter.fromDate, filter.toDate),
       OR: filter.search
         ? [
-            { code: { contains: filter.search } },
-            { nickname: { contains: filter.search } },
-            { fullName: { contains: filter.search } },
-            { phone: { contains: filter.search } }
+            { code: { contains: filter.search, mode: 'insensitive' } },
+            { nickname: { contains: filter.search, mode: 'insensitive' } },
+            { fullName: { contains: filter.search, mode: 'insensitive' } },
+            { phone: { contains: filter.search, mode: 'insensitive' } }
           ]
         : undefined
     },

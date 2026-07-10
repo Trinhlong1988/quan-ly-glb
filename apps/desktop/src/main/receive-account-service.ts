@@ -210,7 +210,7 @@ export async function listAccounts(filter: RcvAccountFilter = {}): Promise<{ ok:
       bankId: filter.bankId ?? undefined,
       customerId: filter.customerId ?? undefined,
       createdAt: dateRange(filter.fromDate, filter.toDate),
-      OR: filter.search ? [{ accountName: { contains: filter.search } }, { accountNumber: { contains: filter.search } }, { cccdNumber: { contains: filter.search } }, { phone: { contains: filter.search } }] : undefined
+      OR: filter.search ? [{ accountName: { contains: filter.search, mode: 'insensitive' } }, { accountNumber: { contains: filter.search, mode: 'insensitive' } }, { cccdNumber: { contains: filter.search, mode: 'insensitive' } }, { phone: { contains: filter.search, mode: 'insensitive' } }] : undefined
     },
     orderBy: { id: 'asc' }
   });

@@ -84,9 +84,9 @@ export async function listBanks(filter: BankFilter = {}): Promise<{ ok: boolean;
     where: {
       deletedAt: null,
       createdAt: dateRange(filter.fromDate, filter.toDate),
-      OR: filter.search ? [{ code: { contains: filter.search } }, { name: { contains: filter.search } }] : undefined
+      OR: filter.search ? [{ code: { contains: filter.search, mode: 'insensitive' } }, { name: { contains: filter.search, mode: 'insensitive' } }] : undefined
     },
-    orderBy: { id: 'asc' }
+    orderBy: { name: 'asc' }
   });
   const names = await resolveUserNames(g.db, rows.flatMap((r) => [r.createdBy, r.updatedBy]));
   return { ok: true, data: rows.map((r) => ({ id: r.id, name: r.name, code: r.code, ...trail(r, names) })) };
@@ -236,9 +236,9 @@ export async function listCardTypes(filter: CardTypeFilter = {}): Promise<{ ok: 
       deletedAt: null,
       bankId: filter.bankId ?? undefined,
       createdAt: dateRange(filter.fromDate, filter.toDate),
-      OR: filter.search ? [{ code: { contains: filter.search } }, { name: { contains: filter.search } }] : undefined
+      OR: filter.search ? [{ code: { contains: filter.search, mode: 'insensitive' } }, { name: { contains: filter.search, mode: 'insensitive' } }] : undefined
     },
-    orderBy: [{ bankId: 'asc' }, { id: 'asc' }]
+    orderBy: [{ bankId: 'asc' }, { name: 'asc' }]
   });
   const names = await resolveUserNames(g.db, rows.flatMap((r) => [r.createdBy, r.updatedBy]));
   const bankIds = [...new Set(rows.map((r) => r.bankId))];
@@ -389,10 +389,15 @@ export async function listPartners(filter: PartnerFilter = {}): Promise<{ ok: bo
       deletedAt: null,
       createdAt: dateRange(filter.fromDate, filter.toDate),
       OR: filter.search
-        ? [{ code: { contains: filter.search } }, { name: { contains: filter.search } }, { phone: { contains: filter.search } }, { contactPerson: { contains: filter.search } }]
+        ? [
+            { code: { contains: filter.search, mode: 'insensitive' } },
+            { name: { contains: filter.search, mode: 'insensitive' } },
+            { phone: { contains: filter.search, mode: 'insensitive' } },
+            { contactPerson: { contains: filter.search, mode: 'insensitive' } }
+          ]
         : undefined
     },
-    orderBy: { id: 'asc' }
+    orderBy: { createdAt: 'asc' }
   });
   const names = await resolveUserNames(g.db, rows.flatMap((r) => [r.createdBy, r.updatedBy]));
   const links = await g.db.partnerBank.findMany({ where: { deletedAt: null, partnerId: { in: rows.map((r) => r.id) } }, select: { partnerId: true, bankId: true } });

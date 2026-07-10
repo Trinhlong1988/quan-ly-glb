@@ -97,10 +97,10 @@ export async function listUsers(
       roles: filter.roleCode ? { some: { role: { code: filter.roleCode } } } : undefined,
       OR: filter.search
         ? [
-            { fullName: { contains: filter.search } },
-            { username: { contains: filter.search } },
-            { email: { contains: filter.search } },
-            { phone: { contains: filter.search } }
+            { fullName: { contains: filter.search, mode: 'insensitive' } },
+            { username: { contains: filter.search, mode: 'insensitive' } },
+            { email: { contains: filter.search, mode: 'insensitive' } },
+            { phone: { contains: filter.search, mode: 'insensitive' } }
           ]
         : undefined
     },

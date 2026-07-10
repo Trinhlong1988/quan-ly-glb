@@ -90,7 +90,7 @@ export async function listPosDevices(
       currentAgentId: filter.agentId ?? undefined,
       createdAt: dateRange(filter.fromDate, filter.toDate),
       OR: filter.search
-        ? [{ serial: { contains: filter.search } }, { currentTid: { contains: filter.search } }]
+        ? [{ serial: { contains: filter.search, mode: 'insensitive' } }, { currentTid: { contains: filter.search, mode: 'insensitive' } }]
         : undefined
     },
     orderBy: { id: 'asc' }

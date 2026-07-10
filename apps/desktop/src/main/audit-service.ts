@@ -32,9 +32,9 @@ export async function listAudit(
       action: query.action ? query.action : undefined,
       OR: query.search
         ? [
-            { action: { contains: query.search } },
-            { targetType: { contains: query.search } },
-            { targetId: { contains: query.search } }
+            { action: { contains: query.search, mode: 'insensitive' } },
+            { targetType: { contains: query.search, mode: 'insensitive' } },
+            { targetId: { contains: query.search, mode: 'insensitive' } }
           ]
         : undefined
     },

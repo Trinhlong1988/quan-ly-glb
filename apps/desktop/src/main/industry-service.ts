@@ -101,7 +101,7 @@ export async function listIndustries(
       deletedAt: null,
       active: filter.active === undefined ? undefined : filter.active,
       createdAt: dateRange(filter.fromDate, filter.toDate),
-      OR: filter.search ? [{ code: { contains: filter.search } }, { name: { contains: filter.search } }] : undefined
+      OR: filter.search ? [{ code: { contains: filter.search, mode: 'insensitive' } }, { name: { contains: filter.search, mode: 'insensitive' } }] : undefined
     },
     orderBy: { id: 'asc' }
   });

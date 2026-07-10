@@ -100,7 +100,7 @@ export async function listSuppliers(filter: SupplierFilter = {}): Promise<{ ok: 
       deletedAt: null,
       createdAt: dateRange(filter.fromDate, filter.toDate),
       OR: filter.search
-        ? [{ code: { contains: filter.search } }, { name: { contains: filter.search } }, { phone: { contains: filter.search } }, { contactPerson: { contains: filter.search } }]
+        ? [{ code: { contains: filter.search, mode: 'insensitive' } }, { name: { contains: filter.search, mode: 'insensitive' } }, { phone: { contains: filter.search, mode: 'insensitive' } }, { contactPerson: { contains: filter.search, mode: 'insensitive' } }]
         : undefined
     },
     orderBy: { id: 'asc' }
@@ -227,7 +227,7 @@ export async function listPosModels(filter: PosModelFilter = {}): Promise<{ ok: 
     where: {
       deletedAt: null,
       createdAt: dateRange(filter.fromDate, filter.toDate),
-      OR: filter.search ? [{ code: { contains: filter.search } }, { name: { contains: filter.search } }] : undefined
+      OR: filter.search ? [{ code: { contains: filter.search, mode: 'insensitive' } }, { name: { contains: filter.search, mode: 'insensitive' } }] : undefined
     },
     orderBy: { id: 'asc' }
   });
@@ -462,7 +462,7 @@ export async function listPosIntakes(filter: PosIntakeFilter = {}): Promise<{ ok
       supplierId: filter.supplierId ?? undefined,
       intakeStatusId: filter.intakeStatusId ?? undefined,
       importedAt: dateRange(filter.fromDate, filter.toDate),
-      OR: filter.search ? [{ serial: { contains: filter.search } }, { note: { contains: filter.search } }] : undefined
+      OR: filter.search ? [{ serial: { contains: filter.search, mode: 'insensitive' } }, { note: { contains: filter.search, mode: 'insensitive' } }] : undefined
     },
     orderBy: { id: 'asc' }
   });

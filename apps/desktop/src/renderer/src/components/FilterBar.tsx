@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { Search, FilterX } from 'lucide-react';
 import { inputCls } from './Field.js';
 
@@ -24,7 +25,8 @@ export function FilterBar({
   onToDate,
   selects = [],
   onApply,
-  onReset
+  onReset,
+  debounceMs = 300
 }: {
   search: string;
   onSearch: (v: string) => void;
@@ -36,16 +38,37 @@ export function FilterBar({
   selects?: FilterSelect[];
   onApply: () => void;
   onReset: () => void;
+  /** Độ trễ (ms) lọc realtime khi gõ ô tìm kiếm. 0 = tắt debounce (chỉ lọc khi Enter/bấm Lọc). */
+  debounceMs?: number;
 }): JSX.Element {
   const showDates = !!onFromDate && !!onToDate;
+
+  // Lọc realtime: gõ xong ~debounceMs mà không gõ tiếp → tự gọi onApply (không gọi mỗi ký tự).
+  // Dùng ref để luôn gọi onApply mới nhất (đọc state hiện tại của trang) mà không cần thêm vào deps.
+  const onApplyRef = useRef(onApply);
+  onApplyRef.current = onApply;
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
+
+  const handleSearch = (v: string): void => {
+    onSearch(v);
+    if (debounceMs <= 0) return;
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => onApplyRef.current(), debounceMs);
+  };
   return (
     <div className="mb-3 flex flex-wrap items-center gap-2">
       <div className="relative">
         <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
         <input
           value={search}
-          onChange={(e) => onSearch(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && onApply()}
+          onChange={(e) => handleSearch(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              if (timerRef.current) clearTimeout(timerRef.current);
+              onApply();
+            }
+          }}
           placeholder={searchPlaceholder}
           className={inputCls + ' w-64 pl-8'}
         />

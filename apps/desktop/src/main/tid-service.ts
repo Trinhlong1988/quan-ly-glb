@@ -81,7 +81,7 @@ export async function listTids(filter: TidFilter = {}): Promise<{ ok: boolean; d
       bank: filter.bank || undefined,
       status: filter.status || undefined,
       openedAt: dateRange(filter.fromDate, filter.toDate),
-      OR: filter.search ? [{ tid: { contains: filter.search } }, { mid: { contains: filter.search } }] : undefined
+      OR: filter.search ? [{ tid: { contains: filter.search, mode: 'insensitive' } }, { mid: { contains: filter.search, mode: 'insensitive' } }] : undefined
     },
     orderBy: { id: 'asc' }
   });
