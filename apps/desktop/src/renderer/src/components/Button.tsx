@@ -8,12 +8,15 @@ import type { ButtonHTMLAttributes, ReactNode } from 'react';
 //   neutral = xám viền (hủy / xóa lọc / phụ)
 export type ButtonVariant = 'confirm' | 'edit' | 'danger' | 'soft' | 'neutral';
 
+// R_UI_HOVER (Mr.Long chốt 10/7): hover nút = "sáng nhẹ" (brightness) đồng nhất mọi variant, GIỮ
+// NGUYÊN màu nền — hiệu ứng sáng nhẹ nằm ở base className (enabled:hover:brightness-110) nên đây chỉ
+// khai báo nền/chữ/viền theo ngữ nghĩa, KHÔNG đặt hover riêng (tránh lệch chuẩn / đá nhau).
 const VARIANT: Record<ButtonVariant, string> = {
-  confirm: 'bg-brand text-white hover:bg-brand-hover shadow-sm',
-  edit: 'bg-warning text-white hover:brightness-95 shadow-sm',
-  danger: 'bg-danger text-white hover:brightness-95 shadow-sm',
-  soft: 'bg-brand/10 text-brand hover:bg-brand/20',
-  neutral: 'border border-line bg-white text-slate-600 hover:bg-appbg'
+  confirm: 'bg-brand text-white shadow-sm',
+  edit: 'bg-warning text-white shadow-sm',
+  danger: 'bg-danger text-white shadow-sm',
+  soft: 'bg-brand/10 text-brand',
+  neutral: 'border border-line bg-white text-slate-600'
 };
 
 interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -29,7 +32,7 @@ export function Button({ variant = 'confirm', icon, children, className = '', di
       disabled={disabled}
       className={
         'inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition ' +
-        'disabled:cursor-not-allowed disabled:opacity-60 ' +
+        'enabled:hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60 ' +
         VARIANT[variant] +
         (className ? ' ' + className : '')
       }

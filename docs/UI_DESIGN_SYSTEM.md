@@ -42,6 +42,12 @@ brand `#1657D0` · brand-hover `#1247AE` · sidebar `#10233F` · appbg `#F4F6FA`
 
 Nút bo góc `rounded-lg`. **Cấm** viết `<button>` thủ công cho các loại trên — phải dùng `Button`/`IconBtn` chung (ngoại lệ: nút gọn "Lọc"/"Xóa lọc" trong thanh `FilterBar`/thanh lọc thủ công dùng chung 1 kiểu markup).
 
+### R_UI_HOVER — chuẩn hiệu ứng rê chuột (Mr.Long chốt 10/7)
+Áp global, cấm tự chế kiểu khác:
+- **Nút** = **sáng nhẹ** (brightness) khi hover + `transition` mượt, **giữ nguyên màu nền** variant. Chuẩn code: base class `enabled:hover:brightness-110` (đồng nhất mọi variant trong `Button`/`IconBtn`); **không** đặt hover đổi màu/đậm bóng/scale riêng từng variant. `disabled` **không** sáng (dùng `enabled:` để loại trạng thái disabled).
+- **Hàng bảng** = đổi nền nhẹ — giữ `hover:bg-appbg/60` hiện có (mục 6).
+- **Tab** = giữ nguyên kiểu hiện tại (không đổi).
+
 ## 5. Thành phần dùng chung (cấm tự chế bản mới)
 `Button` · `IconBtn(variant)` · `Modal` · `ConfirmDialog` (xóa/nguy hiểm, xuống dòng được) · `toast.alert` (**dialog lỗi TO-RÕ đồng bộ toàn app** — header đỏ + icon cảnh báo; mọi lỗi/thao tác sai dùng cái này, KHÔNG dùng toast nhỏ) · `toast.success/info` (thông báo nhẹ) · `StatusPill` + `statusLabel` · `FilterBar` · `Field` + `inputCls`.
 

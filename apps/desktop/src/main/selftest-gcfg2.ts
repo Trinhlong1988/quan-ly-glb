@@ -38,14 +38,16 @@ export async function runPosSupplySelfTest(): Promise<number> {
   ok('list chủng loại = 10', (await sup.listPosModels()).data?.length === 10);
   ok('update chủng loại[0] → ok', (await sup.updatePosModel(modelIds[0], { name: 'Máy đổi tên' })).ok === true);
 
-  // (3) 4 trạng thái nhập (4)
+  // (3) 4 trạng thái nhập — nay SEED sẵn trong seedIfEmpty (seedDefaultIntakeStatusesIfMissing).
+  // Test đọc lại 4 bản đã seed (giữ đúng thứ tự tên) thay vì tự tạo (tạo lại = DUPLICATE).
   const statusIds: number[] = [];
+  const seededStatuses = (await sup.listIntakeStatuses()).data ?? [];
   for (const nm of ['Máy mới', 'Máy cũ', 'Máy đổi', 'Máy thuê']) {
-    const r = await sup.createIntakeStatus({ name: nm });
-    ok(`tạo trạng thái "${nm}" → ok`, r.ok === true, r);
-    if (r.id) statusIds.push(r.id);
+    const found = seededStatuses.find((s) => s.name === nm);
+    ok(`trạng thái "${nm}" đã seed sẵn`, !!found, found);
+    if (found) statusIds.push(found.id);
   }
-  ok('list trạng thái = 4', (await sup.listIntakeStatuses()).data?.length === 4);
+  ok('list trạng thái = 4 (từ seed)', (await sup.listIntakeStatuses()).data?.length === 4);
 
   // (4) 15 nhập kho (15) — map model/supplier/status vòng
   const intakeIds: number[] = [];
