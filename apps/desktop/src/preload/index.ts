@@ -183,6 +183,11 @@ const api = {
   industryCreate: (input: unknown) => ipcRenderer.invoke('industry:create', input),
   industryUpdate: (id: number, input: unknown) => ipcRenderer.invoke('industry:update', { id, input }),
   industryDelete: (ids: number[], password: string) => ipcRenderer.invoke('industry:delete', { ids, password }),
+  // ── PHASE H1 — Thu–Chi: danh mục thu/chi ──
+  cashCategoryList: (filter: unknown) => ipcRenderer.invoke('cashCategory:list', filter),
+  cashCategoryCreate: (input: unknown) => ipcRenderer.invoke('cashCategory:create', input),
+  cashCategoryUpdate: (id: number, input: unknown) => ipcRenderer.invoke('cashCategory:update', { id, input }),
+  cashCategoryDelete: (ids: number[], password: string) => ipcRenderer.invoke('cashCategory:remove', { ids, password }),
 
   // Thùng rác (E4)
   trashList: () => ipcRenderer.invoke('trash:list'),

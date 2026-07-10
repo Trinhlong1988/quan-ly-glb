@@ -48,6 +48,7 @@ import { ReceiveAccountPage } from './ReceiveAccountPage.js';
 import { DossierPage } from './DossierPage.js';
 import { TidConfigPage } from './TidConfigPage.js';
 import { IndustryConfigPage } from './IndustryConfigPage.js';
+import { CashCategoryConfigPage } from './CashCategoryConfigPage.js';
 import { RevenuePage } from './RevenuePage.js';
 import { DebtPage } from './DebtPage.js';
 import { ApprovalPage } from './ApprovalPage.js';
@@ -82,6 +83,7 @@ const MENU: MenuItem[] = [
   { key: 'dossier', label: 'Quản Lý Hồ Sơ HKD', icon: <FolderKanban className="h-[18px] w-[18px]" />, perms: ['CONFIG_DOSSIER_VIEW'] },
   { key: 'tidcfg', label: 'Cấu hình TID', icon: <CreditCard className="h-[18px] w-[18px]" />, perms: ['CONFIG_TID_VIEW'] },
   { key: 'industrycfg', label: 'Cấu hình ngành nghề', icon: <Tags className="h-[18px] w-[18px]" />, perms: ['CONFIG_INDUSTRY_VIEW'] },
+  { key: 'cashcatcfg', label: 'Cấu hình thu – chi', icon: <Wallet className="h-[18px] w-[18px]" />, perms: ['CASHCAT_VIEW'] },
   { key: 'tid', label: 'Quản Lý TID', icon: <CreditCard className="h-[18px] w-[18px]" />, perms: ['TID_VIEW'], badge: 'undeliveredTid' },
   { key: 'approval', label: 'Duyệt Hủy Bill', icon: <ClipboardCheck className="h-[18px] w-[18px]" />, perms: ['BILL_CANCEL_APPROVE'] },
   { key: 'audit', label: 'Nhật ký hệ thống', icon: <ScrollText className="h-[18px] w-[18px]" />, perms: ['AUDIT_LOG_VIEW'] },
@@ -305,6 +307,7 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
           {activeItem?.key === 'dossier' && <DossierPage user={user} />}
           {activeItem?.key === 'tidcfg' && <TidConfigPage user={user} />}
           {activeItem?.key === 'industrycfg' && <IndustryConfigPage user={user} />}
+          {activeItem?.key === 'cashcatcfg' && <CashCategoryConfigPage user={user} />}
           {activeItem?.key === 'revenue' && <RevenuePage user={user} />}
           {activeItem?.key === 'debt' && <DebtPage user={user} />}
           {activeItem?.key === 'approval' && <ApprovalPage user={user} />}

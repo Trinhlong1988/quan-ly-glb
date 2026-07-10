@@ -18,6 +18,7 @@ import * as rcvAcctSvc from './receive-account-service.js';
 import * as dossierSvc from './dossier-service.js';
 import * as tidCfgSvc from './tid-config-service.js';
 import * as industryCfgSvc from './industry-service.js';
+import * as cashCatSvc from './cash-category-service.js';
 import { readAttachmentDataUrl } from './file-store.js';
 import * as trashSvc from './trash-service.js';
 import * as msgSvc from './message-service.js';
@@ -264,6 +265,12 @@ export function registerIpc(): void {
   ipcMain.handle('industry:create', async (_e, input: industryCfgSvc.CreateIndustryInput) => industryCfgSvc.createIndustry(input));
   ipcMain.handle('industry:update', async (_e, args: { id: number; input: industryCfgSvc.UpdateIndustryInput }) => industryCfgSvc.updateIndustry(args.id, args.input));
   ipcMain.handle('industry:delete', async (_e, args: { ids: number[]; password: string }) => industryCfgSvc.deleteIndustries(args.ids, args.password));
+
+  // ── PHASE H1 — Thu–Chi: danh mục thu/chi ──
+  ipcMain.handle('cashCategory:list', async (_e, filter: cashCatSvc.CashCategoryFilter) => cashCatSvc.listCashCategories(filter));
+  ipcMain.handle('cashCategory:create', async (_e, input: cashCatSvc.CreateCashCategoryInput) => cashCatSvc.createCashCategory(input));
+  ipcMain.handle('cashCategory:update', async (_e, args: { id: number; input: cashCatSvc.UpdateCashCategoryInput }) => cashCatSvc.updateCashCategory(args.id, args.input));
+  ipcMain.handle('cashCategory:remove', async (_e, args: { ids: number[]; password: string }) => cashCatSvc.deleteCashCategories(args.ids, args.password));
 
   // ── E4 Thùng rác ──
   ipcMain.handle('trash:list', async () => trashSvc.listTrash());

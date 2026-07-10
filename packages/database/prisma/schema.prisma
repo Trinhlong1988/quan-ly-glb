@@ -710,6 +710,35 @@ model Industry {
   @@map("industries")
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE H1 — Thu–Chi (Cashflow). CashCategory = danh mục khoản THU/CHI (§A/§B spec H).
+// affectsPnl = cột chống double-count lợi nhuận accrual (§5). BẤT BIẾN (I#12): sourceKind nội bộ
+// (DEBT_*/DEPOSIT/DEPOSIT_REFUND/ADVANCE/DEVICE_DEPOSIT/FUND_TRANSFER) CẤM affectsPnl=true —
+// enforce ở cash-category-service (create/update) + selftest. isSystem = seed hệ thống, KHÔNG xóa.
+// Tiền = VND nguyên (KHÔNG ×1000). Mọi DateTime @db.Timestamptz(3) + @map snake_case (M6).
+// ─────────────────────────────────────────────────────────────────────────────
+model CashCategory {
+  id         Int       @id @default(autoincrement())
+  kind       String // THU | CHI
+  name       String
+  unit       String? // đơn vị tính (đồng, máy, tháng…)
+  periodType String?   @map("period_type") // NONE | MONTH | DATE_RANGE — kỳ áp dụng
+  sourceKind String    @default("MANUAL") @map("source_kind") // MANUAL|DEBT_CUSTOMER|DEBT_PARTNER|SALE_POS|SALE_TID|ADVANCE|DEPOSIT|DEPOSIT_REFUND|DEVICE_DEPOSIT|FUND_TRANSFER|SALARY
+  affectsPnl Boolean   @default(true) @map("affects_pnl") // có tính vào lợi nhuận accrual (§5) không
+  isSystem   Boolean   @default(false) @map("is_system") // danh mục hệ thống (seed) — không cho xóa
+  active     Boolean   @default(true)
+  createdBy  Int?      @map("created_by")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedBy  Int?      @map("updated_by")
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt  DateTime? @map("deleted_at") @db.Timestamptz(3)
+  deletedBy  Int?      @map("deleted_by")
+
+  @@index([kind])
+  @@index([sourceKind])
+  @@map("cash_categories")
+}
+
 // Lịch sử BẢO TRÌ / quét sức khỏe hệ thống (Nhóm E, LEAD 9/7). Mỗi lần quét lưu 1 dòng +
 // báo cáo JSON (danh sách phát hiện lỗi/bug + đề xuất fix). Giữ vết để đối chiếu về sau.
 model MaintenanceRun {

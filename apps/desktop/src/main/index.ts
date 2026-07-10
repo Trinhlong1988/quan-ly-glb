@@ -249,6 +249,15 @@ app.whenReady().then(async () => {
     return;
   }
 
+  // PHASE H1 Thu–Chi: danh mục thu/chi self-test (=25): CRUD + affectsPnl I#12 + isSystem lock +
+  // seed idempotent + audit + FORBIDDEN + "DB tiến hóa" quyền CASHCAT_*.
+  if (process.env['GLB_SELFTEST'] === '25') {
+    const { runCashCategorySelfTest } = await import('./selftest-cash-category.js');
+    const code = await runCashCategorySelfTest();
+    app.exit(code);
+    return;
+  }
+
   await createWindow();
   startHousekeeping();
 

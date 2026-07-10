@@ -135,6 +135,11 @@ export type AuditAction =
   | 'INDUSTRY_UPDATED'
   | 'INDUSTRY_DELETED'
   | 'INDUSTRY_PERMS_GRANTED'
+  // ── PHASE H1 — Thu–Chi: danh mục thu/chi (CashCategory) ──
+  | 'CASH_CATEGORY_CREATED'
+  | 'CASH_CATEGORY_UPDATED'
+  | 'CASH_CATEGORY_DELETED'
+  | 'CASHCAT_PERMS_GRANTED'
   // ── Nhóm A — Bảo mật & tài khoản ──
   | 'USER_AUTO_LOCKED'
   | 'PASSWORD_RESET_BY_ADMIN'

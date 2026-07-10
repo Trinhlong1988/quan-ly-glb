@@ -728,6 +728,43 @@ export interface UpdateIndustryInput {
   active?: boolean;
   note?: string | null;
 }
+// ── PHASE H1 — Thu–Chi DTOs (danh mục thu/chi §A/§B) ──
+export interface CashCategoryDto extends AuditTrail {
+  id: number;
+  kind: string; // THU | CHI
+  name: string;
+  unit: string | null;
+  periodType: string | null; // NONE | MONTH | DATE_RANGE
+  sourceKind: string;
+  affectsPnl: boolean;
+  isSystem: boolean;
+  active: boolean;
+}
+export interface CashCategoryFilter {
+  search?: string;
+  kind?: string; // THU | CHI
+  active?: boolean;
+  sourceKind?: string;
+  fromDate?: string;
+  toDate?: string;
+}
+export interface CreateCashCategoryInput {
+  kind: string; // THU | CHI
+  name: string;
+  unit?: string | null;
+  periodType?: string | null;
+  sourceKind?: string;
+  affectsPnl?: boolean;
+  active?: boolean;
+}
+export interface UpdateCashCategoryInput {
+  name?: string;
+  unit?: string | null;
+  periodType?: string | null;
+  sourceKind?: string;
+  affectsPnl?: boolean;
+  active?: boolean;
+}
 export interface PickImageResult {
   ok: boolean;
   path?: string;
@@ -952,6 +989,12 @@ export interface GlbApi {
   industryCreate(input: CreateIndustryInput): Promise<MutationOutcome>;
   industryUpdate(id: number, input: UpdateIndustryInput): Promise<MutationOutcome>;
   industryDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
+
+  // ── PHASE H1 — Thu–Chi: danh mục thu/chi (§A/§B) ──
+  cashCategoryList(filter: CashCategoryFilter): Promise<ListResult<CashCategoryDto>>;
+  cashCategoryCreate(input: CreateCashCategoryInput): Promise<MutationOutcome>;
+  cashCategoryUpdate(id: number, input: UpdateCashCategoryInput): Promise<MutationOutcome>;
+  cashCategoryDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
 
   // Thùng rác (E4)
   trashList(): Promise<{ ok: boolean; data?: TrashRow[]; error?: string; message?: string }>;

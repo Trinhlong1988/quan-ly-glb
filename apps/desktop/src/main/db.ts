@@ -59,6 +59,76 @@ export async function grantIndustryPermsToExistingRoles(db: Db): Promise<number>
   return granted;
 }
 
+// ── PHASE H1 — Thu–Chi: bug class "DB tiến hóa" (H7) ──────────────────────────
+// Quyền thu-chi MỚI (CASHCAT_*) phải cấp cho role ĐÃ TỒN TẠI trên DB cũ (không chỉ role tạo mới).
+// Cùng khuôn với ngành nghề: ADMIN tự đồng bộ mỗi boot (R_ADMIN_SUPERUSER); MANAGER cấp 1 LẦN
+// idempotent, guard bằng cờ AppSetting để KHÔNG cấp lại quyền admin đã CHỦ ĐỘNG gỡ về sau.
+const CASHCAT_PERM_CODES = ['CASHCAT_VIEW', 'CASHCAT_CREATE', 'CASHCAT_UPDATE', 'CASHCAT_DELETE'];
+const CASHCAT_PERM_TARGET_ROLES = ['MANAGER'];
+const CASHCAT_GRANT_FLAG = 'seed.cashCatPermsGrantedV1';
+
+/**
+ * Cấp (idempotent) quyền thu-chi (CASHCAT_*) cho các role đã có sẵn trên DB (db-evolution).
+ * Trả về số (role×quyền) vừa thêm mới. Bỏ qua cặp đã có → an toàn chạy lại.
+ * Không guard cờ ở đây (để selftest gọi trực tiếp mô phỏng DB tiến hóa); cờ guard nằm ở seedIfEmpty.
+ */
+export async function grantCashCatPermsToExistingRoles(db: Db): Promise<number> {
+  const perms = await db.permission.findMany({ where: { code: { in: CASHCAT_PERM_CODES } }, select: { id: true } });
+  let granted = 0;
+  for (const roleCode of CASHCAT_PERM_TARGET_ROLES) {
+    const role = await db.role.findUnique({ where: { code: roleCode }, select: { id: true } });
+    if (!role) continue;
+    for (const perm of perms) {
+      const existing = await db.rolePermission.findUnique({
+        where: { roleId_permissionId: { roleId: role.id, permissionId: perm.id } }
+      });
+      if (existing) continue;
+      await db.rolePermission.create({ data: { roleId: role.id, permissionId: perm.id } });
+      granted++;
+    }
+  }
+  return granted;
+}
+
+// ── PHASE H1 — Thu–Chi: seed danh mục thu/chi HỆ THỐNG (isSystem=true), idempotent ────────────
+// Khóa tự nhiên = (kind, name). Có → skip; chưa → tạo. Gán affectsPnl đúng bất biến §2.1/§5:
+//   sourceKind nội bộ (DEBT_*/DEPOSIT/DEPOSIT_REFUND/ADVANCE/DEVICE_DEPOSIT/FUND_TRANSFER) = false;
+//   doanh thu bán trực tiếp (SALE_POS/SALE_TID/DT khác) + chi phí vận hành + chi lương (SALARY) = true.
+interface SeedCat { kind: 'THU' | 'CHI'; name: string; unit: string | null; sourceKind: string; affectsPnl: boolean; }
+const SYSTEM_CASH_CATEGORIES: SeedCat[] = [
+  // THU
+  { kind: 'THU', name: 'Công nợ khách hàng', unit: 'đồng', sourceKind: 'DEBT_CUSTOMER', affectsPnl: false },
+  { kind: 'THU', name: 'Công nợ đối tác', unit: 'đồng', sourceKind: 'DEBT_PARTNER', affectsPnl: false },
+  { kind: 'THU', name: 'Doanh thu bán máy POS', unit: 'đồng', sourceKind: 'SALE_POS', affectsPnl: true },
+  { kind: 'THU', name: 'Doanh thu bán TID', unit: 'đồng', sourceKind: 'SALE_TID', affectsPnl: true },
+  { kind: 'THU', name: 'Doanh thu khác', unit: 'đồng', sourceKind: 'MANUAL', affectsPnl: true },
+  { kind: 'THU', name: 'Thu cọc máy', unit: 'đồng', sourceKind: 'DEPOSIT', affectsPnl: false },
+  { kind: 'THU', name: 'Hoàn ứng (thu lại tạm ứng)', unit: 'đồng', sourceKind: 'ADVANCE', affectsPnl: false },
+  { kind: 'THU', name: 'Chuyển quỹ đến', unit: 'đồng', sourceKind: 'FUND_TRANSFER', affectsPnl: false },
+  // CHI
+  { kind: 'CHI', name: 'Chi lương', unit: 'đồng', sourceKind: 'SALARY', affectsPnl: true },
+  { kind: 'CHI', name: 'Chi phí vận hành', unit: 'đồng', sourceKind: 'MANUAL', affectsPnl: true },
+  { kind: 'CHI', name: 'Chi phí văn phòng', unit: 'đồng', sourceKind: 'MANUAL', affectsPnl: true },
+  { kind: 'CHI', name: 'Chi phí khác', unit: 'đồng', sourceKind: 'MANUAL', affectsPnl: true },
+  { kind: 'CHI', name: 'Chi tạm ứng', unit: 'đồng', sourceKind: 'ADVANCE', affectsPnl: false },
+  { kind: 'CHI', name: 'Hoàn cọc máy', unit: 'đồng', sourceKind: 'DEPOSIT_REFUND', affectsPnl: false },
+  { kind: 'CHI', name: 'Chuyển quỹ đi', unit: 'đồng', sourceKind: 'FUND_TRANSFER', affectsPnl: false }
+];
+
+/** Seed idempotent danh mục thu/chi hệ thống. Trả về số danh mục vừa tạo mới. */
+export async function seedSystemCashCategories(db: Db): Promise<number> {
+  let created = 0;
+  for (const c of SYSTEM_CASH_CATEGORIES) {
+    const existing = await db.cashCategory.findFirst({ where: { kind: c.kind, name: c.name }, select: { id: true } });
+    if (existing) continue;
+    await db.cashCategory.create({
+      data: { kind: c.kind, name: c.name, unit: c.unit, periodType: 'NONE', sourceKind: c.sourceKind, affectsPnl: c.affectsPnl, isSystem: true, active: true }
+    });
+    created++;
+  }
+  return created;
+}
+
 let prisma: Db | undefined;
 
 /** Cấu hình kết nối máy chủ PostgreSQL (client nhập ở màn "Cấu hình máy chủ", G10 model A). */
@@ -202,6 +272,31 @@ export async function seedIfEmpty(db: Db): Promise<void> {
       }
     }
   }
+
+  // db-evolution (PHASE H1): cấp quyền thu-chi (CASHCAT_*) cho role CŨ 1 lần/DB (cờ AppSetting).
+  // DB mới → role vừa tạo đã có quyền qua DEFAULT_ROLE_PERMISSIONS → grant=0 (no-op an toàn).
+  {
+    const flag = await db.appSetting.findUnique({ where: { key: CASHCAT_GRANT_FLAG } });
+    if (!flag) {
+      const granted = await grantCashCatPermsToExistingRoles(db);
+      await db.appSetting.upsert({
+        where: { key: CASHCAT_GRANT_FLAG },
+        update: {},
+        create: { key: CASHCAT_GRANT_FLAG, value: new Date().toISOString() }
+      });
+      if (granted > 0) {
+        await writeAudit(db, {
+          actorUserId: null,
+          action: 'CASHCAT_PERMS_GRANTED',
+          targetType: 'System',
+          after: { granted, roles: CASHCAT_PERM_TARGET_ROLES, perms: CASHCAT_PERM_CODES }
+        });
+      }
+    }
+  }
+
+  // PHASE H1: seed danh mục thu/chi hệ thống (idempotent — bỏ qua danh mục đã tồn tại).
+  await seedSystemCashCategories(db);
 
   const adminRole = await db.role.findUniqueOrThrow({ where: { code: 'ADMIN' } });
   const existingAdmin = await db.user.findFirst({
