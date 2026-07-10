@@ -199,8 +199,16 @@ app.whenReady().then(async () => {
     app.exit(code);
     return;
   }
+  // G10.5 stress-race tương tranh THẬT trên Postgres (=20): N client GHI ĐỒNG THỜI (Promise.all)
+  // → guard G10.C phải giữ 1-winner; mã KH/NV không trùng. Đo bằng SELECT count/distinct DB thật.
+  if (process.env['GLB_SELFTEST'] === '20') {
+    const { runConcurrencySelfTest } = await import('./selftest-concurrency.js');
+    const code = await runConcurrencySelfTest();
+    app.exit(code);
+    return;
+  }
   // G10.C concurrency-correctness self-test (guard-logic tất định): conditional transition +
-  // $transaction cho request/approve/reject (=20 dành cho G10.5 concurrency thật trên Postgres).
+  // $transaction cho request/approve/reject (=21, race THẬT ở =20).
   if (process.env['GLB_SELFTEST'] === '21') {
     const { runGuardSelfTest } = await import('./selftest-guard.js');
     const code = await runGuardSelfTest();
