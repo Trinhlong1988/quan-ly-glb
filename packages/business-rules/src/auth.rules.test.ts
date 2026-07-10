@@ -4,6 +4,10 @@ import {
   verifyPassword,
   isBcryptHash,
   decideLogin,
+  hashLevel2,
+  verifyLevel2,
+  reachesLockout,
+  MAX_FAILED_ATTEMPTS,
   type AuthUserRecord
 } from './auth.rules.js';
 import type { UserStatus } from '@glb/shared';
@@ -87,5 +91,34 @@ describe('login decision (IMS_SPEC §5/§11)', () => {
   it('does not reveal status when password is wrong on a locked account', () => {
     const d = decideLogin(rec('LOCKED', hash), 'wrongpass');
     expect(d.reason).toBe('INVALID_CREDENTIALS');
+  });
+});
+
+describe('mật khẩu cấp 2 (Nhóm A #3 — băm 1 chiều cost cao)', () => {
+  it('băm cấp 2 là bcrypt cost 12, không phải plaintext', () => {
+    const h = hashLevel2('Xoa@Vinhvien#2026');
+    expect(h).not.toBe('Xoa@Vinhvien#2026');
+    expect(isBcryptHash(h)).toBe(true);
+    expect(h.startsWith('$2')).toBe(true);
+    expect(h.slice(4, 6)).toBe('12'); // cost 12
+  });
+  it('verify đúng/sai', () => {
+    const h = hashLevel2('Xoa@Vinhvien#2026');
+    expect(verifyLevel2('Xoa@Vinhvien#2026', h)).toBe(true);
+    expect(verifyLevel2('sai', h)).toBe(false);
+  });
+  it('verify với hash null/rỗng → false (không crash)', () => {
+    expect(verifyLevel2('bất kỳ', null)).toBe(false);
+    expect(verifyLevel2('bất kỳ', '')).toBe(false);
+    expect(verifyLevel2('bất kỳ', undefined)).toBe(false);
+  });
+});
+
+describe('ngưỡng khóa (Nhóm A #2)', () => {
+  it(`chưa khóa khi < ${MAX_FAILED_ATTEMPTS}, khóa khi >= ${MAX_FAILED_ATTEMPTS}`, () => {
+    expect(MAX_FAILED_ATTEMPTS).toBe(5);
+    for (let i = 0; i < MAX_FAILED_ATTEMPTS; i++) expect(reachesLockout(i)).toBe(false);
+    expect(reachesLockout(MAX_FAILED_ATTEMPTS)).toBe(true);
+    expect(reachesLockout(MAX_FAILED_ATTEMPTS + 3)).toBe(true);
   });
 });

@@ -31,7 +31,7 @@ export function DossierPage({ user }: { user: AuthUser }): JSX.Element {
   return (
     <div>
       <div className="mb-4">
-        <h2 className="text-lg font-semibold text-slate-800">Quản lý Hồ sơ HKD</h2>
+        <h2 className="text-lg font-semibold text-slate-800">Quản Lý Hồ Sơ HKD</h2>
         <p className="text-sm text-slate-500">Hồ sơ Hộ Kinh Doanh (kèm ảnh ĐKKD + CCCD) · Nguồn hồ sơ (chính sách chiết khấu).</p>
       </div>
       <div className="mb-3 flex items-center gap-1 border-b border-line">

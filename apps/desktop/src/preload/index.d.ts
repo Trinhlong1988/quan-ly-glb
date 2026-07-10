@@ -718,7 +718,11 @@ export interface GlbApi {
   login(username: string, password: string, remember: boolean): Promise<LoginOutcome>;
   me(): Promise<AuthUser | null>;
   logout(): Promise<{ ok: boolean }>;
-  changePassword(currentPassword: string, newPassword: string): Promise<MutationOutcome>;
+  changePassword(currentPassword: string, newPassword: string, confirmPassword?: string): Promise<MutationOutcome>;
+  adminResetPassword(userId: number, newPassword: string): Promise<MutationOutcome>;
+  level2Status(): Promise<{ ok: boolean; hasLevel2?: boolean; error?: string; message?: string }>;
+  setLevel2(level1: string, newLevel2: string, confirmLevel2: string): Promise<MutationOutcome>;
+  resetLevel2(level1: string, oldLevel2: string, newLevel2: string, confirmLevel2: string): Promise<MutationOutcome>;
   validatePassword(pwd: string): Promise<ValidationResult>;
   getRemembered(): Promise<RememberedCreds | null>;
   saveRemembered(username: string, password: string): Promise<{ ok: boolean }>;
@@ -869,6 +873,220 @@ export interface GlbApi {
   trashList(): Promise<{ ok: boolean; data?: TrashRow[]; error?: string; message?: string }>;
   trashRestore(entityType: string, id: number): Promise<MutationOutcome>;
   trashLinkSummary(entityType: string, id: number): Promise<{ ok: boolean; data?: TrashLinkRef[]; error?: string; message?: string }>;
+  trashPurge(entityType: string, id: number, password: string): Promise<MutationOutcome>;
+  trashEmptyAll(level2Password: string): Promise<{ ok: boolean; purged?: number; error?: string; message?: string }>;
+
+  // Dashboard (Nhóm B — KPI realtime + tăng trưởng)
+  dashboardStats(): Promise<{ ok: boolean; data?: DashboardStats; error?: string; message?: string }>;
+
+  // Hòm thư nội bộ + thông báo bảo mật (Nhóm A #2 / Nhóm C #7)
+  messageInbox(): Promise<{ ok: boolean; data?: MessageDto[]; error?: string; message?: string }>;
+  messageUnreadCount(): Promise<{ ok: boolean; data?: number; error?: string; message?: string }>;
+  messageMarkRead(id: number): Promise<MutationOutcome>;
+  messageMarkAllRead(): Promise<MutationOutcome>;
+  messageSend(input: { recipientId: number; subject: string; body: string }): Promise<MutationOutcome>;
+
+  // Doanh thu & Công nợ (Nhóm B)
+  transactionList(filter: TransactionFilter): Promise<ListTransactionsResult>;
+  transactionCreate(input: CreateTransactionInput): Promise<MutationOutcome>;
+  transactionUpdate(id: number, input: UpdateTransactionInput): Promise<MutationOutcome>;
+  transactionDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
+  transactionSettle(ids: number[], settled: boolean): Promise<{ ok: boolean; changed?: number; error?: string; message?: string }>;
+  debtSummary(filter: TransactionFilter): Promise<{ ok: boolean; data?: DebtSummary; error?: string; message?: string }>;
+
+  // Bảo trì & Bộ nhớ (Nhóm E — Storage-Guard)
+  storageStatus(): Promise<{ ok: boolean; data?: StorageStatus; error?: string; message?: string }>;
+  storageCleanup(opts: { clearHistory?: boolean; purgeTrash?: boolean; password: string }): Promise<{ ok: boolean; error?: string; message?: string; backupFile?: string; auditDeleted?: number; trashDeleted?: number }>;
+  storageUpdateConfig(cfg: StorageConfigInput): Promise<{ ok: boolean; error?: string; message?: string }>;
+
+  // Bảo trì: quét sức khỏe toàn hệ thống + lịch sử bảo trì
+  healthScan(opts: { autoFix?: boolean }): Promise<{ ok: boolean; error?: string; message?: string; data?: ScanResult }>;
+  healthRuns(limit?: number): Promise<{ ok: boolean; error?: string; message?: string; data?: MaintenanceRunDto[] }>;
+  healthRun(id: number): Promise<{ ok: boolean; error?: string; message?: string; data?: MaintenanceRunDto }>;
+}
+
+export type HealthSeverity = 'ERROR' | 'WARN' | 'INFO';
+export interface HealthFinding {
+  code: string;
+  severity: HealthSeverity;
+  title: string;
+  count: number;
+  detail: string;
+  suggestion: string;
+  autoFixable: boolean;
+  sampleIds?: number[];
+}
+export interface ScanResult {
+  runId: number;
+  status: 'OK' | 'WARN' | 'ERROR';
+  checksTotal: number;
+  issuesFound: number;
+  errorCount: number;
+  warnCount: number;
+  autoFixed: number;
+  durationMs: number;
+  findings: HealthFinding[];
+}
+export interface MaintenanceRunDto {
+  id: number;
+  kind: string;
+  status: string;
+  checksTotal: number;
+  issuesFound: number;
+  errorCount: number;
+  warnCount: number;
+  autoFixed: number;
+  vacuumed: boolean;
+  auditDeleted: number;
+  trashDeleted: number;
+  durationMs: number;
+  triggeredByName: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+  findings?: HealthFinding[];
+}
+
+export interface StorageConfigInput {
+  thresholdPct?: number;
+  auditRetentionDays?: number;
+  trashRetentionDays?: number;
+  backupIntervalHours?: number;
+  maintenanceDayOfWeek?: number;
+  maintenanceHour?: number;
+  maintenanceEnabled?: boolean;
+  autoPurgeWeekly?: boolean;
+}
+
+export interface StorageStatus {
+  dbBytes: number;
+  dbPath: string;
+  diskTotalBytes: number | null;
+  diskFreeBytes: number | null;
+  diskUsedPct: number | null;
+  thresholdPct: number;
+  over: boolean;
+  lastBackupAt: string | null;
+  lastAlertAt: string | null;
+  lastMaintenanceAt: string | null;
+  backupIntervalHours: number;
+  maintenanceEnabled: boolean;
+  maintenanceDayOfWeek: number;
+  maintenanceHour: number;
+  autoPurgeWeekly: boolean;
+  cleanable: {
+    auditOld: number;
+    trashOld: number;
+    auditRetentionDays: number;
+    trashRetentionDays: number;
+  };
+}
+
+export interface TransactionDto {
+  id: number;
+  code: string | null;
+  tidId: number;
+  tid: string | null;
+  mid: string | null;
+  hkdName: string | null;
+  bankId: number | null;
+  bankName: string | null;
+  partnerId: number | null;
+  partnerName: string | null;
+  customerId: number | null;
+  customerName: string | null;
+  cardTypeId: number | null;
+  cardTypeName: string | null;
+  amount: number;
+  partnerMarginPct: number;
+  sellMarginPct: number;
+  revenuePartner: number;
+  revenueSell: number;
+  revenueAmount: number;
+  settled: boolean;
+  settledAt: string | null;
+  txnDate: string;
+  note: string | null;
+  createdBy: number | null;
+  createdByName: string | null;
+  createdAt: string;
+}
+
+export interface TransactionFilter {
+  tidId?: number;
+  mid?: string;
+  hkdName?: string;
+  partnerId?: number;
+  bankId?: number;
+  customerId?: number;
+  cardTypeId?: number;
+  dateFrom?: string;
+  dateTo?: string;
+  settled?: boolean;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface RevenueSummary {
+  count: number;
+  totalAmount: number;
+  totalRevenuePartner: number;
+  totalRevenueSell: number;
+  totalRevenue: number;
+}
+
+export interface DebtSummary {
+  count: number;
+  debtPartner: number;
+  debtSell: number;
+  debtTotal: number;
+}
+
+export interface ListTransactionsResult {
+  ok: boolean;
+  error?: string;
+  message?: string;
+  data?: TransactionDto[];
+  total?: number;
+  page?: number;
+  pageSize?: number;
+  summary?: RevenueSummary;
+}
+
+export interface CreateTransactionInput {
+  tidId: number;
+  cardTypeId: number;
+  amount: number;
+  txnDate: string;
+  customerId?: number | null;
+  note?: string;
+}
+
+export interface UpdateTransactionInput {
+  cardTypeId?: number;
+  amount?: number;
+  txnDate?: string;
+  customerId?: number | null;
+  note?: string;
+}
+
+export interface DashboardStats {
+  counts: { tids: number; customers: number; posDevices: number; dossiers: number; users: number; banks: number; partners: number };
+  tidsByBank: { label: string; count: number }[];
+  posByStatus: { label: string; count: number }[];
+  monthly: { month: string; tids: number; customers: number }[];
+}
+
+export interface MessageDto {
+  id: number;
+  kind: string;
+  category: string | null;
+  subject: string;
+  body: string;
+  senderId: number | null;
+  senderName: string | null;
+  recipientId: number;
+  readAt: string | null;
+  createdAt: string;
 }
 
 export interface TrashRow {
@@ -878,6 +1096,8 @@ export interface TrashRow {
   code: string | null;
   label: string;
   deletedAt: string;
+  deletedBy: number | null;
+  deletedByName: string | null;
 }
 
 export interface TrashLinkRef {

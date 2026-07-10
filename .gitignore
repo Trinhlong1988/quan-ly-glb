@@ -42,3 +42,8 @@ coverage/
 
 # ts build info
 *.tsbuildinfo
+
+# DB artifacts / backups (không commit binary DB)
+.backup_phase1/
+*.db.restored
+*.db-journal

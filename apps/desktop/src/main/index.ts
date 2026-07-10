@@ -129,13 +129,82 @@ app.whenReady().then(async () => {
     app.exit(code);
     return;
   }
+  // Nhóm A Bảo mật & tài khoản self-test: khóa 5 lần + reset đếm + đổi/đặt lại mật khẩu + hòm thư.
+  if (process.env['GLB_SELFTEST'] === '11') {
+    const { runNhomASelfTest } = await import('./selftest-nhoma.js');
+    const code = await runNhomASelfTest();
+    app.exit(code);
+    return;
+  }
+  // Nhóm A #3 self-test: pass cấp 2 (đặt/đổi/khóa) + xóa vĩnh viễn + dọn sạch thùng rác.
+  if (process.env['GLB_SELFTEST'] === '12') {
+    const { runNhomA2SelfTest } = await import('./selftest-nhoma2.js');
+    const code = await runNhomA2SelfTest();
+    app.exit(code);
+    return;
+  }
+  // Nhóm A #4 self-test: thùng rác per-user (deletedBy scope) + tên người xóa.
+  if (process.env['GLB_SELFTEST'] === '13') {
+    const { runNhomA3SelfTest } = await import('./selftest-nhoma3.js');
+    const code = await runNhomA3SelfTest();
+    app.exit(code);
+    return;
+  }
+  // Nhóm B self-test: dashboard stats (KPI + tăng trưởng + bộ đếm theo chiều).
+  if (process.env['GLB_SELFTEST'] === '14') {
+    const { runDashboardSelfTest } = await import('./selftest-dashboard.js');
+    const code = await runDashboardSelfTest();
+    app.exit(code);
+    return;
+  }
+  if (process.env['GLB_SELFTEST'] === '15') {
+    const { runRevenueSelfTest } = await import('./selftest-revenue.js');
+    const code = await runRevenueSelfTest();
+    app.exit(code);
+    return;
+  }
+  if (process.env['GLB_SELFTEST'] === '16') {
+    const { runStorageSelfTest } = await import('./selftest-storage.js');
+    const code = await runStorageSelfTest();
+    app.exit(code);
+    return;
+  }
+  if (process.env['GLB_SELFTEST'] === '17') {
+    const { runHealthScanSelfTest } = await import('./selftest-healthscan.js');
+    const code = await runHealthScanSelfTest();
+    app.exit(code);
+    return;
+  }
 
   await createWindow();
+  startHousekeeping();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
+
+// Storage-Guard (Nhóm E): backup định kỳ 1 lần/ngày + kiểm tra ngưỡng bộ nhớ mỗi giờ.
+// Chạy 1 lần khi khởi động, sau đó lặp mỗi giờ. Lỗi được nuốt để không làm sập app.
+let housekeepingTimer: ReturnType<typeof setInterval> | undefined;
+function startHousekeeping(): void {
+  const tick = async (): Promise<void> => {
+    try {
+      const { getDb } = await import('./db.js');
+      const { systemBackupIfDue, systemStorageCheck, systemWeeklyMaintenanceIfDue } = await import('./storage-service.js');
+      const db = getDb();
+      await systemBackupIfDue(db);
+      await systemWeeklyMaintenanceIfDue(db);
+      await systemStorageCheck(db);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[housekeeping] tick failed', err);
+    }
+  };
+  void tick();
+  if (housekeepingTimer) clearInterval(housekeepingTimer);
+  housekeepingTimer = setInterval(() => void tick(), 60 * 60 * 1000);
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();

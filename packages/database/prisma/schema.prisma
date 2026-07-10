@@ -24,6 +24,10 @@ model User {
   passwordHash        String    @map("password_hash")
   status              String    @default("ACTIVE") // ACTIVE|PENDING|LOCKED|DISABLED|DELETED
   forceChangePassword Boolean   @default(false) @map("force_change_password")
+  failedAttempts      Int       @default(0) @map("failed_attempts") // đếm mọi lần xác thực SAI (đăng nhập/đổi mật khẩu/pass cấp 2). ≥5 → tự khóa
+  lockedAt            DateTime? @map("locked_at") // thời điểm bị tự khóa do sai quá số lần
+  level2Hash          String?   @map("level2_hash") // băm bcrypt (cost cao) mật khẩu CẤP 2 — chỉ Admin/Manager đặt; dùng cho xóa vĩnh viễn
+  level2SetAt         DateTime? @map("level2_set_at")
   createdBy           Int?      @map("created_by")
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
@@ -34,6 +38,24 @@ model User {
   sessions  LoginSession[]
 
   @@map("users")
+}
+
+// Thư nội bộ + thông báo hệ thống (hòm thư dùng chung).
+// kind=SYSTEM (thông báo bảo mật, senderId null) | USER (thư người dùng gửi nhau — Nhóm C).
+model Message {
+  id          Int       @id @default(autoincrement())
+  kind        String    @default("USER") // USER | SYSTEM
+  category    String? // SECURITY_LOCK | SECURITY_RESET | ... (phân loại thông báo hệ thống)
+  subject     String
+  body        String
+  senderId    Int?      @map("sender_id") // null = hệ thống
+  recipientId Int       @map("recipient_id")
+  readAt      DateTime? @map("read_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  @@index([recipientId, deletedAt])
+  @@map("messages")
 }
 
 model Role {
@@ -155,6 +177,7 @@ model Agent {
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
+  deletedBy Int?      @map("deleted_by")
 
   @@map("agents")
 }
@@ -174,6 +197,7 @@ model Customer {
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
+  deletedBy Int?      @map("deleted_by")
 
   @@map("customers")
 }
@@ -198,35 +222,71 @@ model PosDevice {
 
 // Terminal ID (§A2).
 model Tid {
-  id          Int       @id @default(autoincrement())
-  tid         String    @unique
-  mid         String?
-  bank        String? // legacy text (G-POS.1) — giữ tương thích
-  status      String    @default("UNASSIGNED") // vòng đời vận hành: UNASSIGNED|ACTIVE|DEAD|CLOSED|RECALLED
-  posSerial   String?   @map("pos_serial")
-  customerId  Int?      @map("customer_id")
-  agentId     Int?      @map("agent_id")
-  openedAt    DateTime? @map("opened_at")
-  deliveredAt DateTime? @map("delivered_at")
-  closedAt    DateTime? @map("closed_at")
+  id               Int       @id @default(autoincrement())
+  tid              String    @unique
+  mid              String?
+  bank             String? // legacy text (G-POS.1) — giữ tương thích
+  status           String    @default("UNASSIGNED") // vòng đời vận hành: UNASSIGNED|ACTIVE|DEAD|CLOSED|RECALLED
+  posSerial        String?   @map("pos_serial")
+  customerId       Int?      @map("customer_id")
+  agentId          Int?      @map("agent_id")
+  openedAt         DateTime? @map("opened_at")
+  deliveredAt      DateTime? @map("delivered_at")
+  closedAt         DateTime? @map("closed_at")
   // ── G-CFG.6 §9 Cấu hình TID (Cách 1: gộp thông tin thương mại vào chính bảng tids) ──
-  bankId          Int?      @map("bank_id") // Ngân hàng (chọn từ danh sách, thay text `bank`)
-  partnerId       Int?      @map("partner_id") // Đối tác → tra biểu phí
-  hkdName         String?   @map("hkd_name") // Tên Hộ Kinh Doanh của máy POS
-  receiveAccountId Int?     @map("receive_account_id") // TK nhận tiền (§8)
-  issuedAt        DateTime? @map("issued_at") // Ngày cấp TID (§9)
-  configStatusId  Int?      @map("config_status_id") // Trạng thái TID cấu hình (§9a)
-  dossierSourceId Int?      @map("dossier_source_id") // Nguồn hồ sơ (§10a)
-  note            String?
-  createdBy       Int?      @map("created_by")
-  updatedBy       Int?      @map("updated_by")
-  deletedAt       DateTime? @map("deleted_at") // soft-delete cho cấu hình TID (§9b)
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  bankId           Int?      @map("bank_id") // Ngân hàng (chọn từ danh sách, thay text `bank`)
+  partnerId        Int?      @map("partner_id") // Đối tác → tra biểu phí
+  hkdName          String?   @map("hkd_name") // Tên Hộ Kinh Doanh của máy POS
+  receiveAccountId Int?      @map("receive_account_id") // TK nhận tiền (§8)
+  issuedAt         DateTime? @map("issued_at") // Ngày cấp TID (§9)
+  configStatusId   Int?      @map("config_status_id") // Trạng thái TID cấu hình (§9a)
+  dossierSourceId  Int?      @map("dossier_source_id") // Nguồn hồ sơ (§10a)
+  note             String?
+  createdBy        Int?      @map("created_by")
+  updatedBy        Int?      @map("updated_by")
+  deletedAt        DateTime? @map("deleted_at") // soft-delete cho cấu hình TID (§9b)
+  deletedBy        Int?      @map("deleted_by")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
 
   @@index([partnerId])
   @@index([bankId])
   @@map("tids")
+}
+
+// Giao dịch (Nhóm B §Doanh thu) — mỗi lần quẹt/rút qua 1 TID cho 1 khách.
+// Doanh thu = BÓC 2 khoản chênh cộng gộp (LEAD 9/7):
+//   • CL_NCC (chênh đối tác) = phí mua − phí cài máy  → đối soát/thu từ đối tác
+//   • CL_KH  (chênh bán)     = phí bán − phí cài máy  → thu từ khách
+//   Doanh thu = số tiền × (CL_NCC% + CL_KH%). Cả 2 khoản = CÔNG NỢ thu về.
+// Phí lưu snapshot (×1000) để không đổi khi biểu phí đổi. Lọc TID/MID/HKD/khách dẫn xuất từ tidId.
+model Transaction {
+  id                 Int       @id @default(autoincrement())
+  code               String?   @unique // GD00001…
+  tidId              Int       @map("tid_id")
+  customerId         Int?      @map("customer_id")
+  cardTypeId         Int?      @map("card_type_id")
+  amount             Int // số tiền giao dịch (VND)
+  partnerMarginMilli Int       @default(0) @map("partner_margin_milli") // CL_NCC = phiMua−phiCaiMay (×1000)
+  sellMarginMilli    Int       @default(0) @map("sell_margin_milli") // CL_KH = phiBan−phiCaiMay (×1000)
+  revenuePartner     Int       @default(0) @map("revenue_partner") // đối soát đối tác (VND)
+  revenueSell        Int       @default(0) @map("revenue_sell") // thu khách (VND)
+  revenueAmount      Int       @default(0) @map("revenue_amount") // tổng doanh thu = partner + sell (VND)
+  settled            Boolean   @default(false) // đã thu/đối soát chưa (cho công nợ)
+  settledAt          DateTime? @map("settled_at")
+  txnDate            DateTime  @map("txn_date")
+  note               String?
+  createdBy          Int?      @map("created_by")
+  updatedBy          Int?      @map("updated_by")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  deletedAt          DateTime? @map("deleted_at")
+  deletedBy          Int?      @map("deleted_by")
+
+  @@index([tidId])
+  @@index([customerId])
+  @@index([txnDate])
+  @@map("transactions")
 }
 
 // Trạng thái TID cấu hình (§9a) — ví dụ: mới cấp, thu hồi, đổi cho đối tác. Khác status vận hành.
@@ -238,6 +298,7 @@ model TidConfigStatus {
   updatedBy Int?      @map("updated_by")
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
+  deletedBy Int?      @map("deleted_by")
 
   @@map("tid_config_statuses")
 }
@@ -306,6 +367,7 @@ model Bank {
   updatedBy Int?      @map("updated_by")
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
+  deletedBy Int?      @map("deleted_by")
 
   @@map("banks")
 }
@@ -321,6 +383,7 @@ model CardType {
   updatedBy Int?      @map("updated_by")
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
+  deletedBy Int?      @map("deleted_by")
 
   @@index([bankId])
   @@map("card_types")
@@ -339,6 +402,7 @@ model Partner {
   updatedBy     Int?      @map("updated_by")
   updatedAt     DateTime  @updatedAt @map("updated_at")
   deletedAt     DateTime? @map("deleted_at")
+  deletedBy     Int?      @map("deleted_by")
 
   @@map("partners")
 }
@@ -380,6 +444,7 @@ model Supplier {
   updatedBy     Int?      @map("updated_by")
   updatedAt     DateTime  @updatedAt @map("updated_at")
   deletedAt     DateTime? @map("deleted_at")
+  deletedBy     Int?      @map("deleted_by")
 
   @@map("suppliers")
 }
@@ -394,6 +459,7 @@ model PosModel {
   updatedBy Int?      @map("updated_by")
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
+  deletedBy Int?      @map("deleted_by")
 
   @@map("pos_models")
 }
@@ -407,6 +473,7 @@ model PosIntakeStatus {
   updatedBy Int?      @map("updated_by")
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
+  deletedBy Int?      @map("deleted_by")
 
   @@map("pos_intake_statuses")
 }
@@ -427,6 +494,7 @@ model PosIntake {
   updatedBy      Int?      @map("updated_by")
   updatedAt      DateTime  @updatedAt @map("updated_at")
   deletedAt      DateTime? @map("deleted_at")
+  deletedBy      Int?      @map("deleted_by")
 
   @@index([posModelId])
   @@index([supplierId])
@@ -447,6 +515,7 @@ model FeeType {
   updatedBy Int?      @map("updated_by")
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
+  deletedBy Int?      @map("deleted_by")
 
   @@map("fee_types")
 }
@@ -467,6 +536,7 @@ model FeeRate {
   updatedBy  Int?      @map("updated_by")
   updatedAt  DateTime  @updatedAt @map("updated_at")
   deletedAt  DateTime? @map("deleted_at")
+  deletedBy  Int?      @map("deleted_by")
 
   @@index([partnerId])
   @@index([cardTypeId])
@@ -487,6 +557,7 @@ model ReceiveAccountSource {
   updatedBy Int?      @map("updated_by")
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
+  deletedBy Int?      @map("deleted_by")
 
   @@map("receive_account_sources")
 }
@@ -517,6 +588,7 @@ model ReceiveAccount {
   updatedBy      Int?      @map("updated_by")
   updatedAt      DateTime  @updatedAt @map("updated_at")
   deletedAt      DateTime? @map("deleted_at")
+  deletedBy      Int?      @map("deleted_by")
 
   @@index([sourceId])
   @@index([bankId])
@@ -539,6 +611,7 @@ model DossierSource {
   updatedBy    Int?      @map("updated_by")
   updatedAt    DateTime  @updatedAt @map("updated_at")
   deletedAt    DateTime? @map("deleted_at")
+  deletedBy    Int?      @map("deleted_by")
 
   @@map("dossier_sources")
 }
@@ -576,7 +649,33 @@ model Dossier {
   updatedBy        Int?      @map("updated_by")
   updatedAt        DateTime  @updatedAt @map("updated_at")
   deletedAt        DateTime? @map("deleted_at")
+  deletedBy        Int?      @map("deleted_by")
 
   @@index([sourceId])
   @@map("dossiers")
+}
+
+// Lịch sử BẢO TRÌ / quét sức khỏe hệ thống (Nhóm E, LEAD 9/7). Mỗi lần quét lưu 1 dòng +
+// báo cáo JSON (danh sách phát hiện lỗi/bug + đề xuất fix). Giữ vết để đối chiếu về sau.
+model MaintenanceRun {
+  id           Int       @id @default(autoincrement())
+  kind         String    @default("MANUAL") // MANUAL | SCHEDULED
+  status       String    @default("OK") // OK | WARN | ERROR
+  checksTotal  Int       @default(0) @map("checks_total")
+  issuesFound  Int       @default(0) @map("issues_found")
+  errorCount   Int       @default(0) @map("error_count")
+  warnCount    Int       @default(0) @map("warn_count")
+  reportJson   String?   @map("report_json") // mảng findings {code,severity,title,count,detail,suggestion}
+  backupFile   String?   @map("backup_file")
+  auditDeleted Int       @default(0) @map("audit_deleted")
+  trashDeleted Int       @default(0) @map("trash_deleted")
+  vacuumed     Boolean   @default(false)
+  autoFixed    Int       @default(0) @map("auto_fixed")
+  durationMs   Int       @default(0) @map("duration_ms")
+  triggeredBy  Int?      @map("triggered_by")
+  startedAt    DateTime  @default(now()) @map("started_at")
+  finishedAt   DateTime? @map("finished_at")
+
+  @@index([startedAt])
+  @@map("maintenance_runs")
 }

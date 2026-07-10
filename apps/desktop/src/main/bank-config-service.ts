@@ -187,7 +187,7 @@ export async function deleteBanks(ids: number[], password: string): Promise<Muta
   for (const id of ids) {
     const row = await db.bank.findUnique({ where: { id } });
     if (!row || row.deletedAt) continue;
-    await db.bank.update({ where: { id }, data: { deletedAt: new Date(), updatedBy: user.id } });
+    await db.bank.update({ where: { id }, data: { deletedAt: new Date(), updatedBy: user.id, deletedBy: user.id } });
     await writeAudit(db, {
       actorUserId: user.id,
       action: 'BANK_DELETED',
@@ -336,7 +336,7 @@ export async function deleteCardTypes(ids: number[], password: string): Promise<
   for (const id of ids) {
     const row = await db.cardType.findUnique({ where: { id } });
     if (!row || row.deletedAt) continue;
-    await db.cardType.update({ where: { id }, data: { deletedAt: new Date(), updatedBy: user.id } });
+    await db.cardType.update({ where: { id }, data: { deletedAt: new Date(), updatedBy: user.id, deletedBy: user.id } });
     await writeAudit(db, {
       actorUserId: user.id,
       action: 'CARD_TYPE_DELETED',
@@ -521,7 +521,7 @@ export async function deletePartners(ids: number[], password: string): Promise<M
   for (const id of ids) {
     const row = await db.partner.findUnique({ where: { id } });
     if (!row || row.deletedAt) continue;
-    await db.partner.update({ where: { id }, data: { deletedAt: new Date(), updatedBy: user.id } });
+    await db.partner.update({ where: { id }, data: { deletedAt: new Date(), updatedBy: user.id, deletedBy: user.id } });
     // Hủy các liên kết ngân hàng của đối tác (soft) — audit riêng.
     await db.partnerBank.updateMany({ where: { partnerId: id, deletedAt: null }, data: { deletedAt: new Date(), updatedBy: user.id } });
     await writeAudit(db, {

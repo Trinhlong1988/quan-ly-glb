@@ -56,9 +56,25 @@ export const PERMISSIONS: PermissionDef[] = [
   // ── G-CFG.6 (§9) — Cấu hình TID ──
   { code: 'CONFIG_TID_VIEW', name: 'Xem cấu hình TID (trạng thái + TID)', group: 'Cấu hình TID' },
   { code: 'CONFIG_TID_MANAGE', name: 'Quản lý cấu hình TID (trạng thái + TID)', group: 'Cấu hình TID' },
-  // ── Thùng rác (R_TRASH_RESTORE) — chỉ ADMIN ──
-  { code: 'TRASH_VIEW', name: 'Xem thùng rác', group: 'Thùng rác' },
-  { code: 'TRASH_RESTORE', name: 'Phục hồi dữ liệu đã xóa', group: 'Thùng rác' }
+  // ── Thùng rác (R_TRASH_RESTORE) ──
+  { code: 'TRASH_VIEW', name: 'Xem thùng rác (của mình)', group: 'Thùng rác' },
+  { code: 'TRASH_VIEW_ALL', name: 'Xem thùng rác TỔNG (mọi người dùng)', group: 'Thùng rác' },
+  { code: 'TRASH_RESTORE', name: 'Phục hồi dữ liệu đã xóa', group: 'Thùng rác' },
+  { code: 'TRASH_PURGE', name: 'Xóa vĩnh viễn / dọn sạch thùng rác', group: 'Thùng rác' },
+  // ── Nhóm A — Bảo mật & tài khoản ──
+  { code: 'USER_RESET_PASSWORD', name: 'Đặt lại mật khẩu cho user khác', group: 'USER' },
+  { code: 'LEVEL2_MANAGE', name: 'Đặt / đổi mật khẩu cấp 2 (xóa vĩnh viễn)', group: 'Bảo mật' },
+  // ── Nhóm C — Hòm thư nội bộ ──
+  { code: 'MESSAGE_VIEW', name: 'Xem hòm thư (thư & thông báo của mình)', group: 'Hòm thư' },
+  { code: 'MESSAGE_SEND', name: 'Gửi thư nội bộ cho người dùng khác', group: 'Hòm thư' },
+  // ── Nhóm B — Doanh thu & Công nợ ──
+  { code: 'REVENUE_VIEW', name: 'Xem doanh thu & giao dịch', group: 'Doanh thu & Công nợ' },
+  { code: 'REVENUE_MANAGE', name: 'Ghi nhận / sửa / xóa giao dịch doanh thu', group: 'Doanh thu & Công nợ' },
+  { code: 'DEBT_VIEW', name: 'Xem công nợ thu về', group: 'Doanh thu & Công nợ' },
+  { code: 'DEBT_SETTLE', name: 'Đối soát / đánh dấu đã thu công nợ', group: 'Doanh thu & Công nợ' },
+  // ── Nhóm E — Bảo trì & Bộ nhớ (chống tràn, dọn dẹp, backup định kỳ) ──
+  { code: 'STORAGE_VIEW', name: 'Xem tình trạng bộ nhớ & bảo trì', group: 'Bảo trì hệ thống' },
+  { code: 'STORAGE_CLEANUP', name: 'Dọn dẹp bộ nhớ (lịch sử + thùng rác) & backup thủ công', group: 'Bảo trì hệ thống' }
 ];
 
 export const PERMISSION_CODES = PERMISSIONS.map((p) => p.code);
@@ -102,16 +118,38 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'CONFIG_DOSSIER_MANAGE',
     // G-CFG.6: managers quản lý cấu hình TID.
     'CONFIG_TID_VIEW',
-    'CONFIG_TID_MANAGE'
+    'CONFIG_TID_MANAGE',
+    // Nhóm A: managers đặt lại mật khẩu, đặt pass cấp 2, xem & dọn thùng rác tổng.
+    'USER_RESET_PASSWORD',
+    'LEVEL2_MANAGE',
+    'TRASH_VIEW',
+    'TRASH_VIEW_ALL',
+    'TRASH_PURGE',
+    // Nhóm B: managers xem/ghi nhận doanh thu, theo dõi & đối soát công nợ.
+    'REVENUE_VIEW',
+    'REVENUE_MANAGE',
+    'DEBT_VIEW',
+    'DEBT_SETTLE',
+    // Nhóm E: managers xem tình trạng bộ nhớ & dọn dẹp bảo trì.
+    'STORAGE_VIEW',
+    'STORAGE_CLEANUP'
   ],
   D_MANAGER: ['DASHBOARD_VIEW', 'USER_READ', 'ROLE_READ', 'CUSTOMER_VIEW', 'POS_VIEW', 'TID_VIEW', 'CONFIG_BANK_VIEW'],
-  ACCOUNTANT: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW', 'CONFIG_BANK_VIEW', 'CONFIG_FEE_VIEW', 'CONFIG_FEE_MANAGE', 'CONFIG_RCV_ACCT_VIEW', 'CONFIG_RCV_ACCT_MANAGE', 'CONFIG_DOSSIER_VIEW', 'CONFIG_DOSSIER_MANAGE'],
+  ACCOUNTANT: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW', 'CONFIG_BANK_VIEW', 'CONFIG_FEE_VIEW', 'CONFIG_FEE_MANAGE', 'CONFIG_RCV_ACCT_VIEW', 'CONFIG_RCV_ACCT_MANAGE', 'CONFIG_DOSSIER_VIEW', 'CONFIG_DOSSIER_MANAGE', 'REVENUE_VIEW', 'REVENUE_MANAGE', 'DEBT_VIEW', 'DEBT_SETTLE'],
   TECHNICIAN: ['DASHBOARD_VIEW', 'POS_VIEW'],
   SUPPORT: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW'],
   WAREHOUSE: ['DASHBOARD_VIEW', 'POS_VIEW', 'TID_VIEW', 'CONFIG_POS_SUPPLY_VIEW', 'CONFIG_POS_SUPPLY_MANAGE', 'CONFIG_TID_VIEW', 'CONFIG_TID_MANAGE'],
   SALES: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW', 'CUSTOMER_CREATE'],
   CUSTOMER: []
 };
+
+// Hòm thư + thùng rác cá nhân: MỌI người dùng đều có hòm thư của mình, gửi thư cho nhau,
+// và có thùng rác riêng (chỉ thấy đồ MÌNH xóa; Admin/Manager thấy TỔNG qua TRASH_VIEW_ALL).
+for (const roleCode of Object.keys(DEFAULT_ROLE_PERMISSIONS)) {
+  for (const code of ['MESSAGE_VIEW', 'MESSAGE_SEND', 'TRASH_VIEW']) {
+    if (!DEFAULT_ROLE_PERMISSIONS[roleCode].includes(code)) DEFAULT_ROLE_PERMISSIONS[roleCode].push(code);
+  }
+}
 
 /** THE permission check. Use everywhere — never compare role names directly. */
 export function hasPermission(user: Pick<AuthUser, 'permissions'> | null | undefined, code: string): boolean {

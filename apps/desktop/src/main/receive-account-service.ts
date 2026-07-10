@@ -139,7 +139,7 @@ export async function deleteSources(ids: number[], password: string): Promise<Mu
   for (const id of ids) {
     const row = await db.receiveAccountSource.findUnique({ where: { id } });
     if (!row || row.deletedAt) continue;
-    await db.receiveAccountSource.update({ where: { id }, data: { deletedAt: new Date(), updatedBy: user.id } });
+    await db.receiveAccountSource.update({ where: { id }, data: { deletedAt: new Date(), updatedBy: user.id, deletedBy: user.id } });
     await writeAudit(db, { actorUserId: user.id, action: 'RCV_ACCT_SOURCE_DELETED', targetType: 'ReceiveAccountSource', targetId: String(id), before: auditSnapshot({ name: row.name }) });
     deleted++;
   }
@@ -371,7 +371,7 @@ export async function deleteAccounts(ids: number[], password: string): Promise<M
   for (const id of ids) {
     const row = await db.receiveAccount.findUnique({ where: { id } });
     if (!row || row.deletedAt) continue;
-    await db.receiveAccount.update({ where: { id }, data: { deletedAt: new Date(), updatedBy: user.id } });
+    await db.receiveAccount.update({ where: { id }, data: { deletedAt: new Date(), updatedBy: user.id, deletedBy: user.id } });
     await writeAudit(db, { actorUserId: user.id, action: 'RCV_ACCT_DELETED', targetType: 'ReceiveAccount', targetId: String(id), before: auditSnapshot({ accountName: row.accountName, accountNumber: row.accountNumber }) });
     deleted++;
   }

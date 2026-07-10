@@ -102,6 +102,26 @@ async function writeBackupArchive(
   return { filePath, size: zip.length, checksum };
 }
 
+/**
+ * Backup do HỆ THỐNG khởi tạo (scheduler ngày / trước khi dọn dẹp) — KHÔNG cần phiên đăng nhập.
+ * Dùng cho auto-backup định kỳ & "backup trước khi xóa" của Storage-Guard. Trả về đường dẫn + size.
+ */
+export async function systemBackup(db: import('@glb/database').Db, note: string): Promise<{ ok: boolean; filePath?: string; size?: number; error?: string }> {
+  try {
+    const out = await writeBackupArchive(db, 'system', note);
+    await writeAudit(db, {
+      actorUserId: null,
+      action: 'AUTO_BACKUP',
+      targetType: 'System',
+      targetId: basename(out.filePath),
+      after: { file: basename(out.filePath), size: out.size, checksum: out.checksum, note }
+    });
+    return { ok: true, filePath: out.filePath, size: out.size };
+  } catch (err) {
+    return { ok: false, error: (err as Error).message };
+  }
+}
+
 /** List recorded backups (BACKUP_CREATE gate is enough to view them). */
 export async function listBackups(): Promise<{ ok: boolean; data?: BackupDto[]; error?: string; message?: string }> {
   const g = await requirePermission('BACKUP_CREATE', { action: 'BACKUP_LIST' });

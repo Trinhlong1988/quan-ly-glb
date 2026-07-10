@@ -162,7 +162,7 @@ export async function deleteSources(ids: number[], password: string): Promise<Mu
   for (const id of ids) {
     const row = await db.dossierSource.findUnique({ where: { id } });
     if (!row || row.deletedAt) continue;
-    await db.dossierSource.update({ where: { id }, data: { deletedAt: new Date(), updatedBy: user.id } });
+    await db.dossierSource.update({ where: { id }, data: { deletedAt: new Date(), updatedBy: user.id, deletedBy: user.id } });
     await writeAudit(db, { actorUserId: user.id, action: 'DOSSIER_SOURCE_DELETED', targetType: 'DossierSource', targetId: String(id), before: auditSnapshot({ code: row.code }) });
     deleted++;
   }
@@ -418,7 +418,7 @@ export async function deleteDossiers(ids: number[], password: string): Promise<M
   for (const id of ids) {
     const row = await db.dossier.findUnique({ where: { id } });
     if (!row || row.deletedAt) continue;
-    await db.dossier.update({ where: { id }, data: { deletedAt: new Date(), updatedBy: user.id } });
+    await db.dossier.update({ where: { id }, data: { deletedAt: new Date(), updatedBy: user.id, deletedBy: user.id } });
     await writeAudit(db, { actorUserId: user.id, action: 'DOSSIER_DELETED', targetType: 'Dossier', targetId: String(id), before: auditSnapshot({ hkdName: row.hkdName, ownerName: row.ownerName }) });
     deleted++;
   }

@@ -1,7 +1,7 @@
 // E4 Thùng rác — self-test tích hợp 50 ĐÚNG + 50 SAI (R_LINK_VERIFY, GLB_SELFTEST=6).
 // Chạy trên DB throwaway (GLB_DB_URL). Chứng minh: soft-delete → vào thùng rác → phục hồi →
 // biến mất khỏi thùng rác; cảnh báo liên kết đúng số; và mọi thao tác sai bị chặn đúng lý do.
-import { login, logout } from './auth-service.js';
+import { login, logout, setLevel2Password } from './auth-service.js';
 import { getDb } from './db.js';
 import * as userSvc from './user-service.js';
 import * as trash from './trash-service.js';
@@ -109,20 +109,51 @@ export async function runTrashSelfTest(): Promise<number> {
     const r = await trash.linkSummary(t, 1);
     ok(`SAI linkSummary loại "${t}" → BAD_ENTITY`, r.ok === false && r.error === 'BAD_ENTITY', r.error);
   }
-  // (E) không có quyền: đăng nhập SALES (không có TRASH_*) → mọi thao tác FORBIDDEN (15)
+  // (E) Nhóm A #4: SALES CÓ thùng rác cá nhân (TRASH_VIEW) nhưng KHÔNG có TRASH_VIEW_ALL/RESTORE.
+  // → SALES xem thùng rác OK nhưng CHỈ thấy đồ MÌNH xóa (SALES chưa xóa gì → rỗng); phục hồi vẫn FORBIDDEN (15)
   await userSvc.createUser({ fullName: 'NV Sales', username: 'salestrash', password: 'Sales@123456', roleCodes: ['SALES'] }).catch(() => undefined);
   await logout();
   await login('salestrash', 'Sales@123456');
   const fList = await trash.listTrash();
-  ok('SAI SALES xem thùng rác → FORBIDDEN', fList.ok === false && fList.error === 'FORBIDDEN', fList.error);
+  ok('SALES xem thùng rác cá nhân → OK (không FORBIDDEN)', fList.ok === true, fList.error);
+  ok('SALES chỉ thấy đồ MÌNH xóa → rỗng (chưa xóa gì)', (fList.data ?? []).length === 0, { count: (fList.data ?? []).length });
   for (let i = 0; i < 7; i++) {
     const r = await trash.restoreItem('Customer', customers[10 + (i % 10)]);
-    ok(`SAI SALES phục hồi #${i} → FORBIDDEN`, r.ok === false && r.error === 'FORBIDDEN', r.error);
+    ok(`SAI SALES phục hồi #${i} → FORBIDDEN (không có TRASH_RESTORE)`, r.ok === false && r.error === 'FORBIDDEN', r.error);
   }
-  for (let i = 0; i < 7; i++) {
+  // linkSummary chỉ cần TRASH_VIEW → SALES gọi được (6)
+  for (let i = 0; i < 6; i++) {
     const r = await trash.linkSummary('Agent', agent.id);
-    ok(`SAI SALES linkSummary #${i} → FORBIDDEN`, r.ok === false && r.error === 'FORBIDDEN', r.error);
+    ok(`SALES linkSummary #${i} → OK (có TRASH_VIEW)`, r.ok === true, r.error);
   }
+  await logout();
+
+  // ===================== REGRESSION FIX 5 (B-audit-on-denial) =====================
+  // Bug: xóa vĩnh viễn / dọn sạch bị TỪ CHỐI (sai mật khẩu, chưa đặt cấp 2) trước đây KHÔNG ghi audit
+  // → hành vi phá hoại bị chặn nhưng không để lại dấu vết (vi phạm R_AUDIT_003). Phải ghi audit denied.
+  await login('adminroot', 'Admin@123456');
+  // customers[10..19] vẫn còn trong thùng rác (chỉ 0..9 được phục hồi) → dùng customers[10] để thử xóa vĩnh viễn
+  const purgeAuditBefore = await db.auditLog.count({ where: { action: 'TRASH_PURGED', afterJson: { contains: 'WRONG_PASSWORD' } } });
+  const rPurgeWrong = await trash.purgeItem('Customer', customers[10], 'sai-mat-khau-admin');
+  ok('SAI xóa vĩnh viễn sai mật khẩu → WRONG_PASSWORD', rPurgeWrong.ok === false && rPurgeWrong.error === 'WRONG_PASSWORD', rPurgeWrong.error);
+  ok('xóa vĩnh viễn bị từ chối VẪN ghi audit TRASH_PURGED denied', (await db.auditLog.count({ where: { action: 'TRASH_PURGED', afterJson: { contains: 'WRONG_PASSWORD' } } })) === purgeAuditBefore + 1, { before: purgeAuditBefore });
+  const stillDeleted = await db.customer.findUnique({ where: { id: customers[10] } });
+  ok('xóa vĩnh viễn bị từ chối → bản ghi VẪN còn (không bị xóa cứng)', stillDeleted !== null && stillDeleted.deletedAt !== null, { id: customers[10] });
+
+  // dọn sạch khi CHƯA đặt cấp 2 → LEVEL2_NOT_SET + audit denied
+  const emptyNotSetBefore = await db.auditLog.count({ where: { action: 'TRASH_EMPTIED', afterJson: { contains: 'LEVEL2_NOT_SET' } } });
+  const rEmptyNoL2 = await trash.emptyTrash('bat-ky');
+  ok('SAI dọn sạch khi chưa đặt cấp 2 → LEVEL2_NOT_SET', rEmptyNoL2.ok === false && rEmptyNoL2.error === 'LEVEL2_NOT_SET', rEmptyNoL2.error);
+  ok('dọn sạch bị chặn (chưa cấp 2) VẪN ghi audit denied', (await db.auditLog.count({ where: { action: 'TRASH_EMPTIED', afterJson: { contains: 'LEVEL2_NOT_SET' } } })) === emptyNotSetBefore + 1, { before: emptyNotSetBefore });
+
+  // đặt cấp 2 rồi dọn sạch SAI cấp 2 → WRONG_LEVEL2 + audit denied
+  ok('đặt mật khẩu cấp 2 để test → ok', (await setLevel2Password('Admin@123456', 'L2@123456', 'L2@123456')).ok === true);
+  const emptyWrongBefore = await db.auditLog.count({ where: { action: 'TRASH_EMPTIED', afterJson: { contains: 'WRONG_LEVEL2' } } });
+  const rEmptyWrong = await trash.emptyTrash('sai-cap-2');
+  ok('SAI dọn sạch sai mật khẩu cấp 2 → WRONG_LEVEL2', rEmptyWrong.ok === false && rEmptyWrong.error === 'WRONG_LEVEL2', rEmptyWrong.error);
+  ok('dọn sạch sai cấp 2 VẪN ghi audit denied', (await db.auditLog.count({ where: { action: 'TRASH_EMPTIED', afterJson: { contains: 'WRONG_LEVEL2' } } })) === emptyWrongBefore + 1, { before: emptyWrongBefore });
+  const trashStill = await trash.listTrash();
+  ok('mọi lần dọn sạch bị từ chối → thùng rác KHÔNG bị xóa (vẫn còn bản ghi)', (trashStill.data ?? []).length > 0, { count: (trashStill.data ?? []).length });
   await logout();
 
   // eslint-disable-next-line no-console

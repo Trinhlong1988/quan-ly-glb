@@ -33,7 +33,7 @@ export function ForceChangePassword({
     }
     setBusy(true);
     try {
-      const res = await window.api.changePassword(current, next);
+      const res = await window.api.changePassword(current, next, confirm);
       if (res.ok) {
         toast.success('Đã đổi mật khẩu thành công');
         onChanged();

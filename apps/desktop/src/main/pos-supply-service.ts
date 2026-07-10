@@ -191,7 +191,7 @@ export async function deleteSuppliers(ids: number[], password: string): Promise<
   for (const id of ids) {
     const row = await db.supplier.findUnique({ where: { id } });
     if (!row || row.deletedAt) continue;
-    await db.supplier.update({ where: { id }, data: { deletedAt: new Date(), updatedBy: user.id } });
+    await db.supplier.update({ where: { id }, data: { deletedAt: new Date(), updatedBy: user.id, deletedBy: user.id } });
     await writeAudit(db, { actorUserId: user.id, action: 'SUPPLIER_DELETED', targetType: 'Supplier', targetId: String(id), before: auditSnapshot({ name: row.name, code: row.code }) });
     deleted++;
   }
@@ -302,7 +302,7 @@ export async function deletePosModels(ids: number[], password: string): Promise<
   for (const id of ids) {
     const row = await db.posModel.findUnique({ where: { id } });
     if (!row || row.deletedAt) continue;
-    await db.posModel.update({ where: { id }, data: { deletedAt: new Date(), updatedBy: user.id } });
+    await db.posModel.update({ where: { id }, data: { deletedAt: new Date(), updatedBy: user.id, deletedBy: user.id } });
     await writeAudit(db, { actorUserId: user.id, action: 'POS_MODEL_DELETED', targetType: 'PosModel', targetId: String(id), before: auditSnapshot({ code: row.code, name: row.name }) });
     deleted++;
   }
@@ -387,7 +387,7 @@ export async function deleteIntakeStatuses(ids: number[], password: string): Pro
   for (const id of ids) {
     const row = await db.posIntakeStatus.findUnique({ where: { id } });
     if (!row || row.deletedAt) continue;
-    await db.posIntakeStatus.update({ where: { id }, data: { deletedAt: new Date(), updatedBy: user.id } });
+    await db.posIntakeStatus.update({ where: { id }, data: { deletedAt: new Date(), updatedBy: user.id, deletedBy: user.id } });
     await writeAudit(db, { actorUserId: user.id, action: 'INTAKE_STATUS_DELETED', targetType: 'PosIntakeStatus', targetId: String(id), before: auditSnapshot({ name: row.name }) });
     deleted++;
   }
@@ -581,7 +581,7 @@ export async function deletePosIntakes(ids: number[], password: string): Promise
   for (const id of ids) {
     const row = await db.posIntake.findUnique({ where: { id } });
     if (!row || row.deletedAt) continue;
-    await db.posIntake.update({ where: { id }, data: { deletedAt: new Date(), updatedBy: user.id } });
+    await db.posIntake.update({ where: { id }, data: { deletedAt: new Date(), updatedBy: user.id, deletedBy: user.id } });
     await writeAudit(db, { actorUserId: user.id, action: 'POS_INTAKE_DELETED', targetType: 'PosIntake', targetId: String(id), before: auditSnapshot({ serial: row.serial }) });
     deleted++;
   }

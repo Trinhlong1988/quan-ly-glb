@@ -7,8 +7,15 @@ const api = {
     ipcRenderer.invoke('auth:login', { username, password, remember }),
   me: () => ipcRenderer.invoke('auth:me'),
   logout: () => ipcRenderer.invoke('auth:logout'),
-  changePassword: (currentPassword: string, newPassword: string) =>
-    ipcRenderer.invoke('auth:changePassword', { currentPassword, newPassword }),
+  changePassword: (currentPassword: string, newPassword: string, confirmPassword?: string) =>
+    ipcRenderer.invoke('auth:changePassword', { currentPassword, newPassword, confirmPassword }),
+  adminResetPassword: (userId: number, newPassword: string) =>
+    ipcRenderer.invoke('auth:adminResetPassword', { userId, newPassword }),
+  level2Status: () => ipcRenderer.invoke('auth:level2Status'),
+  setLevel2: (level1: string, newLevel2: string, confirmLevel2: string) =>
+    ipcRenderer.invoke('auth:setLevel2', { level1, newLevel2, confirmLevel2 }),
+  resetLevel2: (level1: string, oldLevel2: string, newLevel2: string, confirmLevel2: string) =>
+    ipcRenderer.invoke('auth:resetLevel2', { level1, oldLevel2, newLevel2, confirmLevel2 }),
   validatePassword: (pwd: string) => ipcRenderer.invoke('auth:validatePassword', pwd),
   getRemembered: () => ipcRenderer.invoke('auth:getRemembered'),
   saveRemembered: (username: string, password: string) =>
@@ -168,7 +175,37 @@ const api = {
   // Thùng rác (E4)
   trashList: () => ipcRenderer.invoke('trash:list'),
   trashRestore: (entityType: string, id: number) => ipcRenderer.invoke('trash:restore', { entityType, id }),
-  trashLinkSummary: (entityType: string, id: number) => ipcRenderer.invoke('trash:linkSummary', { entityType, id })
+  trashLinkSummary: (entityType: string, id: number) => ipcRenderer.invoke('trash:linkSummary', { entityType, id }),
+  trashPurge: (entityType: string, id: number, password: string) => ipcRenderer.invoke('trash:purge', { entityType, id, password }),
+  trashEmptyAll: (level2Password: string) => ipcRenderer.invoke('trash:emptyAll', { level2Password }),
+
+  // Dashboard (Nhóm B)
+  dashboardStats: () => ipcRenderer.invoke('dashboard:stats'),
+
+  // Hòm thư nội bộ + thông báo bảo mật
+  messageInbox: () => ipcRenderer.invoke('message:inbox'),
+  messageUnreadCount: () => ipcRenderer.invoke('message:unreadCount'),
+  messageMarkRead: (id: number) => ipcRenderer.invoke('message:markRead', id),
+  messageMarkAllRead: () => ipcRenderer.invoke('message:markAllRead'),
+  messageSend: (input: { recipientId: number; subject: string; body: string }) => ipcRenderer.invoke('message:send', input),
+
+  // Doanh thu & Công nợ (Nhóm B)
+  transactionList: (filter: unknown) => ipcRenderer.invoke('transaction:list', filter),
+  transactionCreate: (input: unknown) => ipcRenderer.invoke('transaction:create', input),
+  transactionUpdate: (id: number, input: unknown) => ipcRenderer.invoke('transaction:update', { id, input }),
+  transactionDelete: (ids: number[], password: string) => ipcRenderer.invoke('transaction:delete', { ids, password }),
+  transactionSettle: (ids: number[], settled: boolean) => ipcRenderer.invoke('transaction:settle', { ids, settled }),
+  debtSummary: (filter: unknown) => ipcRenderer.invoke('debt:summary', filter),
+
+  // Bảo trì & Bộ nhớ (Nhóm E — Storage-Guard)
+  storageStatus: () => ipcRenderer.invoke('storage:status'),
+  storageCleanup: (opts: { clearHistory?: boolean; purgeTrash?: boolean; password: string }) => ipcRenderer.invoke('storage:cleanup', opts),
+  storageUpdateConfig: (cfg: { thresholdPct?: number; auditRetentionDays?: number; trashRetentionDays?: number; backupIntervalHours?: number; maintenanceDayOfWeek?: number; maintenanceHour?: number; maintenanceEnabled?: boolean; autoPurgeWeekly?: boolean }) => ipcRenderer.invoke('storage:updateConfig', cfg),
+
+  // Bảo trì: quét sức khỏe toàn hệ thống + lịch sử bảo trì
+  healthScan: (opts: { autoFix?: boolean }) => ipcRenderer.invoke('health:scan', opts),
+  healthRuns: (limit?: number) => ipcRenderer.invoke('health:runs', limit),
+  healthRun: (id: number) => ipcRenderer.invoke('health:run', id)
 };
 
 export type GlbApi = typeof api;

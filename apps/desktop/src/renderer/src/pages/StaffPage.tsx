@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Plus, Pencil, Lock, Unlock, Trash2, Search, Loader2, Users } from 'lucide-react';
+import { Plus, Pencil, Lock, Unlock, Trash2, Search, Loader2, Users, KeyRound } from 'lucide-react';
+import { AdminResetPasswordModal } from '../components/AdminResetPasswordModal.js';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, roleLabel, ROLES } from '@glb/shared';
 import type { UserDto, RoleDto } from '../../../preload/index.d';
@@ -23,12 +24,14 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<UserDto | null>(null);
   const [confirm, setConfirm] = useState<{ kind: 'lock' | 'unlock' | 'delete'; u: UserDto } | null>(null);
+  const [resetTarget, setResetTarget] = useState<UserDto | null>(null);
 
   const canCreate = hasPermission(user, 'USER_CREATE') || hasPermission(user, 'USER_CREATE_LIMITED');
   const canUpdate = hasPermission(user, 'USER_UPDATE');
   const canLock = hasPermission(user, 'USER_LOCK');
   const canUnlock = hasPermission(user, 'USER_UNLOCK');
   const canDelete = hasPermission(user, 'USER_DELETE');
+  const canReset = hasPermission(user, 'USER_RESET_PASSWORD');
 
   async function reload(): Promise<void> {
     setLoading(true);
@@ -186,6 +189,11 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
                           <Unlock className="h-4 w-4" />
                         </IconBtn>
                       )}
+                      {canReset && u.status !== 'DELETED' && (
+                        <IconBtn title="Đặt lại mật khẩu" variant="edit" onClick={() => setResetTarget(u)}>
+                          <KeyRound className="h-4 w-4" />
+                        </IconBtn>
+                      )}
                       {canDelete && u.status !== 'DELETED' && (
                         <IconBtn title="Xóa" variant="danger" onClick={() => setConfirm({ kind: 'delete', u })}>
                           <Trash2 className="h-4 w-4" />
@@ -244,6 +252,13 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
           requirePassword
           onCancel={() => setConfirm(null)}
           onConfirm={(pwd) => doDelete(confirm.u, pwd)}
+        />
+      )}
+      {resetTarget && (
+        <AdminResetPasswordModal
+          target={{ id: resetTarget.id, fullName: resetTarget.fullName, username: resetTarget.username }}
+          onClose={() => setResetTarget(null)}
+          onDone={reload}
         />
       )}
     </div>

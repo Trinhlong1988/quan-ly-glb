@@ -140,7 +140,7 @@ export async function deleteStatuses(ids: number[], password: string): Promise<M
   for (const id of ids) {
     const row = await db.tidConfigStatus.findUnique({ where: { id } });
     if (!row || row.deletedAt) continue;
-    await db.tidConfigStatus.update({ where: { id }, data: { deletedAt: new Date(), updatedBy: user.id } });
+    await db.tidConfigStatus.update({ where: { id }, data: { deletedAt: new Date(), updatedBy: user.id, deletedBy: user.id } });
     await writeAudit(db, { actorUserId: user.id, action: 'TID_CONFIG_STATUS_DELETED', targetType: 'TidConfigStatus', targetId: String(id), before: auditSnapshot({ name: row.name }) });
     deleted++;
   }
@@ -373,7 +373,7 @@ export async function deleteConfigTids(ids: number[], password: string): Promise
   for (const id of ids) {
     const row = await db.tid.findUnique({ where: { id } });
     if (!row || row.deletedAt) continue;
-    await db.tid.update({ where: { id }, data: { deletedAt: new Date(), updatedBy: user.id } });
+    await db.tid.update({ where: { id }, data: { deletedAt: new Date(), updatedBy: user.id, deletedBy: user.id } });
     await writeAudit(db, { actorUserId: user.id, action: 'TID_CONFIG_DELETED', targetType: 'Tid', targetId: String(id), before: auditSnapshot({ tid: row.tid }) });
     deleted++;
   }

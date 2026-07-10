@@ -19,6 +19,11 @@ import * as dossierSvc from './dossier-service.js';
 import * as tidCfgSvc from './tid-config-service.js';
 import { readAttachmentDataUrl } from './file-store.js';
 import * as trashSvc from './trash-service.js';
+import * as msgSvc from './message-service.js';
+import * as dashboardSvc from './dashboard-service.js';
+import * as txnSvc from './transaction-service.js';
+import * as storageSvc from './storage-service.js';
+import * as healthSvc from './health-scan.js';
 import { getRemembered, saveRemembered, clearRemembered } from './remember.js';
 
 export function registerIpc(): void {
@@ -37,9 +42,22 @@ export function registerIpc(): void {
     await auth.logout();
     return { ok: true };
   });
-  ipcMain.handle('auth:changePassword', async (_e, args: { currentPassword: string; newPassword: string }) => {
-    const { currentPassword, newPassword } = args ?? ({} as never);
-    return auth.changePassword(currentPassword, newPassword);
+  ipcMain.handle('auth:changePassword', async (_e, args: { currentPassword: string; newPassword: string; confirmPassword?: string }) => {
+    const { currentPassword, newPassword, confirmPassword } = args ?? ({} as never);
+    return auth.changePassword(currentPassword, newPassword, confirmPassword);
+  });
+  ipcMain.handle('auth:adminResetPassword', async (_e, args: { userId: number; newPassword: string }) => {
+    const { userId, newPassword } = args ?? ({} as never);
+    return auth.adminResetPassword(userId, newPassword);
+  });
+  ipcMain.handle('auth:level2Status', async () => auth.getLevel2Status());
+  ipcMain.handle('auth:setLevel2', async (_e, args: { level1: string; newLevel2: string; confirmLevel2: string }) => {
+    const { level1, newLevel2, confirmLevel2 } = args ?? ({} as never);
+    return auth.setLevel2Password(level1, newLevel2, confirmLevel2);
+  });
+  ipcMain.handle('auth:resetLevel2', async (_e, args: { level1: string; oldLevel2: string; newLevel2: string; confirmLevel2: string }) => {
+    const { level1, oldLevel2, newLevel2, confirmLevel2 } = args ?? ({} as never);
+    return auth.resetLevel2Password(level1, oldLevel2, newLevel2, confirmLevel2);
   });
   ipcMain.handle('auth:validatePassword', async (_e, pwd: string) => validatePassword(pwd));
   ipcMain.handle('auth:getRemembered', async () => getRemembered());
@@ -124,6 +142,9 @@ export function registerIpc(): void {
   ipcMain.handle('tid:replace', async (_e, args: { tid: string; input: tidSvc.ReplaceTidInput }) => tidSvc.replaceTid(args.tid, args.input));
   ipcMain.handle('tid:recall', async (_e, args: { tid: string; input: tidSvc.RecallTidInput }) => tidSvc.recallTid(args.tid, args.input));
   ipcMain.handle('tid:markDelivered', async (_e, args: { tid: string; input: tidSvc.MarkDeliveredInput }) => tidSvc.markTidDelivered(args.tid, args.input));
+
+  // ---- Dashboard (Nhóm B — KPI realtime + tăng trưởng) ------------------
+  ipcMain.handle('dashboard:stats', async () => dashboardSvc.getStats());
 
   // ---- Notifications (undelivered TID — badge REAL, push STUB) -----------
   ipcMain.handle('notify:undeliveredSummary', async () => notifySvc.getUndeliveredSummary());
@@ -229,4 +250,31 @@ export function registerIpc(): void {
   ipcMain.handle('trash:list', async () => trashSvc.listTrash());
   ipcMain.handle('trash:restore', async (_e, args: { entityType: string; id: number }) => trashSvc.restoreItem(args.entityType, args.id));
   ipcMain.handle('trash:linkSummary', async (_e, args: { entityType: string; id: number }) => trashSvc.linkSummary(args.entityType, args.id));
+  ipcMain.handle('trash:purge', async (_e, args: { entityType: string; id: number; password: string }) => trashSvc.purgeItem(args.entityType, args.id, args.password));
+  ipcMain.handle('trash:emptyAll', async (_e, args: { level2Password: string }) => trashSvc.emptyTrash(args.level2Password));
+
+  // ── Hòm thư nội bộ + thông báo bảo mật (Nhóm A #2 / Nhóm C #7) ──
+  ipcMain.handle('message:inbox', async () => msgSvc.listInbox());
+  ipcMain.handle('message:unreadCount', async () => msgSvc.unreadCount());
+  ipcMain.handle('message:markRead', async (_e, id: number) => msgSvc.markRead(id));
+  ipcMain.handle('message:markAllRead', async () => msgSvc.markAllRead());
+  ipcMain.handle('message:send', async (_e, input: { recipientId: number; subject: string; body: string }) => msgSvc.sendMessage(input));
+
+  // ── Nhóm B — Doanh thu & Công nợ ──
+  ipcMain.handle('transaction:list', async (_e, filter: txnSvc.TransactionFilter) => txnSvc.listTransactions(filter));
+  ipcMain.handle('transaction:create', async (_e, input: txnSvc.CreateTransactionInput) => txnSvc.createTransaction(input));
+  ipcMain.handle('transaction:update', async (_e, args: { id: number; input: txnSvc.UpdateTransactionInput }) => txnSvc.updateTransaction(args.id, args.input));
+  ipcMain.handle('transaction:delete', async (_e, args: { ids: number[]; password: string }) => txnSvc.deleteTransactions(args.ids, args.password));
+  ipcMain.handle('transaction:settle', async (_e, args: { ids: number[]; settled: boolean }) => txnSvc.settleTransactions(args.ids, args.settled));
+  ipcMain.handle('debt:summary', async (_e, filter: txnSvc.TransactionFilter) => txnSvc.debtSummary(filter));
+
+  // ── Nhóm E — Bảo trì & Bộ nhớ (Storage-Guard) ──
+  ipcMain.handle('storage:status', async () => storageSvc.getStorageStatus());
+  ipcMain.handle('storage:cleanup', async (_e, opts: storageSvc.CleanupOptions) => storageSvc.runCleanup(opts));
+  ipcMain.handle('storage:updateConfig', async (_e, cfg: Parameters<typeof storageSvc.updateStorageConfig>[0]) => storageSvc.updateStorageConfig(cfg));
+
+  // ── Bảo trì: quét sức khỏe toàn hệ thống + lịch sử ──
+  ipcMain.handle('health:scan', async (_e, opts: { autoFix?: boolean }) => healthSvc.runScan(opts ?? {}));
+  ipcMain.handle('health:runs', async (_e, limit?: number) => healthSvc.listRuns(limit));
+  ipcMain.handle('health:run', async (_e, id: number) => healthSvc.getRun(id));
 }

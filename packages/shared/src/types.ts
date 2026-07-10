@@ -130,6 +130,24 @@ export type AuditAction =
   | 'TID_CONFIG_CREATED'
   | 'TID_CONFIG_UPDATED'
   | 'TID_CONFIG_DELETED'
+  // ── Nhóm A — Bảo mật & tài khoản ──
+  | 'USER_AUTO_LOCKED'
+  | 'PASSWORD_RESET_BY_ADMIN'
+  | 'LEVEL2_SET'
+  | 'LEVEL2_RESET'
+  | 'TRASH_PURGED'
+  | 'TRASH_EMPTIED'
+  // ── Nhóm C — Hòm thư nội bộ ──
+  | 'MESSAGE_SENT'
+  // ── Nhóm B — Doanh thu & Công nợ ──
+  | 'TRANSACTION_CREATED'
+  | 'TRANSACTION_UPDATED'
+  | 'TRANSACTION_DELETED'
+  | 'DEBT_SETTLED'
+  // ── Nhóm E — Bảo trì & Bộ nhớ ──
+  | 'AUTO_BACKUP'
+  | 'STORAGE_ALERT'
+  | 'STORAGE_CLEANUP'
   // Extra (superset of §16 minimum): a mutation refused because the actor lacked the
   // required permission MUST still be logged (R_AUDIT_003).
   | 'PERMISSION_DENIED';

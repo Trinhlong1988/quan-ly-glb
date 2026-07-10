@@ -85,7 +85,7 @@ export function PosPage({ user }: { user: AuthUser }): JSX.Element {
     <div>
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-slate-800">Máy POS</h2>
+          <h2 className="text-lg font-semibold text-slate-800">Quản Lý Máy POS</h2>
           <p className="text-sm text-slate-500">Danh tính = serial bất biến · vòng đời có nhật ký sự kiện.</p>
         </div>
         {canManage && (

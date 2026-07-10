@@ -76,6 +76,23 @@ export async function seedIfEmpty(db: Db): Promise<void> {
       });
     }
   }
+  // R_ADMIN_SUPERUSER (LEAD 9/7): ADMIN = superuser → LUÔN đồng bộ ĐỦ mọi quyền mỗi boot,
+  // kể cả quyền MỚI thêm sau này (chống bug "thêm feature → thêm permission → role ADMIN cũ
+  // thiếu quyền → menu/tính năng bị ẩn"). Role khác vẫn giữ chỉnh tay của admin (không tự cấp lại).
+  {
+    const adminRoleForSync = await db.role.findUnique({ where: { code: 'ADMIN' }, select: { id: true } });
+    if (adminRoleForSync) {
+      const allPerms = await db.permission.findMany({ select: { id: true } });
+      for (const perm of allPerms) {
+        await db.rolePermission.upsert({
+          where: { roleId_permissionId: { roleId: adminRoleForSync.id, permissionId: perm.id } },
+          update: {},
+          create: { roleId: adminRoleForSync.id, permissionId: perm.id }
+        });
+      }
+    }
+  }
+
   const adminRole = await db.role.findUniqueOrThrow({ where: { code: 'ADMIN' } });
   const existingAdmin = await db.user.findFirst({
     where: { deletedAt: null, roles: { some: { roleId: adminRole.id } } }

@@ -74,7 +74,7 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
     <div>
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-slate-800">TID</h2>
+          <h2 className="text-lg font-semibold text-slate-800">Quản Lý TID</h2>
           <p className="text-sm text-slate-500">Terminal ID · gán/đổi/thu hồi/giao · theo dõi TID chưa giao.</p>
         </div>
         {canManage && (

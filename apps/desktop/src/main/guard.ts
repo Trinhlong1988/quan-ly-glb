@@ -1,7 +1,7 @@
 // Permission guard (main). Enforces §13 permission checks and R_AUDIT_003:
 // a mutation refused for lack of permission is STILL written to the audit log.
 import { hasPermission, type AuthUser } from '@glb/shared';
-import { verifyPassword } from '@glb/business-rules';
+import { verifyPassword, verifyLevel2 } from '@glb/business-rules';
 import type { Db } from '@glb/database';
 import { getDb } from './db.js';
 import { me } from './auth-service.js';
@@ -60,4 +60,16 @@ export async function verifyActorPassword(user: AuthUser, password: string): Pro
   const row = await db.user.findUnique({ where: { id: user.id } });
   if (!row) return false;
   return verifyPassword(password, row.passwordHash);
+}
+
+/** Người đang đăng nhập ĐÃ đặt mật khẩu cấp 2 chưa? (để UI chọn form đặt / đổi). */
+export async function actorHasLevel2(user: AuthUser): Promise<boolean> {
+  const row = await getDb().user.findUnique({ where: { id: user.id }, select: { level2Hash: true } });
+  return !!row?.level2Hash;
+}
+
+/** Xác thực mật khẩu CẤP 2 của người đang đăng nhập (dọn sạch thùng rác — Nhóm A #3). */
+export async function verifyActorLevel2(user: AuthUser, level2: string): Promise<boolean> {
+  const row = await getDb().user.findUnique({ where: { id: user.id }, select: { level2Hash: true } });
+  return verifyLevel2(level2, row?.level2Hash ?? null);
 }

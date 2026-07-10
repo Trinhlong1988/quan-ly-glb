@@ -1,12 +1,12 @@
 ---
 project: Quản Lý GLB (IMS)
-phase: G-CFG.6
-current_version: 0.9.0-gcfg6
+phase: G-REV.B / G-MAINT.E
+current_version: 0.14.1-audit-fixes
 status: BUILDING (Engineering, chưa Production Validated)
-last_update_ts: 2026-07-09
-last_update_by: CMD_BUILD (Claude)
+last_update_ts: 2026-07-10
+last_update_by: CMD_AUDIT (Claude)
 rule_break_count: 0
-schema_version: 9
+schema_version: 12
 ---
 
 # VERSION — Quản Lý GLB
@@ -18,6 +18,44 @@ schema_version: 9
 4. Đọc `bible/00_constitution.md`.
 
 ## Nhật ký phiên bản
+### 0.14.1-audit-fixes — 2026-07-10 (CMD_AUDIT) — KIỂM ĐỊNH 3 AGENT PHẢN BIỆN ĐỘC LẬP → 6 FIX + regression
+- **Quy trình**: chạy song song agent code-reviewer/security-auditor/health-scan phản biện độc lập. **Kết quả: 0 Critical / 0 High; 6 phát hiện Medium — ĐÃ FIX HẾT** (B10-B15 trong BUGS_FIXED.md).
+- **B10** snapshot doanh thu: `updateTransaction` chỉ tra lại phí khi đổi loại thẻ (không phá snapshot khi sửa note/ngày/tiền). **B11** lọc TID xóa mềm vẫn ra GD lịch sử. **B12** sàn an toàn hạn giữ (audit≥7d/thùng rác≥1d/backup≥1h), reject cấu hình dưới sàn. **B13** Health-Scan backup TRƯỚC khi tự sửa (fail → abort). **B14** trash ghi audit KỂ CẢ khi từ chối (R_AUDIT_003). **B15** trang công nợ phân trang, summary tính toàn tập lọc.
+- **2 check chuẩn SQLite** thêm vào Health-Scan: `PRAGMA integrity_check` (DB_INTEGRITY) + `PRAGMA foreign_key_check` (DB_FOREIGN_KEY) → CHECKS_TOTAL 10→12.
+- **Loại bỏ hallucination**: agent phản biện doanh thu lặp báo cáo bịa "Mr.Long đã chốt giá theo kỳ / redesign serial" — KHÔNG có input người thật (system notification xác nhận) → **discard toàn bộ, KHÔNG build**. Đúng R1/R2/R10: không hành động khi chưa có LEAD duyệt thật.
+- **Bằng chứng chạy thật (sau fix + regression)**: typecheck main+web **0** · build **0** · **vitest 193/193** · **REV15 47/0** (thêm regression B10 snapshot-bất-biến-khi-sửa + B11 lọc-TID-xóa-mềm) · **STG16 37/0** (thêm regression B12 sàn hạn giữ) · **HSC17 25/0** (thêm 2 PRAGMA + B13 backup-trước-tự-sửa) · **TRASH6 115/0** (thêm khối B14 audit-khi-từ-chối 3 nhánh) · **NHOMA12 36/0**. Tất cả số thật, 0 FAIL. Status vẫn **L1 Engineering PASS — CHỜ LEAD nghiệm thu Production**.
+
+### 0.14.0-nhomB-nhomE — 2026-07-10 (CMD_BUILD) — NHÓM B DOANH THU/CÔNG NỢ + NHÓM E BẢO TRÌ/STORAGE-GUARD/HEALTH-SCAN
+- **Schema v11+v12**: migration `20260709172135_transactions_revenue` (bảng `transactions`) + `20260710010000_maintenance_runs` (lịch sử bảo trì). Thêm quyền: REVENUE_VIEW/MANAGE, DEBT_VIEW/DEBT_SETTLE, STORAGE_VIEW/STORAGE_CLEANUP (seed → 55 permissions).
+- **NHÓM B — Doanh thu = BÓC 2 khoản chênh CỘNG GỘP** (LEAD 9/7): chênh đối tác (phiMua−phiCaiMay) + chênh bán (phiBan−phiCaiMay). `computeRevenue` trả {revenuePartner, revenueSell, revenueAmount}. Phí **snapshot** vào giao dịch → đổi biểu phí sau KHÔNG sai doanh thu đã ghi. `transaction-service`: create/update/delete(mật khẩu)/settle + list (lọc TID/MID/HKD/khách/NH/đối tác/ngày/đối soát + phân trang + summary TOÀN BỘ) + `debtSummary` (công nợ = 2 khoản của GD chưa đối soát). UI `RevenuePage` (KPI + lọc đa chiều + form ghi nhận) + `DebtPage` (đối soát). Giao dịch vào Thùng rác.
+- **NHÓM E — Storage-Guard chống tràn khi lên server**: `storage-service` đo DB+ổ đĩa (statfs), cảnh báo khi ≥ ngưỡng (mặc định 80%) → hòm thư Admin/Manager + dialog xác nhận toàn app (poll 5'). Dọn dẹp AN TOÀN: **LUÔN backup trước khi xóa** (fail backup → HỦY xóa), chỉ xóa audit/thùng rác QUÁ HẠN (không đụng dữ liệu trong hạn), cần mật khẩu admin. **Backup định kỳ 1 lần/ngày** + **bảo trì định kỳ chọn thứ+giờ, bật/tắt** (bù khi app từng tắt, không lặp 2 lần/tuần) + VACUUM/optimize.
+- **NHÓM E — Health-Scan quét toàn hệ thống**: `health-scan` chạy 10 nhóm kiểm tra toàn vẹn → findings {mã, mức độ, số lượng, chi tiết, **đề xuất fix**} + **tự sửa** doanh thu lệch. Lưu **lịch sử bảo trì** (`maintenance_runs` + báo cáo JSON). UI Bảo trì: "Quét ngay"/"Quét & Tự sửa" + bảng kết quả + Lịch sử bảo trì. Bảo trì tuần tự động quét + lưu run kind=SCHEDULED.
+- **Bằng chứng chạy thật**: typecheck main+web **0** · build **0** · **REV15 43/0** (2 khoản 280k+210k=490k, snapshot bất biến, công nợ, phân quyền) · **STG16 33/0** (dọn an toàn backup-trước-xóa, backup ngày, bảo trì tuần thứ/giờ/bật-tắt, VACUUM, cảnh báo ngưỡng) · **HSC17 22/0** (nhồi 7 loại dữ liệu sai → bắt đúng mã+mức độ+đề xuất, tự sửa doanh thu, lịch sử, phân quyền) · regression **fresh-deploy 16/0** (migration mới deploy sạch) · **vitest 193/193** · **TRASH6 106/0** (giao dịch vào thùng rác). Status **L1 Engineering PASS — CHỜ LEAD nghiệm thu Production** (xem `docs/NOTE_YEU_CAU_CHAY_THU.md`). Đang chạy 3 agent phản biện độc lập kiểm định.
+
+### 0.12.0-nhoma4 — 2026-07-09 (CMD_BUILD) — NHÓM A #4: THÙNG RÁC PER-USER + audit trail visibility → NHÓM A HOÀN TẤT
+- **Schema**: migration `20260709200000_nhoma_deletedby_per_user_trash` — ADD COLUMN `deleted_by` cho **17 bảng** soft-delete (additive). Ghi `deletedBy = người xóa` tại **16 chỗ xóa mềm** production (bank/cardType/partner/customer/dossier×2/fee×2/pos-supply×4/receive×2/tid×2). Restore xóa cả deletedBy.
+- **Thùng rác per-user**: user thường CHỈ thấy bản ghi MÌNH xóa (`deletedBy = self`); ai có **TRASH_VIEW_ALL** (Admin/Manager) thấy TỔNG mọi người + cột **"Người xóa"** (resolve tên). Quyền mới TRASH_VIEW_ALL; TRASH_VIEW cấp cho MỌI role (ai cũng có thùng rác riêng).
+- **Audit trail visibility**: đã đạt sẵn qua permission — mọi hành vi `writeAudit` (đã có toàn hệ thống), Nhật ký hệ thống gated bởi AUDIT_LOG_VIEW = chỉ Admin/Manager. Không cần code thêm.
+- **Bug B07 vá** (thứ tự migration): folder deletedBy tạo với timestamp 165229 < gcfg4/5/6 (170000-190000) → trên DB MỚI, ALTER bảng chưa tồn tại (dossiers/tid_config_statuses) → fail. Fix: đổi tên folder → 200000 (sau mọi migration). Selftest fresh-deploy (=13) bắt đúng bug này.
+- Bằng chứng: typecheck node+web 0 · build 0 · boot 0 lỗi · **GLB_SELFTEST=13 16/16 PASS** (service ghi đúng deletedBy + user thường chỉ thấy đồ mình + admin/manager thấy tổng + tên người xóa + restore xóa deletedBy) · regression **=6 106/0** (cập nhật tiền đề: SALES có thùng rác cá nhân) **· =10 108/0 · =12 36/0**. **✅ NHÓM A HOÀN TẤT** (#1 đổi/đặt lại mật khẩu · #2 khóa 5 lần + hòm thư · #3 pass cấp 2 + xóa vĩnh viễn · #4 per-user trash). Status L1 Engineering PASS. CHƯA nghiệm thu UI thật (LEAD).
+
+### 0.11.0-nhoma2 — 2026-07-09 (CMD_BUILD) — NHÓM A #3: PASS CẤP 2 + XÓA VĨNH VIỄN + DỌN SẠCH THÙNG RÁC
+- **Mật khẩu cấp 2** (chỉ Admin/Manager — quyền LEVEL2_MANAGE): `getLevel2Status/setLevel2Password/resetLevel2Password`. Đặt lần đầu = cấp 1 + cấp 2 mới ×2; đổi = cấp 1 + cấp 2 CŨ + mới ×2 (khác cũ). Sai cấp 1 HOẶC cấp 2 cũ → tính vào bộ đếm khóa, 5 lần → LOCKED. Băm bcrypt cost 12 (một chiều). UI `Level2PasswordModal` (tự chọn Đặt/Đổi) trong menu tài khoản.
+- **Xóa vĩnh viễn từng mục** (TRASH_PURGE): `purgeItem(entity,id,mật_khẩu_cấp_1)` — bản ghi phải đang trong thùng rác → xóa CỨNG khỏi DB. UI nút "Xóa vĩnh viễn" mỗi dòng TrashPage + ConfirmDialog nhập mật khẩu.
+- **Dọn sạch toàn bộ** (TRASH_PURGE + quyết định 1a): `emptyTrash(mật_khẩu_cấp_2)` — xóa cứng MỌI bản ghi xóa mềm (17 bảng), trả `purged` count; chưa đặt cấp 2 → LEVEL2_NOT_SET. UI nút "Dọn sạch thùng rác" + `EmptyTrashModal` nhập mật khẩu cấp 2. Audit LEVEL2_SET/RESET/TRASH_PURGED/TRASH_EMPTIED.
+- Bằng chứng: typecheck node+web 0 · build 0 · boot 0 lỗi · **GLB_SELFTEST=12 36/36 PASS** (đặt/đổi cấp 2 + khóa 5 lần cấp 2 + xóa vĩnh viễn xác thực mật khẩu + bản ghi biến mất khỏi DB + dọn sạch bằng cấp 2 + phân quyền) · regression **=6 106/0 · =11 51/0**. Status L1 Engineering PASS. CÒN Nhóm A #4 (thùng rác per-user `deletedBy` + audit trail chỉ Admin/Manager).
+
+### 0.10.0-nhoma1 — 2026-07-09 (CMD_BUILD) — NHÓM A #1+#2 BẢO MẬT + NỀN HÒM THƯ + UI restructure
+- **Schema v10** migration `20260709155059_nhom_a_security_inbox` (additive, giữ nguyên user cũ): User thêm `failed_attempts`/`locked_at`/`level2_hash`/`level2_set_at`; bảng mới `messages` (hòm thư dùng chung: kind USER|SYSTEM + category + read_at + soft-delete + index recipient).
+- **Nhóm A #1 Đổi mật khẩu**: `changePassword(cũ, mới, xác_nhận)` — xác thực cũ + KHỚP xác nhận (PASSWORD_MISMATCH) + khác cũ (SAME_PASSWORD) + đủ mạnh. Server-side. UI `ChangePasswordModal` (menu user) + `ForceChangePassword` truyền confirm.
+- **Nhóm A #1 Admin/Manager đặt lại mật khẩu user khác**: `adminResetPassword` (quyền USER_RESET_PASSWORD) → ép đổi lần kế + mở khóa nếu đang LOCKED + reset đếm + audit + báo hòm thư user. UI: nút KeyRound ở Danh sách nhân sự + `AdminResetPasswordModal`.
+- **Nhóm A #2 Khóa 5 lần**: đếm MỌI lần xác thực sai (đăng nhập + sai mật khẩu cũ khi đổi — quyết định 3b) → ≥5 tự khóa (LOCKED + lockedAt + audit USER_AUTO_LOCKED) + push hòm thư mọi Admin/Manager; đăng nhập/đổi đúng → reset đếm. Hằng `MAX_FAILED_ATTEMPTS=5`, `reachesLockout()`.
+- **Nền hòm thư (Nhóm C #7 core)**: `message-service` (notifyAdmins/listInbox/unreadCount/markRead/markAllRead/sendMessage) + IPC + preload. UI `MessagesDrawer` (email 2 khung + soạn thư) + chuông topbar badge chưa đọc **poll 10s realtime**. Thông báo bảo mật CHỈ Admin/Manager.
+- **Pass cấp 2 (nền A#3)**: `hashLevel2/verifyLevel2` bcrypt cost 12; permission LEVEL2_MANAGE/TRASH_PURGE + AuditAction LEVEL2_*/TRASH_PURGED/EMPTIED (chưa wire UI — slice A2).
+- **Vá bug seed B06** (menu ẩn): ADMIN superuser LUÔN đồng bộ đủ mọi quyền mỗi boot. Bằng chứng: adminroot dev.db CŨ tự lên 43→48 quyền.
+- **UI restructure (Nhóm F)**: menu/tiêu đề thêm "Quản Lý" (Khách Hàng/Máy POS/TID/TK Nhận Tiền/Hồ Sơ HKD); icon menu nổi bật (ô bo góc + thanh nhấn active); **Vai trò & Quyền → tab con** Quản Lý Nhân Sự; menu TID xuống dưới Cấu hình máy POS.
+- Bằng chứng: **Vitest 182/182** (+4) · typecheck node+web 0 · build 0 · **GLB_SELFTEST=11 51/51 PASS** (khóa/reset/đổi MK/admin reset/hòm thư/phân quyền, số liệu DB thật) · regression **=2 23/0 · =6 106/0 · =10 108/0**. Status L1 Engineering PASS (R196). CÒN: UI pass cấp 2 + xóa vĩnh viễn + thùng rác per-user (A#3/A#4), Nhóm B/C-UI/E, nghiệm thu UI thật (LEAD).
+
 ### 0.9.0-gcfg6 — 2026-07-09 (CMD_BUILD) — HOÀN TẤT MODULE §C CẤU HÌNH
 - **G-CFG.6 Cấu hình TID (§C mục 9)**: §9a trạng thái TID (bảng cấu hình riêng) + §9 thêm/sửa TID kèm thông tin thương mại (ngân hàng · đối tác + **biểu phí dẫn xuất realtime** · chuỗi TID · tên HKD · TK nhận tiền §8 · ngày cấp · trạng thái §9a · nguồn hồ sơ §10a).
 - **QUYẾT ĐỊNH kiến trúc (Mr.Long chốt "Cách 1")**: GỘP thông tin thương mại §9 **vào chính bảng `tids`** (G-POS.1), KHÔNG tạo bảng riêng — 1 khái niệm TID duy nhất: cấu hình §9 → gắn POS §11 → vận hành cùng 1 record.

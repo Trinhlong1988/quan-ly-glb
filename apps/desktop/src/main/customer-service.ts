@@ -241,7 +241,7 @@ export async function deleteCustomer(id: number, password: string): Promise<Muta
   const row = await db.customer.findUnique({ where: { id } });
   if (!row || row.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Khách hàng không tồn tại.' };
 
-  await db.customer.update({ where: { id }, data: { deletedAt: new Date() } });
+  await db.customer.update({ where: { id }, data: { deletedAt: new Date(), deletedBy: user.id } });
   await writeAudit(db, {
     actorUserId: user.id,
     action: 'CUSTOMER_DELETED',

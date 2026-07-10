@@ -26,7 +26,7 @@ export function ReceiveAccountPage({ user }: { user: AuthUser }): JSX.Element {
   return (
     <div>
       <div className="mb-4">
-        <h2 className="text-lg font-semibold text-slate-800">Tài khoản nhận tiền – ủy quyền</h2>
+        <h2 className="text-lg font-semibold text-slate-800">Quản Lý Tài Khoản Nhận Tiền</h2>
         <p className="text-sm text-slate-500">Tài khoản nhận tiền (kèm CCCD ủy quyền) · Nguồn tài khoản.</p>
       </div>
       <div className="mb-3 flex items-center gap-1 border-b border-line">

@@ -144,7 +144,7 @@ export async function deleteFeeTypes(ids: number[], password: string): Promise<M
   for (const id of ids) {
     const row = await db.feeType.findUnique({ where: { id } });
     if (!row || row.deletedAt) continue;
-    await db.feeType.update({ where: { id }, data: { deletedAt: new Date(), updatedBy: user.id } });
+    await db.feeType.update({ where: { id }, data: { deletedAt: new Date(), updatedBy: user.id, deletedBy: user.id } });
     await writeAudit(db, { actorUserId: user.id, action: 'FEE_TYPE_DELETED', targetType: 'FeeType', targetId: String(id), before: auditSnapshot({ name: row.name }) });
     deleted++;
   }
@@ -272,7 +272,7 @@ export async function deleteFeeRates(ids: number[], password: string): Promise<M
   for (const id of ids) {
     const row = await db.feeRate.findUnique({ where: { id } });
     if (!row || row.deletedAt) continue;
-    await db.feeRate.update({ where: { id }, data: { deletedAt: new Date(), updatedBy: user.id } });
+    await db.feeRate.update({ where: { id }, data: { deletedAt: new Date(), updatedBy: user.id, deletedBy: user.id } });
     await writeAudit(db, { actorUserId: user.id, action: 'FEE_RATE_DELETED', targetType: 'FeeRate', targetId: String(id), before: auditSnapshot({ partnerId: row.partnerId, cardTypeId: row.cardTypeId }) });
     deleted++;
   }

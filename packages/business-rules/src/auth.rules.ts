@@ -4,6 +4,10 @@ import bcrypt from 'bcryptjs';
 import type { UserStatus } from '@glb/shared';
 
 export const BCRYPT_ROUNDS = 10;
+/** Pass cấp 2 (xóa vĩnh viễn) băm sâu hơn — cost cao chống dò/phá hoại. */
+export const BCRYPT_ROUNDS_L2 = 12;
+/** Sai xác thực quá số lần này (đăng nhập / đổi mật khẩu / pass cấp 2) → tự khóa tài khoản. */
+export const MAX_FAILED_ATTEMPTS = 5;
 
 /** Minimal record the auth rules need — DB layer maps its row into this shape. */
 export interface AuthUserRecord {
@@ -51,6 +55,26 @@ export function verifyPassword(plain: string, hash: string): boolean {
 /** True only for a real bcrypt hash (defence-in-depth: never store/compare plaintext). */
 export function isBcryptHash(value: string): boolean {
   return typeof value === 'string' && /^\$2[aby]\$\d{2}\$.{53}$/.test(value);
+}
+
+/** Băm mật khẩu CẤP 2 (cost cao hơn — mã hóa sâu, một chiều, không thể khôi phục). */
+export function hashLevel2(plain: string): string {
+  return bcrypt.hashSync(plain, BCRYPT_ROUNDS_L2);
+}
+
+/** Đối chiếu mật khẩu cấp 2 với băm đã lưu. */
+export function verifyLevel2(plain: string, hash: string | null | undefined): boolean {
+  if (!hash) return false;
+  try {
+    return bcrypt.compareSync(plain, hash);
+  } catch {
+    return false;
+  }
+}
+
+/** Sau lần xác thực SAI: đã chạm ngưỡng khóa chưa? (đếm gồm cả lần vừa sai) */
+export function reachesLockout(failedAttempts: number): boolean {
+  return failedAttempts >= MAX_FAILED_ATTEMPTS;
 }
 
 /**

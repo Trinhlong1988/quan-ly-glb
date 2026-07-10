@@ -67,7 +67,7 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
     <div>
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-slate-800">Khách hàng</h2>
+          <h2 className="text-lg font-semibold text-slate-800">Quản Lý Khách Hàng</h2>
           <p className="text-sm text-slate-500">Mã khách hàng tự sinh · biệt danh dễ gọi · tên thật · Số điện thoại.</p>
         </div>
         {canCreate && (
