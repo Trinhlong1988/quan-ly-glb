@@ -15,7 +15,7 @@ import {
 import { hasPermission, validatePassword, type AuthUser, type UserStatus } from '@glb/shared';
 import { getDb } from './db.js';
 import { writeAudit } from './audit.js';
-import { requirePermission } from './guard.js';
+import { requirePermission, verifyActorPassword } from './guard.js';
 import { notifyAdmins } from './message-service.js';
 
 /**
@@ -264,10 +264,15 @@ export async function changePassword(
  * Admin/Manager ĐẶT LẠI mật khẩu cho user KHÁC (USER_RESET_PASSWORD).
  * Không cần mật khẩu cũ của user đó; đặt mật khẩu mới + ÉP đổi ở lần đăng nhập kế + mở khóa + xóa bộ đếm sai.
  * Gửi thông báo vào hòm thư của user bị đặt lại.
+ *
+ * BẢO MẬT (B19): thao tác nhạy cảm trên tài khoản NGƯỜI KHÁC PHẢI re-auth chính actor đang đăng nhập —
+ * bắt actor nhập lại MẬT KHẨU ĐĂNG NHẬP của mình (chống chiếm tài khoản qua phiên bỏ ngỏ). Tái dùng đúng
+ * pattern verifyActorPassword như thao tác xóa (không tính vào bộ đếm khóa — nhất quán với delete).
  */
 export async function adminResetPassword(
   targetUserId: number,
-  newPassword: string
+  newPassword: string,
+  actorPassword: string
 ): Promise<ChangePasswordOutcome> {
   const g = await requirePermission('USER_RESET_PASSWORD', {
     action: 'PASSWORD_RESET_BY_ADMIN',
@@ -276,6 +281,22 @@ export async function adminResetPassword(
   });
   if (!g.ok) return g;
   const { db, user: actor } = g;
+
+  // Re-auth actor: sai mật khẩu của chính mình → KHÔNG đổi gì DB (chỉ ghi audit từ chối), như thao tác xóa.
+  if (!(await verifyActorPassword(actor, actorPassword))) {
+    await writeAudit(db, {
+      actorUserId: actor.id,
+      action: 'PERMISSION_DENIED',
+      targetType: 'User',
+      targetId: String(targetUserId),
+      after: { deniedAction: 'PASSWORD_RESET_BY_ADMIN', reason: 'WRONG_ACTOR_PASSWORD', actor: actor.username }
+    });
+    return {
+      ok: false,
+      error: 'WRONG_ACTOR_PASSWORD',
+      message: 'Mật khẩu của bạn không đúng — không thể đặt lại mật khẩu người dùng.'
+    };
+  }
 
   const target = await db.user.findFirst({ where: { id: targetUserId, deletedAt: null } });
   if (!target) return { ok: false, error: 'NOT_FOUND', message: 'Không tìm thấy nhân sự cần đặt lại mật khẩu.' };

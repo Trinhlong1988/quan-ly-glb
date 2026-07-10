@@ -116,7 +116,27 @@ export async function runNhomASelfTest(): Promise<number> {
   // ═══════════ E) ADMIN ĐẶT LẠI MẬT KHẨU USER KHÁC (ép đổi + mở khóa + báo hòm thư) ═══════════
   await logout();
   await login('adminroot', 'Admin@123456');
-  const rReset = await adminResetPassword(lockId, 'Fresh@123456'); // locktest đang LOCKED
+
+  // B19: SAI mật khẩu của CHÍNH actor → WRONG_ACTOR_PASSWORD + KHÔNG đổi gì DB của target.
+  // Chụp trạng thái target TRƯỚC (locktest đang LOCKED) rồi so sánh SAU: mọi trường phải bất biến.
+  const hashBefore = (await db.user.findUnique({ where: { id: lockId }, select: { passwordHash: true } }))!.passwordHash;
+  const sBeforeWrong = await statusOf(lockId);
+  const rWrongActor = await adminResetPassword(lockId, 'Fresh@123456', 'sai-mat-khau-admin');
+  const sWrongActor = await statusOf(lockId);
+  const hashAfterWrong = (await db.user.findUnique({ where: { id: lockId }, select: { passwordHash: true } }))!.passwordHash;
+  ok('admin reset SAI mật khẩu chính mình → WRONG_ACTOR_PASSWORD', rWrongActor.ok === false && rWrongActor.error === 'WRONG_ACTOR_PASSWORD', rWrongActor.error);
+  ok('reset SAI actor password → MK target KHÔNG đổi (hash giữ nguyên)', hashAfterWrong === hashBefore, { changed: hashAfterWrong !== hashBefore });
+  ok(
+    'reset SAI actor password → trạng thái target BẤT BIẾN (vẫn LOCKED, đếm/ép-đổi/lockedAt không đổi)',
+    sWrongActor.status === 'LOCKED' &&
+      sWrongActor.status === sBeforeWrong.status &&
+      sWrongActor.failedAttempts === sBeforeWrong.failedAttempts &&
+      sWrongActor.forceChangePassword === sBeforeWrong.forceChangePassword &&
+      String(sWrongActor.lockedAt) === String(sBeforeWrong.lockedAt),
+    { before: sBeforeWrong, after: sWrongActor }
+  );
+
+  const rReset = await adminResetPassword(lockId, 'Fresh@123456', 'Admin@123456'); // actorPassword ĐÚNG; locktest đang LOCKED
   const sReset = await statusOf(lockId);
   ok('admin đặt lại mật khẩu locktest → ok', rReset.ok === true, rReset.error);
   ok('sau đặt lại: forceChangePassword=true', sReset.forceChangePassword === true, sReset);
@@ -138,7 +158,7 @@ export async function runNhomASelfTest(): Promise<number> {
   await mkUser('NV Sales2', 'salesusr2', 'Sales@123456');
   await logout();
   await login('salesusr2', 'Sales@123456');
-  const forb = await adminResetPassword(resetId, 'Hack@123456');
+  const forb = await adminResetPassword(resetId, 'Hack@123456', 'Sales@123456');
   ok('SALES đặt lại mật khẩu user khác → FORBIDDEN', forb.ok === false && forb.error === 'FORBIDDEN', forb.error);
 
   // ═══════════ G) HÒM THƯ: gửi thư nội bộ + đếm chưa đọc + đánh dấu đã đọc ═══════════

@@ -22,6 +22,7 @@ export function AdminResetPasswordModal({
   const toast = useToast();
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [actorPassword, setActorPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const mismatch = confirm.length > 0 && next !== confirm;
@@ -37,9 +38,13 @@ export function AdminResetPasswordModal({
       setError('Mật khẩu mới và xác nhận không khớp nhau.');
       return;
     }
+    if (!actorPassword) {
+      setError('Vui lòng nhập mật khẩu của bạn để xác nhận.');
+      return;
+    }
     setBusy(true);
     try {
-      const res = await window.api.adminResetPassword(target.id, next);
+      const res = await window.api.adminResetPassword(target.id, next, actorPassword);
       if (res.ok) {
         toast.success(`Đã đặt lại mật khẩu cho ${target.fullName}. Người dùng sẽ phải đổi mật khẩu ở lần đăng nhập kế.`);
         onDone?.();
@@ -75,6 +80,13 @@ export function AdminResetPasswordModal({
           />
         </Field>
         {mismatch && <p className="-mt-2 text-xs font-medium text-danger">Mật khẩu xác nhận chưa khớp.</p>}
+        <Field label="Mật khẩu của bạn (xác nhận)" required>
+          <PasswordInput
+            value={actorPassword}
+            onChange={(e) => setActorPassword(e.target.value)}
+            autoComplete="current-password"
+          />
+        </Field>
         {error && <div className="rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">{error}</div>}
 
         <div className="mt-1 flex justify-end gap-2">

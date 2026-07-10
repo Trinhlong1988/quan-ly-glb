@@ -54,9 +54,9 @@ export function registerIpc(): void {
     const { currentPassword, newPassword, confirmPassword } = args ?? ({} as never);
     return auth.changePassword(currentPassword, newPassword, confirmPassword);
   });
-  ipcMain.handle('auth:adminResetPassword', async (_e, args: { userId: number; newPassword: string }) => {
-    const { userId, newPassword } = args ?? ({} as never);
-    return auth.adminResetPassword(userId, newPassword);
+  ipcMain.handle('auth:adminResetPassword', async (_e, args: { userId: number; newPassword: string; actorPassword: string }) => {
+    const { userId, newPassword, actorPassword } = args ?? ({} as never);
+    return auth.adminResetPassword(userId, newPassword, actorPassword);
   });
   ipcMain.handle('auth:level2Status', async () => auth.getLevel2Status());
   ipcMain.handle('auth:setLevel2', async (_e, args: { level1: string; newLevel2: string; confirmLevel2: string }) => {

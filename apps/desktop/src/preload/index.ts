@@ -9,8 +9,8 @@ const api = {
   logout: () => ipcRenderer.invoke('auth:logout'),
   changePassword: (currentPassword: string, newPassword: string, confirmPassword?: string) =>
     ipcRenderer.invoke('auth:changePassword', { currentPassword, newPassword, confirmPassword }),
-  adminResetPassword: (userId: number, newPassword: string) =>
-    ipcRenderer.invoke('auth:adminResetPassword', { userId, newPassword }),
+  adminResetPassword: (userId: number, newPassword: string, actorPassword: string) =>
+    ipcRenderer.invoke('auth:adminResetPassword', { userId, newPassword, actorPassword }),
   level2Status: () => ipcRenderer.invoke('auth:level2Status'),
   setLevel2: (level1: string, newLevel2: string, confirmLevel2: string) =>
     ipcRenderer.invoke('auth:setLevel2', { level1, newLevel2, confirmLevel2 }),

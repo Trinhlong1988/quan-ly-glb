@@ -767,7 +767,7 @@ export interface GlbApi {
   me(): Promise<AuthUser | null>;
   logout(): Promise<{ ok: boolean }>;
   changePassword(currentPassword: string, newPassword: string, confirmPassword?: string): Promise<MutationOutcome>;
-  adminResetPassword(userId: number, newPassword: string): Promise<MutationOutcome>;
+  adminResetPassword(userId: number, newPassword: string, actorPassword: string): Promise<MutationOutcome>;
   level2Status(): Promise<{ ok: boolean; hasLevel2?: boolean; error?: string; message?: string }>;
   setLevel2(level1: string, newLevel2: string, confirmLevel2: string): Promise<MutationOutcome>;
   resetLevel2(level1: string, oldLevel2: string, newLevel2: string, confirmLevel2: string): Promise<MutationOutcome>;
