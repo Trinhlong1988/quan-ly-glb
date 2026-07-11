@@ -1,12 +1,12 @@
 ---
 project: Quản Lý GLB (IMS)
 phase: G-REV.B / G-MAINT.E
-current_version: 0.22.0-k1
-status: PHASE_K K1 (Hợp nhất POS + timeline gốc) COMMITTED+TAGGED. PosDevice=nguồn sự thật (nhập kho upsert PosDevice IN_STOCK+STOCK_IN, sửa desync #22), backfill idempotent từ PosIntake, xử lý TID khi thu hồi/hỏng/bảo hành/thanh lý, PosPage 5 tab, bỏ menu possupply. QA-pair đối kháng bắt 3 lỗi pre-commit (HIGH reassign / MEDIUM ABBA deadlock / LOW STOCK_IN) → hardening PASS. K2 (TID unify) tiếp theo. (Thu-Chi H1→H2b: b09b289; B21: f1be7aa.)
+current_version: 0.23.0-k2
+status: PHASE_K HOÀN TẤT (K1+K2) COMMITTED+TAGGED. K1=POS unify (PosDevice nguồn sự thật, desync #22 fixed, tag v0.22.0-k1). K2=TID unify: 2 chiều trạng thái derive (Gán máy POS/Giao cho khách), form chuỗi HKD→đối tác→bank(PartnerBank 1-auto/2+-dropdown), 1 trang 3 tab + 2 StatBar/2 lọc/2 cột, timeline TID (tidTimeline), máy khách (customerDeviceSerial), bỏ menu tidcfg. QA-pair đối kháng bắt K1(3)+K2(HIGH mồ côi gán TID=B22/MEDIUM/2 LOW) pre-commit → hardening PASS. (Thu-Chi H1→H2b b09b289; B21 f1be7aa.)
 last_update_ts: 2026-07-11
-last_update_by: LEAD (AUDIT rerun sạch: typecheck 0 · build 0 · vitest 238 · selftest 29 hardened failures=0 (4 ca FIX1) · 3/5/14/27/28/2 xanh)
+last_update_by: LEAD (AUDIT rerun sạch: typecheck 0 · build 0 · vitest 238 · selftest 30 hardened failures=0 (FIX1/2/3) · 29 back-port failures=0 · 3/10 xanh)
 rule_break_count: 0
-schema_version: 18
+schema_version: 19
 repo_path: D:\TT HKD AI\tools\quan-ly-glb (chuyển C→D 10/7; bản C giữ làm sao lưu, cấm sửa)
 ---
 

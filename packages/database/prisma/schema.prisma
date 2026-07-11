@@ -260,6 +260,9 @@ model Tid {
   configStatusId   Int?      @map("config_status_id") // Trạng thái TID cấu hình (§9a)
   dossierSourceId  Int?      @map("dossier_source_id") // Nguồn hồ sơ (§10a)
   note             String?
+  // ── PHASE K2 (§5/§8) — hợp nhất TID + máy của khách (Q-T6) + link HKD (Q-T3) ──
+  customerDeviceSerial String? @map("customer_device_serial") // Q-T6: serial máy CỦA KHÁCH (không tạo PosDevice)
+  dossierId        Int?      @map("dossier_id") // Q-T3: link Hồ sơ HKD (Dossier); giữ hkdName text để hiển thị/backfill
   createdBy        Int?      @map("created_by")
   updatedBy        Int?      @map("updated_by")
   deletedAt        DateTime? @map("deleted_at") @db.Timestamptz(3) // soft-delete cho cấu hình TID (§9b)
@@ -269,6 +272,7 @@ model Tid {
 
   @@index([partnerId])
   @@index([bankId])
+  @@index([dossierId])
   @@map("tids")
 }
 

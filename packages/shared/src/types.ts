@@ -107,6 +107,8 @@ export type AuditAction =
   | 'POS_INTAKE_DELETED'
   // ── PHASE K1 — Hợp nhất POS ──
   | 'POS_UNIFY_BACKFILL'
+  // ── PHASE K2 — Hợp nhất TID ──
+  | 'TID_UNIFY_DOSSIER_BACKFILL'
   // ── G-CFG.3 (§C5) — Cấu hình phí ──
   | 'FEE_TYPE_CREATED'
   | 'FEE_TYPE_UPDATED'

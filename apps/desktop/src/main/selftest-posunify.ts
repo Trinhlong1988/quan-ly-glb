@@ -121,6 +121,16 @@ export async function runPosUnifySelfTest(): Promise<number> {
   const polluted = (undel.data ?? []).some((t) => t.tid === 'TID-K1-002');
   assert('FIX1(d): TID đã giao (ACTIVE, đã gán lại) KHÔNG lọt list "chưa giao"', !polluted, { inUndelivered: polluted });
 
+  // (e) BACK-PORT (K2 hardening): assignTid lên máy ĐANG MANG TID khác → chặn DEVICE_HAS_TID (bất
+  //     biến 1 máy 1 TID; chống mồ côi TID + 2 binding mở). s2b hiện DEPLOYED + currentTid=TID-K1-002.
+  await tidSvc.createTid({ tid: 'TID-K1-DHT' });
+  const devHasTid = await tidSvc.assignTid('TID-K1-DHT', { posSerial: s2b, customerId, occurredAt: '2026-07-09' });
+  assert('FIX1(e): gán TID mới lên máy đã có TID → chặn DEVICE_HAS_TID', devHasTid.ok === false && devHasTid.error === 'DEVICE_HAS_TID', { error: devHasTid.error });
+  const devS2b = await db.posDevice.findUnique({ where: { serial: s2b } });
+  assert('FIX1(e): máy vẫn trỏ TID cũ (TID-K1-002), không mồ côi', devS2b?.currentTid === 'TID-K1-002', { tid: devS2b?.currentTid });
+  const openBindS2b = await db.posTidBinding.count({ where: { posSerial: s2b, unboundAt: null } });
+  assert('FIX1(e): chỉ 1 binding mở cho máy', openBindS2b === 1, { openBindS2b });
+
   // ── (4c) retirePos BẮT BUỘC gỡ + đóng TID (RECALLED) ───────────────────
   const s3 = 'SN-K1-003';
   await supplySvc.createPosIntake({ posModelId: modelId, serial: s3, intakeStatusId: statusId!, supplierId, importPrice: 900_000, importedAt: '2026-07-01' });

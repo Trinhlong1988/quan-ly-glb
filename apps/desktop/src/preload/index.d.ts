@@ -168,9 +168,36 @@ export interface TidDto {
   deliveredAt: string | null;
   closedAt: string | null;
   createdAt: string;
+  // PHASE K2 — 2 chiều DERIVE (Q-T1) + máy khách (Q-T6) + HKD (Q-T3) + cấu hình hợp nhất (§1).
+  deviceAssigned: boolean;
+  delivered: boolean;
+  customerDeviceSerial: string | null;
+  dossierId: number | null;
+  bankId: number | null;
+  bankCode: string | null;
+  bankName: string | null;
+  partnerId: number | null;
+  partnerCode: string | null;
+  partnerName: string | null;
+  hkdName: string | null;
+  receiveAccountId: number | null;
+  issuedAt: string | null;
+  configStatusId: number | null;
+  configStatusName: string | null;
+  dossierSourceId: number | null;
+  dossierSourceCode: string | null;
+  note: string | null;
+  customerName: string | null;
+  agentName: string | null;
 }
 export interface UndeliveredTidDto extends TidDto {
   agingDays: number;
+}
+export interface TidRefs {
+  dossiers: { id: number; hkdName: string; ownerName: string | null }[];
+  partners: { id: number; code: string; name: string }[];
+  banks: { id: number; code: string; name: string }[];
+  partnerBanks: Record<number, number[]>;
 }
 export interface UndeliveredSummary {
   count: number;
@@ -228,14 +255,27 @@ export interface TidFilter {
   search?: string;
   bank?: string;
   status?: string;
+  deviceAssigned?: boolean;
+  delivered?: boolean;
   fromDate?: string;
   toDate?: string;
 }
+/** PHASE K2 (Q-T5) — form Thêm TID hợp nhất (đầy đủ): cho phép chưa gán + chưa giao. */
 export interface CreateTidInput {
   tid: string;
   mid?: string | null;
-  bank?: string | null;
-  openedAt?: string | null;
+  dossierId?: number | null;
+  hkdName: string;
+  partnerId: number;
+  bankId: number;
+  receiveAccountId?: number | null;
+  issuedAt?: string | null;
+  configStatusId?: number | null;
+  dossierSourceId?: number | null;
+  note?: string | null;
+  customerDeviceSerial?: string | null;
+  assign?: { posSerial: string; customerId: number };
+  deliver?: { deliveredAt?: string | null; customerId: number; toAgentId?: number | null };
 }
 export interface AssignTidInput {
   posSerial: string;
@@ -255,6 +295,8 @@ export interface RecallTidInput {
 }
 export interface MarkDeliveredInput {
   deliveredAt?: string | null;
+  customerId?: number | null;
+  toAgentId?: number | null;
   note?: string | null;
 }
 
@@ -1060,6 +1102,8 @@ export interface GlbApi {
   tidList(filter: TidFilter): Promise<ListResult<TidDto>>;
   tidUndelivered(): Promise<ListResult<UndeliveredTidDto>>;
   tidCreate(input: CreateTidInput): Promise<MutationOutcome>;
+  tidRefs(): Promise<{ ok: boolean; data?: TidRefs; error?: string; message?: string }>;
+  tidTimeline(tid: string): Promise<ListResult<TimelineEventDto>>;
   tidAssign(tid: string, input: AssignTidInput): Promise<MutationOutcome>;
   tidReplace(tid: string, input: ReplaceTidInput): Promise<MutationOutcome>;
   tidRecall(tid: string, input: RecallTidInput): Promise<MutationOutcome>;

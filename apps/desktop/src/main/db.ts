@@ -301,6 +301,43 @@ export async function backfillPosDevicesFromIntakes(db: Db): Promise<PosBackfill
   return { created, filled, stockInAdded, intakeSerials: distinctSerials.length, deviceSerials };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE K2 (§8, Q-T3) — Backfill dossierId cho tids từ hkdName text.
+// Idempotent (chỉ đụng tids dossierId=null có hkdName). Khớp CHÍNH XÁC 1 Dossier alive
+// (hkdName, case-insensitive) → set; nhiều hoặc không khớp → GIỮ null + log (đối soát đếm).
+// Guard cờ nằm ở seedIfEmpty (1 lần/DB), giống grant*/pos-unify.
+// ─────────────────────────────────────────────────────────────────────────────
+const TID_UNIFY_BACKFILL_FLAG = 'seed.tidUnifyDossierBackfilledV1';
+
+export interface TidDossierBackfillReport {
+  linked: number; // số tids được set dossierId (khớp chính xác 1)
+  ambiguous: number; // hkdName khớp ≥2 Dossier → giữ null
+  unmatched: number; // hkdName không khớp Dossier nào → giữ null
+  scanned: number; // số tids có hkdName, dossierId=null đã quét
+}
+
+export async function backfillTidDossierIds(db: Db): Promise<TidDossierBackfillReport> {
+  const norm = (s: string): string => s.trim().toLowerCase();
+  const dossiers = await db.dossier.findMany({ where: { deletedAt: null }, select: { id: true, hkdName: true } });
+  // Đếm số Dossier alive theo hkdName chuẩn hóa → phát hiện mơ hồ (≥2).
+  const byName = new Map<string, number[]>();
+  for (const d of dossiers) {
+    const k = norm(d.hkdName);
+    byName.set(k, [...(byName.get(k) ?? []), d.id]);
+  }
+  const tids = await db.tid.findMany({ where: { deletedAt: null, dossierId: null, NOT: { hkdName: null } }, select: { id: true, hkdName: true } });
+  let linked = 0, ambiguous = 0, unmatched = 0;
+  for (const t of tids) {
+    if (!t.hkdName || !t.hkdName.trim()) { unmatched++; continue; }
+    const ids = byName.get(norm(t.hkdName));
+    if (!ids || ids.length === 0) { unmatched++; continue; }
+    if (ids.length > 1) { ambiguous++; continue; }
+    await db.tid.update({ where: { id: t.id }, data: { dossierId: ids[0] } });
+    linked++;
+  }
+  return { linked, ambiguous, unmatched, scanned: tids.length };
+}
+
 let prisma: Db | undefined;
 
 /** Cấu hình kết nối máy chủ PostgreSQL (client nhập ở màn "Cấu hình máy chủ", G10 model A). */
@@ -538,6 +575,27 @@ export async function seedIfEmpty(db: Db): Promise<void> {
       if (report.intakeSerials !== report.deviceSerials) {
         // eslint-disable-next-line no-console
         console.warn(`[pos-unify] đối soát lệch: ${report.intakeSerials} serial phiếu nhập vs ${report.deviceSerials} máy tương ứng`);
+      }
+    }
+  }
+
+  // PHASE K2 (§8, Q-T3): backfill dossierId cho tids từ hkdName 1 LẦN/DB (cờ AppSetting). DB mới
+  // (chưa có TID/Dossier) → no-op. Idempotent; khớp chính xác 1 → set, mơ hồ/không khớp → null + log.
+  {
+    const flag = await db.appSetting.findUnique({ where: { key: TID_UNIFY_BACKFILL_FLAG } });
+    if (!flag) {
+      const report = await backfillTidDossierIds(db);
+      await db.appSetting.upsert({
+        where: { key: TID_UNIFY_BACKFILL_FLAG },
+        update: {},
+        create: { key: TID_UNIFY_BACKFILL_FLAG, value: new Date().toISOString() }
+      });
+      if (report.linked > 0 || report.ambiguous > 0 || report.unmatched > 0) {
+        await writeAudit(db, { actorUserId: null, action: 'TID_UNIFY_DOSSIER_BACKFILL', targetType: 'System', after: report });
+      }
+      if (report.ambiguous > 0 || report.unmatched > 0) {
+        // eslint-disable-next-line no-console
+        console.warn(`[tid-unify] dossierId backfill: linked=${report.linked} ambiguous=${report.ambiguous} unmatched=${report.unmatched} (giữ null, cần gán tay)`);
       }
     }
   }

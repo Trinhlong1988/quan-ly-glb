@@ -40,7 +40,8 @@ export function TidConfigPage({ user }: { user: AuthUser }): JSX.Element {
 }
 
 // ── §9a TRẠNG THÁI TID ────────────────────────────────────────────────────────
-function StatusTab({ canManage }: { canManage: boolean }): JSX.Element {
+// PHASE K2: export để trang "Quản Lý TID" hợp nhất (TidPage) tái dùng làm tab "Trạng thái TID cấu hình".
+export function StatusTab({ canManage }: { canManage: boolean }): JSX.Element {
   const toast = useToast();
   const [rows, setRows] = useState<TidConfigStatusDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -256,7 +257,7 @@ function TidTab({ canManage }: { canManage: boolean }): JSX.Element {
 }
 
 /** Bảng biểu phí dẫn xuất theo (Đối tác × Ngân hàng) — hiện realtime KỲ ĐANG HIỆU LỰC khi chọn đối tác (§9). */
-function FeePreview({ bankId, partnerId }: { bankId: number; partnerId: number }): JSX.Element {
+export function FeePreview({ bankId, partnerId }: { bankId: number; partnerId: number }): JSX.Element {
   const [rows, setRows] = useState<FeeRateDto[] | null>(null);
   useEffect(() => {
     let live = true;

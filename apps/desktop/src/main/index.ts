@@ -298,6 +298,18 @@ app.whenReady().then(async () => {
     return;
   }
 
+  // PHASE K2 Hợp nhất TID self-test (=30): 4 tổ hợp Gán×Giao (gồm máy khách "chưa gán + đã giao"),
+  // tạo chưa gán → assign sau, giao khi chưa gán (customerId+toAgentId+customerDeviceSerial), sự kiện
+  // Giao đủ field, tidTimeline đúng thứ tự, regression assign/replace/recall/deliver, K1 compat
+  // (recallPos→reassign / recallTid→RECALLED→assign FORBIDDEN), chưa-giao loại lifecycle+soft-delete
+  // khớp badge, quyền vai (WAREHOUSE tạo+tidRefs OK / assign+SALES FORBIDDEN), D4 recallTid clear posSerial.
+  if (process.env['GLB_SELFTEST'] === '30') {
+    const { runTidUnifySelfTest } = await import('./selftest-tidunify.js');
+    const code = await runTidUnifySelfTest();
+    app.exit(code);
+    return;
+  }
+
   await createWindow();
   startHousekeeping();
 

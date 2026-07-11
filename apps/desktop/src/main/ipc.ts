@@ -153,7 +153,11 @@ export function registerIpc(): void {
   // ---- TIDs (G-POS.1 §A) ------------------------------------------------
   ipcMain.handle('tid:list', async (_e, filter: tidSvc.TidFilter) => tidSvc.listTids(filter));
   ipcMain.handle('tid:undelivered', async () => tidSvc.listUndeliveredTids());
-  ipcMain.handle('tid:create', async (_e, input: tidSvc.CreateTidInput) => tidSvc.createTid(input));
+  // PHASE K2 (Q-T5): tid:create → form ĐẦY ĐỦ hợp nhất (cho phép chưa gán + chưa giao). Helper
+  // createTid nội bộ (D3) GIỮ cho selftest gpos/posunify, KHÔNG expose qua IPC nữa.
+  ipcMain.handle('tid:create', async (_e, input: tidSvc.CreateTidUnifiedInput) => tidSvc.createTidUnified(input));
+  ipcMain.handle('tid:refs', async () => tidSvc.tidRefs());
+  ipcMain.handle('tid:timeline', async (_e, tid: string) => tidSvc.tidTimeline(tid));
   ipcMain.handle('tid:assign', async (_e, args: { tid: string; input: tidSvc.AssignTidInput }) => tidSvc.assignTid(args.tid, args.input));
   ipcMain.handle('tid:replace', async (_e, args: { tid: string; input: tidSvc.ReplaceTidInput }) => tidSvc.replaceTid(args.tid, args.input));
   ipcMain.handle('tid:recall', async (_e, args: { tid: string; input: tidSvc.RecallTidInput }) => tidSvc.recallTid(args.tid, args.input));

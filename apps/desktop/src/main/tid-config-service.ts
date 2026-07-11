@@ -246,8 +246,9 @@ function ids(arr: (number | null)[]): number[] {
   return [...new Set(arr.filter((x): x is number => typeof x === 'number'))];
 }
 
-/** Kiểm tra khóa tham chiếu (ngân hàng/đối tác bắt buộc; TK nhận/trạng thái/nguồn hồ sơ nếu có). */
-async function validateRefs(db: Db, input: { bankId: number; partnerId: number; receiveAccountId?: number | null; configStatusId?: number | null; dossierSourceId?: number | null }): Promise<MutationResult | null> {
+/** Kiểm tra khóa tham chiếu (ngân hàng/đối tác bắt buộc; TK nhận/trạng thái/nguồn hồ sơ nếu có).
+ *  PHASE K2 (D5): export để createTidUnified (tid-service) tái dùng — 1 nguồn kiểm chứng ref. */
+export async function validateRefs(db: Db, input: { bankId: number; partnerId: number; receiveAccountId?: number | null; configStatusId?: number | null; dossierSourceId?: number | null }): Promise<MutationResult | null> {
   const bank = await db.bank.findUnique({ where: { id: input.bankId } });
   if (!bank || bank.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Ngân hàng đã chọn không tồn tại.' };
   const partner = await db.partner.findUnique({ where: { id: input.partnerId } });
