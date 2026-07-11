@@ -3,6 +3,67 @@
 // tổng hợp vàng kem, tên cột IN HOA nền xanh nhạt + LỌC (autofilter) + đóng băng, kẻ ô mảnh, dòng lẻ xám nhạt,
 // Times New Roman 11pt. Trang A4 DỌC, fit-to-width 1 trang. Dùng cho cả bảng dữ liệu lẫn MẪU nhập (headers-only).
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
+
+type Align = 'left' | 'center' | 'right';
+// Chuỗi trông như TIỀN: TOÀN BỘ là số + phân tách + (tùy chọn) ký hiệu tiền ở cuối, VÀ có phân tách nghìn
+// hoặc ký hiệu tiền. CẨN THẬN: "đ" là CHỮ CÁI tiếng Việt phổ biến ("Đang hoạt động", "đối tác") → KHÔNG
+// được coi mọi chuỗi chứa "đ" là tiền; phải neo ký hiệu tiền ở CUỐI sau chuỗi số. Cũng loại SĐT/mã số thuần.
+function isMoneyString(v: Cell): boolean {
+  if (typeof v !== 'string') return false;
+  const s = v.trim();
+  if (!/\d/.test(s)) return false;
+  if (!/^[\d.,\s]+(\s?(₫|đ|VND))?$/i.test(s)) return false; // toàn số/phân tách, tiền chỉ ở cuối
+  return /\d[.,]\d{3}(\D|$)/.test(s) || /(₫|đ|VND)\s*$/i.test(s); // có phân tách nghìn hoặc ký hiệu tiền
+}
+// Căn cột THEO KIỂU dữ liệu (R44 + "số tiền căn phải", Mr.Long):
+//   • TIỀN/số lớn (number ≥1000, số lẻ, hoặc chuỗi tiền có phân tách) → PHẢI;
+//   • STT/đếm nhỏ (số nguyên <1000) → GIỮA;
+//   • mã/SĐT/trạng thái/ngày (chuỗi ngắn ≤16) → GIỮA;  • tên/địa chỉ (dài >16) → TRÁI.
+function colAligns(rows: Cell[][], N: number): Align[] {
+  const aligns: Align[] = [];
+  for (let ci = 0; ci < N; ci++) {
+    let has = false, maxLen = 0, allRightable = true, allSmallInt = true;
+    for (const r of rows) {
+      const v = r[ci];
+      if (v == null || v === '') continue;
+      has = true;
+      maxLen = Math.max(maxLen, String(v).length);
+      const isNum = typeof v === 'number';
+      const money = isMoneyString(v);
+      if (!isNum && !money) allRightable = false;
+      if (money) allSmallInt = false;
+      else if (isNum) { if (!Number.isInteger(v) || Math.abs(v) >= 1000) allSmallInt = false; }
+      else allSmallInt = false;
+    }
+    if (!has) aligns.push('center');
+    else if (allRightable && !allSmallInt) aligns.push('right'); // TIỀN / số lớn
+    else if (allRightable && allSmallInt) aligns.push('center'); // STT / đếm nhỏ
+    else if (maxLen > 16) aligns.push('left'); // tên/địa chỉ dài
+    else aligns.push('center'); // mã/SĐT/trạng thái/ngày
+  }
+  return aligns;
+}
+
+// R43: chặn "chấm vàng/tam giác — Number stored as text" khi ô là chuỗi số (SĐT/mã/MST giữ nguyên text).
+// exceljs không expose ignoredErrors → chèn thẳng vào sheet XML (đúng vị trí schema: trước </worksheet>).
+async function suppressNumberAsTextWarning(buf: Buffer, sqref: string): Promise<Buffer> {
+  try {
+    const zip = await JSZip.loadAsync(buf);
+    const path = 'xl/worksheets/sheet1.xml';
+    const file = zip.file(path);
+    if (!file) return buf;
+    let xml = await file.async('string');
+    if (!xml.includes('<ignoredErrors>')) {
+      const tag = `<ignoredErrors><ignoredError sqref="${sqref}" numberStoredAsText="1"/></ignoredErrors>`;
+      xml = xml.replace('</worksheet>', tag + '</worksheet>');
+      zip.file(path, xml);
+    }
+    return (await zip.generateAsync({ type: 'nodebuffer' })) as Buffer;
+  } catch {
+    return buf; // an toàn: lỗi hậu xử lý không làm hỏng file
+  }
+}
 
 const FONT = 'Times New Roman';
 const C_TITLE = 'FF2E75B6';
@@ -29,13 +90,6 @@ function fmtVNDate(d: Date): string {
   const p = (n: number): string => String(n).padStart(2, '0');
   return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()}`;
 }
-// Số thuần / chuỗi chỉ gồm số + phân cách → căn phải; còn lại căn trái.
-function isNumericCell(v: Cell): boolean {
-  if (typeof v === 'number') return true;
-  if (typeof v !== 'string') return false;
-  const s = v.trim();
-  return !!s && /^[()+\-\d.,\s]+$/.test(s) && /\d/.test(s);
-}
 function pageSetup(): ExcelJS.Worksheet['pageSetup'] {
   return { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0, horizontalCentered: true, margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 } };
 }
@@ -49,6 +103,23 @@ function colWidths(headers: string[], rows: Cell[][]): number[] {
     }
     return Math.min(42, Math.max(6, max + 2));
   });
+}
+// Số dòng 1 ô văn bản CHIẾM khi wrap ở độ rộng cột `width` (ước theo ký tự — đủ để KHÔNG che chữ).
+function wrapLines(text: string, width: number): number {
+  const w = Math.max(4, Math.floor(width) - 1);
+  let lines = 0;
+  for (const seg of String(text).split('\n')) lines += Math.max(1, Math.ceil(seg.length / w));
+  return lines;
+}
+// Chiều cao hàng đủ chứa ô wrap NHIỀU DÒNG NHẤT (11pt ≈ 15pt/dòng). base = tối thiểu.
+function rowHeightFor(values: (Cell | string)[], widths: number[], base: number): number {
+  let maxLines = 1;
+  values.forEach((v, i) => {
+    if (v == null || v === '') return;
+    const lines = wrapLines(String(v), widths[i] ?? 12);
+    if (lines > maxLines) maxLines = lines;
+  });
+  return Math.max(base, maxLines * 15 + 5);
 }
 
 /** Dựng bảng dữ liệu chuẩn nhà → Buffer .xlsx. */
@@ -89,25 +160,32 @@ export async function buildReportWorkbook(input: ReportInput): Promise<Buffer> {
     c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C_HEADER } };
     c.border = BORDER;
   });
-  hr.height = 26;
+  hr.height = rowHeightFor(headers, widths, 26); // đủ cao nếu tên cột wrap 2 dòng
 
-  // Dữ liệu (dòng lẻ nền xám nhạt)
+  // Dữ liệu (dòng lẻ nền xám nhạt) — căn theo cột (R44), CHIỀU CAO TỰ TÍNH theo cột wrap (trái) → KHÔNG che chữ.
+  const aligns = colAligns(input.rows, N);
   input.rows.forEach((r, ri) => {
     const row = ws.getRow(4 + ri);
+    // Chỉ cột căn trái (tên/địa chỉ dài) mới wrap → tính chiều cao theo các cột đó.
+    const wrapVals: (Cell)[] = [];
     for (let ci = 0; ci < N; ci++) {
       const c = row.getCell(ci + 1);
       const v = r[ci] ?? '';
+      const wrap = aligns[ci] === 'left';
       c.value = v;
       c.font = { name: FONT, size: 11 };
-      c.alignment = { vertical: 'middle', horizontal: isNumericCell(v) ? 'right' : 'left', wrapText: !isNumericCell(v) };
+      c.alignment = { vertical: 'middle', horizontal: aligns[ci], wrapText: wrap };
       c.border = BORDER;
       if (ri % 2 === 1) c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C_ZEBRA } };
+      wrapVals.push(wrap ? v : '');
     }
-    row.height = 20;
+    row.height = rowHeightFor(wrapVals, widths, 20);
   });
 
   ws.autoFilter = { from: { row: 3, column: 1 }, to: { row: 3 + input.rows.length, column: N } };
-  return (await wb.xlsx.writeBuffer()) as unknown as Buffer;
+  const buf = (await wb.xlsx.writeBuffer()) as unknown as Buffer;
+  // R43: bỏ cảnh báo "số lưu dạng text" cho toàn vùng dữ liệu (SĐT/mã/MST là text có chủ đích).
+  return input.rows.length > 0 ? suppressNumberAsTextWarning(buf, `A4:${lastCol}${3 + input.rows.length}`) : buf;
 }
 
 /** Dựng MẪU nhập → Buffer .xlsx. Sheet 1 "Mẫu nhập" CHỈ có 1 dòng header (row 1) để parse round-trip;
@@ -115,7 +193,8 @@ export async function buildReportWorkbook(input: ReportInput): Promise<Buffer> {
 export async function buildTemplateWorkbook(input: TemplateInput): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Mẫu nhập', { views: [{ state: 'frozen', ySplit: 1 }], pageSetup: pageSetup() });
-  ws.columns = input.headers.map((h) => ({ width: Math.min(40, Math.max(14, h.length + 4)) }));
+  const twidths = input.headers.map((h) => Math.min(40, Math.max(14, h.length + 4)));
+  ws.columns = twidths.map((w) => ({ width: w }));
   const hr = ws.getRow(1);
   input.headers.forEach((h, i) => {
     const c = hr.getCell(i + 1);
@@ -125,7 +204,7 @@ export async function buildTemplateWorkbook(input: TemplateInput): Promise<Buffe
     c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C_HEADER } };
     c.border = BORDER;
   });
-  hr.height = 26;
+  hr.height = rowHeightFor(input.headers, twidths, 26);
 
   if (input.hints && input.hints.length) {
     const gd = wb.addWorksheet('Hướng dẫn');

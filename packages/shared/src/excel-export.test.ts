@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 // R38/R39 — Xuất Excel .xlsx THẬT chuẩn nhà GLOBEWAY (thay .xls-HTML giả). Builder thuần ở main/export-service.
 // Vitest chỉ quét packages/* nên test đặt ở đây, import chéo sang apps/desktop.
 import { buildReportWorkbook, buildTemplateWorkbook } from '../../../apps/desktop/src/main/export-service.js';
@@ -41,11 +42,10 @@ describe('buildReportWorkbook — bảng dữ liệu chuẩn nhà', () => {
     expect((ws.views[0] as { ySplit?: number }).ySplit).toBe(3);
   });
 
-  it('số căn phải, chữ căn trái', async () => {
+  it('cột số (number) căn phải', async () => {
     const wb = await load(await buildReportWorkbook({ title: 'x', headers, rows }));
     const ws = wb.getWorksheet('Dữ liệu')!;
-    expect(ws.getCell('C4').alignment?.horizontal).toBe('right'); // 1000
-    expect(ws.getCell('B4').alignment?.horizontal).toBe('left'); // tên
+    expect(ws.getCell('C4').alignment?.horizontal).toBe('right'); // 1000 (number) — chi tiết căn ở test R44
   });
 
   it('dòng tổng hợp tự sinh khi không truyền', async () => {
@@ -57,6 +57,49 @@ describe('buildReportWorkbook — bảng dữ liệu chuẩn nhà', () => {
   it('không dòng dữ liệu vẫn xuất được', async () => {
     const wb = await load(await buildReportWorkbook({ title: 'Rỗng', headers, rows: [] }));
     expect(wb.getWorksheet('Dữ liệu')).toBeTruthy();
+  });
+
+  it('căn cột theo kiểu: tiền phải · mã/SĐT ngắn giữa · tên dài trái (R44)', async () => {
+    const wb = await load(await buildReportWorkbook({
+      title: 'x',
+      headers: ['Mã', 'Số điện thoại', 'Tên khách hàng', 'Số tiền'],
+      rows: [['KH01', '0901234567', 'Nguyễn Văn A ở địa chỉ dài hơn mười sáu ký tự', 5000], ['KH02', '0912345678', 'B', 6000]]
+    }));
+    const ws = wb.getWorksheet('Dữ liệu')!;
+    expect(ws.getCell('A4').alignment?.horizontal).toBe('center'); // mã ngắn
+    expect(ws.getCell('B4').alignment?.horizontal).toBe('center'); // SĐT (chuỗi số ngắn)
+    expect(ws.getCell('C4').alignment?.horizontal).toBe('left'); // tên dài
+    expect(ws.getCell('D4').alignment?.horizontal).toBe('right'); // tiền (number)
+  });
+
+  it('tiền dạng CHUỖI có phân tách nghìn → PHẢI; STT nhỏ → GIỮA (R44 tiền)', async () => {
+    const wb = await load(await buildReportWorkbook({ title: 'x', headers: ['STT', 'Số tiền'], rows: [[1, '1.000.000'], [2, '2.500.000']] }));
+    const ws = wb.getWorksheet('Dữ liệu')!;
+    expect(ws.getCell('A4').alignment?.horizontal).toBe('center'); // STT nguyên nhỏ
+    expect(ws.getCell('B4').alignment?.horizontal).toBe('right'); // tiền dạng chuỗi
+  });
+
+  it('trạng thái chứa chữ "đ" ("Đang hoạt động") KHÔNG bị nhầm là tiền → GIỮA, không phải phải (B33)', async () => {
+    const wb = await load(await buildReportWorkbook({ title: 'x', headers: ['Trạng thái', 'Ghi chú'], rows: [['Đang hoạt động', 'đối tác lâu năm'], ['Đã khóa', 'động lực']] }));
+    const ws = wb.getWorksheet('Dữ liệu')!;
+    expect(ws.getCell('A4').alignment?.horizontal).toBe('center'); // KHÔNG right
+  });
+
+  it('bỏ cảnh báo "số lưu dạng text" (chấm vàng) trên vùng dữ liệu (R43)', async () => {
+    const buf = await buildReportWorkbook({ title: 'x', headers: ['SĐT'], rows: [['0901234567'], ['0912345678']] });
+    const zip = await JSZip.loadAsync(buf);
+    const xml = await zip.file('xl/worksheets/sheet1.xml')!.async('string');
+    expect(xml).toContain('numberStoredAsText="1"');
+  });
+
+  it('tên dài wrap 2 dòng → hàng CAO HƠN, không che chữ (B32)', async () => {
+    const longName = 'Ngân hàng TMCP Đầu tư và Phát triển Việt Nam'; // 44 ký tự, cột "Tên ngân hàng" ~30
+    const wb = await load(await buildReportWorkbook({ title: 'x', headers, rows: [['NH1', longName, 1000], ['NH2', 'ACB', 2000]] }));
+    const ws = wb.getWorksheet('Dữ liệu')!;
+    const tall = ws.getRow(4).height ?? 0; // dòng tên dài
+    const shortRow = ws.getRow(5).height ?? 0; // dòng tên ngắn
+    expect(tall).toBeGreaterThan(20); // KHÔNG còn kẹt 20 (che dòng 2)
+    expect(tall).toBeGreaterThan(shortRow); // cao hơn dòng ngắn
   });
 });
 

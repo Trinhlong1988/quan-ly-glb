@@ -16,8 +16,16 @@ interface PreviewRow { rowIndex: number; ok: boolean; error?: string; message?: 
 
 export function ImportButton({ entityKey, label, onImported }: { entityKey: string; label: string; onImported: () => void }): JSX.Element {
   const [open, setOpen] = useState(false);
+  const toast = useToast();
+  // R45: nút xuất MẪU RỖNG hiện NGAY ở thanh công cụ (không phải mở modal Nhập mới thấy).
+  async function handleTemplate(): Promise<void> {
+    const res = await window.api.importTemplate(entityKey);
+    if (!res.ok || !res.data) return toast.alert(res.message ?? 'Không lấy được mẫu nhập.', 'Lỗi tải mẫu');
+    await downloadTemplate(res.data, `Mẫu nhập ${label.toLowerCase()}`);
+  }
   return (
     <>
+      <Button variant="soft" icon={<FileDown className="h-4 w-4" />} onClick={handleTemplate}>Xuất mẫu (rỗng)</Button>
       <Button variant="confirm" icon={<Upload className="h-4 w-4" />} onClick={() => setOpen(true)}>Nhập Excel</Button>
       {open && <ImportModal entityKey={entityKey} label={label} onClose={() => setOpen(false)} onImported={onImported} />}
     </>
