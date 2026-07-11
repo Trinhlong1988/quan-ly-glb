@@ -385,7 +385,7 @@ function Home({ user }: { user: AuthUser; visibleCount: number }): JSX.Element {
       {/* KPI realtime */}
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-slate-600">Chỉ số tổng quan (realtime)</h3>
-        <button onClick={refresh} title="Tải lại số liệu mới nhất" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200"><RefreshCw className="h-4 w-4" /> Làm mới</button>
+        <button onClick={refresh} title="Tải lại số liệu mới nhất" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-brand/10 text-brand hover:bg-brand/20"><RefreshCw className="h-4 w-4" /> Làm mới</button>
       </div>
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
         {kpis.map((k) => (

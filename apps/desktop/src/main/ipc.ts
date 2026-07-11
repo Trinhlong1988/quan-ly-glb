@@ -107,13 +107,8 @@ export function registerIpc(): void {
   );
   ipcMain.handle('user:lock', async (_e, id: number) => userSvc.lockUser(id));
   ipcMain.handle('user:unlock', async (_e, id: number) => userSvc.unlockUser(id));
-  ipcMain.handle('user:delete', async (_e, args: { id: number; password: string }) =>
-    userSvc.deleteUser(args.id, args.password)
-  );
-  // Xóa hàng loạt nhân sự (P1.2 §5) — xác thực mật khẩu 1 lần, lặp guard, skip kèm lý do.
-  ipcMain.handle('user:deleteMany', async (_e, args: { ids: number[]; password: string }) =>
-    userSvc.deleteUsers(args.ids, args.password)
-  );
+  // R34 (Mr.Long 11/7): GỠ IPC xóa trực tiếp nhân sự — xóa nhân sự nay CHỈ qua Duyệt Hủy
+  // (entityCancel:* → USER_CANCEL_REQUEST/APPROVE). deleteUser/deleteUsers giữ cho selftest/nội bộ.
 
   // ---- Audit (Phase B, §16) ---------------------------------------------
   ipcMain.handle('audit:list', async (_e, query: auditSvc.AuditQuery) => auditSvc.listAudit(query));
@@ -138,9 +133,7 @@ export function registerIpc(): void {
   ipcMain.handle('customer:update', async (_e, args: { id: number; input: customerSvc.UpdateCustomerInput }) =>
     customerSvc.updateCustomer(args.id, args.input)
   );
-  ipcMain.handle('customer:delete', async (_e, args: { id: number; password: string }) =>
-    customerSvc.deleteCustomer(args.id, args.password)
-  );
+  // R34: GỠ IPC xóa trực tiếp khách hàng — nay CHỈ qua Duyệt Hủy (CUSTOMER_CANCEL_*). deleteCustomer giữ nội bộ.
   ipcMain.handle('agent:list', async () => customerSvc.listAgents());
 
   // ---- POS devices (G-POS.1 §A) -----------------------------------------
@@ -283,7 +276,7 @@ export function registerIpc(): void {
   ipcMain.handle('tidConfig:list', async (_e, filter: tidCfgSvc.ConfigTidFilter) => tidCfgSvc.listConfigTids(filter));
   ipcMain.handle('tidConfig:create', async (_e, input: tidCfgSvc.ConfigTidInput) => tidCfgSvc.createConfigTid(input));
   ipcMain.handle('tidConfig:update', async (_e, args: { id: number; input: tidCfgSvc.ConfigTidInput }) => tidCfgSvc.updateConfigTid(args.id, args.input));
-  ipcMain.handle('tidConfig:delete', async (_e, args: { ids: number[]; password: string }) => tidCfgSvc.deleteConfigTids(args.ids, args.password));
+  // R34: GỠ IPC xóa cấu hình TID trực tiếp — xóa TID nay CHỈ qua Duyệt Hủy (TID_CANCEL_*). deleteConfigTids giữ nội bộ.
 
   // ── G-CFG.7 (§11 Pha I1) Cấu hình ngành nghề (master) ──
   ipcMain.handle('industry:list', async (_e, filter: industryCfgSvc.IndustryFilter) => industryCfgSvc.listIndustries(filter));

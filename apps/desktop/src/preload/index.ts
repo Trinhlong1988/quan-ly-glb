@@ -42,8 +42,6 @@ const api = {
   userUpdate: (id: number, input: unknown) => ipcRenderer.invoke('user:update', { id, input }),
   userLock: (id: number) => ipcRenderer.invoke('user:lock', id),
   userUnlock: (id: number) => ipcRenderer.invoke('user:unlock', id),
-  userDelete: (id: number, password: string) => ipcRenderer.invoke('user:delete', { id, password }),
-  userDeleteMany: (ids: number[], password: string) => ipcRenderer.invoke('user:deleteMany', { ids, password }),
 
   // Audit
   auditList: (query: unknown) => ipcRenderer.invoke('audit:list', query),
@@ -63,7 +61,6 @@ const api = {
   customerCounts: () => ipcRenderer.invoke('customer:counts'),
   customerCreate: (input: unknown) => ipcRenderer.invoke('customer:create', input),
   customerUpdate: (id: number, input: unknown) => ipcRenderer.invoke('customer:update', { id, input }),
-  customerDelete: (id: number, password: string) => ipcRenderer.invoke('customer:delete', { id, password }),
   agentList: () => ipcRenderer.invoke('agent:list'),
 
   // POS devices (G-POS.1)
@@ -188,7 +185,6 @@ const api = {
   tidConfigList: (filter: unknown) => ipcRenderer.invoke('tidConfig:list', filter),
   tidConfigCreate: (input: unknown) => ipcRenderer.invoke('tidConfig:create', input),
   tidConfigUpdate: (id: number, input: unknown) => ipcRenderer.invoke('tidConfig:update', { id, input }),
-  tidConfigDelete: (ids: number[], password: string) => ipcRenderer.invoke('tidConfig:delete', { ids, password }),
 
   // Cấu hình ngành nghề (G-CFG.7 §11 Pha I1)
   industryList: (filter: unknown) => ipcRenderer.invoke('industry:list', filter),

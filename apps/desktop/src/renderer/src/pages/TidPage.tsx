@@ -124,7 +124,7 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
         </div>
         <div className="flex items-center gap-2">
           {tab === 'undelivered' && (
-            <button onClick={() => void reload()} title="Tải lại dữ liệu mới nhất (giữ nguyên bộ lọc)" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200">
+            <button onClick={() => void reload()} title="Tải lại dữ liệu mới nhất (giữ nguyên bộ lọc)" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-brand/10 text-brand hover:bg-brand/20">
               <RefreshCw className="h-4 w-4" /> Làm mới
             </button>
           )}
@@ -324,15 +324,24 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
                           </button>
                         )}
                         {canOps &&
-                          actionsFor(t).map((a) => (
-                            <button
-                              key={a.kind}
-                              onClick={() => setAction({ tid: t, kind: a.kind })}
-                              className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs text-slate-600 hover:bg-appbg hover:brightness-110"
-                            >
-                              {a.icon} {a.label}
-                            </button>
-                          ))}
+                          actionsFor(t).map((a) => {
+                            // R33: mỗi thao tác 1 sắc thái riêng để phân biệt rõ (không còn xám giống nhau).
+                            const tone =
+                              a.kind === 'assign' || a.kind === 'deliver'
+                                ? 'border-brand/30 bg-brand/5 text-brand font-semibold'
+                                : a.kind === 'recall'
+                                  ? 'border-warning/30 bg-warning/5 text-warning font-semibold'
+                                  : 'border-line text-slate-600 hover:bg-appbg';
+                            return (
+                              <button
+                                key={a.kind}
+                                onClick={() => setAction({ tid: t, kind: a.kind })}
+                                className={'flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:brightness-110 ' + tone}
+                              >
+                                {a.icon} {a.label}
+                              </button>
+                            );
+                          })}
                         {canCancelReq && (
                           <button
                             onClick={() => setCancelTarget({ entityType: 'Tid', entityId: t.id, entityLabel: t.tid, typeLabel: 'TID' })}
@@ -471,7 +480,7 @@ function RevenueRankingTab(): JSX.Element {
         <button onClick={reset} title="Về kỳ mặc định (tháng hiện tại)" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-brand/10 text-brand hover:bg-brand/20">
           <FilterX className="h-4 w-4" /> Xóa lọc
         </button>
-        <button onClick={() => void load(from, to)} title="Tải lại dữ liệu mới nhất (giữ nguyên bộ lọc)" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200">
+        <button onClick={() => void load(from, to)} title="Tải lại dữ liệu mới nhất (giữ nguyên bộ lọc)" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-brand/10 text-brand hover:bg-brand/20">
           <RefreshCw className="h-4 w-4" /> Làm mới
         </button>
       </div>

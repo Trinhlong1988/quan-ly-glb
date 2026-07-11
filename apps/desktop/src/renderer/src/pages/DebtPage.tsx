@@ -198,7 +198,7 @@ export function DebtPage({ user }: { user: AuthUser }): JSX.Element {
           </label>
           <button onClick={() => void reload()} className="rounded-md bg-brand px-3 py-2 text-sm font-medium text-white hover:bg-brand-hover">Lọc</button>
           <button onClick={resetFilter} title="Xóa toàn bộ bộ lọc, đưa về mặc định" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-brand/10 text-brand hover:bg-brand/20"><FilterX className="h-4 w-4" /> Xóa lọc</button>
-          <button onClick={() => void reload()} title="Tải lại dữ liệu mới nhất (giữ nguyên bộ lọc)" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200"><RefreshCw className="h-4 w-4" /> Làm mới</button>
+          <button onClick={() => void reload()} title="Tải lại dữ liệu mới nhất (giữ nguyên bộ lọc)" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-brand/10 text-brand hover:bg-brand/20"><RefreshCw className="h-4 w-4" /> Làm mới</button>
           <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('cong_no', ['Mã GD', 'Ngày', 'TID', 'HKD', 'Khách', 'Nợ đối tác còn lại', 'Nợ bán còn lại'], rows.map((r) => [r.code ?? '', fmtDate(r.txnDate), r.tid ?? '', r.hkdName ?? '', r.customerName ?? '', String(r.remainingPartner), String(r.remainingSell)]))}>Xuất Excel</Button>
         </div>
       </div>

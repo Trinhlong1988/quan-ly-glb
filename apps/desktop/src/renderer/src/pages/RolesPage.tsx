@@ -63,7 +63,7 @@ export function RolesPage({ user }: { user: AuthUser }): JSX.Element {
           <p className="text-sm text-slate-500">Tạo, phân quyền, khóa/mở khóa và xóa vai trò hệ thống.</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={reload} title="Tải lại dữ liệu mới nhất" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200">
+          <button onClick={reload} title="Tải lại dữ liệu mới nhất" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-brand/10 text-brand hover:bg-brand/20">
             <RefreshCw className="h-4 w-4" /> Làm mới
           </button>
           <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('vai_tro', ['Vai trò', 'Mã', 'Số quyền', 'Nhân sự', 'Trạng thái'], roles.map((r) => [r.name, r.code, r.permissions.length, r.userCount, statusLabel(r.status)]))}>

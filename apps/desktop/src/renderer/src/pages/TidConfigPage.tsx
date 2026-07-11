@@ -11,6 +11,7 @@ import { FilterBar } from '../components/FilterBar.js';
 import { StatBar } from '../components/StatBar.js';
 import { Button } from '../components/Button.js';
 import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../components/Selection.js';
+import { RequestCancelModal, type RequestCancelTarget } from '../components/RequestCancelModal.js';
 import { AuditTrailHeadCells, AuditTrailCells } from '../components/AuditCells.js';
 import { exportCsv } from '../lib/exportCsv.js';
 import { TabBar, TabButton } from '../components/Tabs.js';
@@ -29,6 +30,7 @@ const fmtPct = (v: number): string => `${Number(v.toFixed(3))}%`;
 export function TidConfigPage({ user }: { user: AuthUser }): JSX.Element {
   const [tab, setTab] = useState<Tab>('tid');
   const canManage = hasPermission(user, 'CONFIG_TID_MANAGE');
+  const canCancelReq = hasPermission(user, 'TID_CANCEL_REQUEST');
   return (
     <div>
       <div className="mb-4">
@@ -39,7 +41,7 @@ export function TidConfigPage({ user }: { user: AuthUser }): JSX.Element {
         <TabButton active={tab === 'tid'} onClick={() => setTab('tid')} icon={<CreditCard className="h-4 w-4" />}>Cấu hình TID</TabButton>
         <TabButton active={tab === 'status'} onClick={() => setTab('status')} icon={<Tag className="h-4 w-4" />}>Trạng thái TID</TabButton>
       </TabBar>
-      {tab === 'tid' && <TidTab canManage={canManage} />}
+      {tab === 'tid' && <TidTab canManage={canManage} canCancelReq={canCancelReq} />}
       {tab === 'status' && <StatusTab canManage={canManage} />}
     </div>
   );
@@ -84,7 +86,7 @@ export function StatusTab({ canManage }: { canManage: boolean }): JSX.Element {
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} trạng thái · <span className="text-slate-400">ví dụ: mới cấp, thu hồi, đổi cho đối tác</span></div>
         <div className="flex gap-2">
-          <button onClick={() => void reload()} title="Tải lại dữ liệu mới nhất (giữ nguyên bộ lọc)" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200"><RefreshCw className="h-4 w-4" /> Làm mới</button>
+          <button onClick={() => void reload()} title="Tải lại dữ liệu mới nhất (giữ nguyên bộ lọc)" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-brand/10 text-brand hover:bg-brand/20"><RefreshCw className="h-4 w-4" /> Làm mới</button>
           <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('trang_thai_tid', ['Tên trạng thái', 'Người tạo', 'Ngày tạo', 'Giờ tạo', 'Người sửa', 'Ngày sửa', 'Giờ sửa'], rows.map((s) => [s.name, s.createdByName ?? '', fmtDate(s.createdAt), fmtTime(s.createdAt), s.updatedByName ?? '', fmtDate(s.updatedAt), fmtTime(s.updatedAt)]))}>Xuất Excel</Button>
           {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm trạng thái</Button>}
         </div>
@@ -151,7 +153,7 @@ function StatusForm({ mode, row, onClose, onSaved }: { mode: 'create' | 'edit'; 
 }
 
 // ── §9 CẤU HÌNH TID ───────────────────────────────────────────────────────────
-function TidTab({ canManage }: { canManage: boolean }): JSX.Element {
+function TidTab({ canManage, canCancelReq }: { canManage: boolean; canCancelReq: boolean }): JSX.Element {
   const toast = useToast();
   const [rows, setRows] = useState<ConfigTidDto[]>([]);
   const [banks, setBanks] = useState<BankLite[]>([]);
@@ -163,9 +165,7 @@ function TidTab({ canManage }: { canManage: boolean }): JSX.Element {
   const [search, setSearch] = useState('');
   const [fPartner, setFPartner] = useState('');
   const [form, setForm] = useState<{ mode: 'create' | 'edit'; row?: ConfigTidDto } | null>(null);
-  const [del, setDel] = useState<ConfigTidDto | null>(null);
-  const [bulkDel, setBulkDel] = useState(false);
-  const sel = useRowSelection();
+  const [cancelTarget, setCancelTarget] = useState<RequestCancelTarget | null>(null);
 
   async function loadRefs(): Promise<void> {
     const [b, p, a, s, d] = await Promise.all([window.api.bankLite(), window.api.partnerList({}), window.api.rcvAccountList({}), window.api.tidStatusList(), window.api.dossierSourceList()]);
@@ -180,24 +180,10 @@ function TidTab({ canManage }: { canManage: boolean }): JSX.Element {
     const res = await window.api.tidConfigList({ search: search || undefined, partnerId: fPartner ? Number(fPartner) : undefined });
     if (res.ok && res.data) setRows(res.data);
     else if (res.message) toast.alert(res.message);
-    sel.clear();
     setLoading(false);
   }
   useEffect(() => { void loadRefs(); }, []);
   useEffect(() => { void reload(); /* eslint-disable-next-line */ }, [fPartner]);
-
-  async function doDelete(t: ConfigTidDto, password?: string): Promise<void> {
-    const res = await window.api.tidConfigDelete([t.id], password ?? '');
-    if (res.ok) toast.success(`Đã xóa TID ${t.tid}`);
-    else toast.alert(res.message ?? 'Xóa TID thất bại', 'Xóa thất bại');
-    setDel(null); await reload();
-  }
-  async function doBulkDelete(password?: string): Promise<void> {
-    const res = await window.api.tidConfigDelete([...sel.selected], password ?? '');
-    if (res.ok) toast.success(`Đã xóa ${res.deleted ?? sel.count} TID`);
-    else toast.alert(res.message ?? 'Xóa TID thất bại', 'Xóa thất bại');
-    setBulkDel(false); await reload();
-  }
 
   return (
     <div>
@@ -220,12 +206,10 @@ function TidTab({ canManage }: { canManage: boolean }): JSX.Element {
           ...(rows.some((r) => !r.configStatusName) ? [{ label: 'Chưa đặt trạng thái', value: rows.filter((r) => !r.configStatusName).length, tone: 'bg-slate-100 text-slate-500' }] : [])
         ]}
       />
-      {canManage && <SelectionBar count={sel.count} entityLabel="TID" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>
-              {canManage && <SelectAllCell ids={rows.map((r) => r.id)} sel={sel} />}
               <th className="px-4 py-3">TID</th>
               <th className="px-4 py-3">Tên HKD</th>
               <th className="px-4 py-3">Ngân hàng</th>
@@ -238,11 +222,10 @@ function TidTab({ canManage }: { canManage: boolean }): JSX.Element {
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {loading && <tr><td colSpan={canManage ? 10 : 8} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
-            {!loading && rows.length === 0 && <tr><td colSpan={canManage ? 10 : 8} className="px-4 py-10 text-center text-slate-400"><CreditCard className="mx-auto mb-2 h-6 w-6" /> Chưa có TID cấu hình.</td></tr>}
+            {loading && <tr><td colSpan={canManage ? 9 : 8} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+            {!loading && rows.length === 0 && <tr><td colSpan={canManage ? 9 : 8} className="px-4 py-10 text-center text-slate-400"><CreditCard className="mx-auto mb-2 h-6 w-6" /> Chưa có TID cấu hình.</td></tr>}
             {!loading && rows.map((t) => (
-              <tr key={t.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(t.id) ? 'bg-brand-tint/40' : '')}>
-                {canManage && <SelectCell id={t.id} sel={sel} />}
+              <tr key={t.id} className="hover:bg-appbg/60">
                 <td className="px-4 py-3 font-mono text-xs font-medium text-slate-800">{t.tid}</td>
                 <td className="px-4 py-3 text-slate-700">{t.hkdName ?? '—'}</td>
                 <td className="px-4 py-3 text-slate-600">{t.bankCode ?? '—'}</td>
@@ -254,7 +237,7 @@ function TidTab({ canManage }: { canManage: boolean }): JSX.Element {
                 {canManage && (
                   <td className="px-4 py-3"><div className="flex justify-end gap-1">
                     <IconBtn title="Sửa" variant="edit" onClick={() => setForm({ mode: 'edit', row: t })}><Pencil className="h-4 w-4" /></IconBtn>
-                    <IconBtn title="Xóa" variant="danger" onClick={() => setDel(t)}><Trash2 className="h-4 w-4" /></IconBtn>
+                    {canCancelReq && <IconBtn title="Yêu cầu hủy" variant="danger" onClick={() => setCancelTarget({ entityType: 'Tid', entityId: t.id, entityLabel: t.tid, typeLabel: 'TID' })}><Trash2 className="h-4 w-4" /></IconBtn>}
                   </div></td>
                 )}
               </tr>
@@ -263,8 +246,7 @@ function TidTab({ canManage }: { canManage: boolean }): JSX.Element {
         </table>
       </div>
       {form && <TidForm mode={form.mode} row={form.row} banks={banks} partners={partners} accounts={accounts} statuses={statuses} dsources={dsources} onClose={() => setForm(null)} onSaved={() => { setForm(null); void reload(); }} />}
-      {del && <ConfirmDialog title="Xóa cấu hình TID" message={`TID "${del.tid}" sẽ vào Thùng rác (có thể phục hồi). Nhập lại mật khẩu để xác nhận.`} confirmLabel="Xóa" danger requirePassword onCancel={() => setDel(null)} onConfirm={(pwd) => doDelete(del, pwd)} />}
-      {bulkDel && <ConfirmDialog title="Xóa nhiều TID" message={`${sel.count} TID đã chọn sẽ vào Thùng rác (có thể phục hồi). Nhập lại mật khẩu để xác nhận.`} confirmLabel={`Xóa ${sel.count} mục`} danger requirePassword onCancel={() => setBulkDel(false)} onConfirm={(pwd) => doBulkDelete(pwd)} />}
+      {cancelTarget && <RequestCancelModal target={cancelTarget} onClose={() => setCancelTarget(null)} onDone={() => { setCancelTarget(null); reload(); }} />}
     </div>
   );
 }

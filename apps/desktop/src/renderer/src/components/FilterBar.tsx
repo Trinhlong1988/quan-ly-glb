@@ -110,7 +110,7 @@ export function FilterBar({
       <button
         onClick={onRefresh ?? onApply}
         title="Tải lại dữ liệu mới nhất (giữ nguyên bộ lọc)"
-        className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200"
+        className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-brand/10 text-brand hover:bg-brand/20"
       >
         <RefreshCw className="h-4 w-4" /> Làm mới
       </button>

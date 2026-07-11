@@ -69,7 +69,7 @@ export function TrashPage({ user }: { user: AuthUser }): JSX.Element {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={reload} title="Tải lại dữ liệu mới nhất" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200">
+          <button onClick={reload} title="Tải lại dữ liệu mới nhất" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-brand/10 text-brand hover:bg-brand/20">
             <RefreshCw className="h-4 w-4" /> Làm mới
           </button>
           <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('thung_rac', ['Loại', 'Mã', 'Tên', 'Người xóa', 'Ngày xóa', 'Giờ'], rows.map((r) => [r.entityLabel, r.code ?? '', r.label, r.deletedByName ?? '', fmtDate(r.deletedAt), fmtTime(r.deletedAt)]))}>

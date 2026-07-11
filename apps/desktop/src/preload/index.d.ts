@@ -1184,8 +1184,6 @@ export interface GlbApi {
   userUpdate(id: number, input: UpdateUserInput): Promise<MutationOutcome>;
   userLock(id: number): Promise<MutationOutcome>;
   userUnlock(id: number): Promise<MutationOutcome>;
-  userDelete(id: number, password: string): Promise<MutationOutcome>;
-  userDeleteMany(ids: number[], password: string): Promise<BulkSkipOutcome>;
 
   auditList(query: AuditQuery): Promise<ListResult<AuditRowDto>>;
 
@@ -1201,7 +1199,6 @@ export interface GlbApi {
   customerCounts(): Promise<{ ok: boolean; data?: { total: number; active: number; locked: number; cancelled: number; unassigned: number; byAgent: { agentId: number; count: number }[] }; error?: string; message?: string }>;
   customerCreate(input: CreateCustomerInput): Promise<MutationOutcome>;
   customerUpdate(id: number, input: UpdateCustomerInput): Promise<MutationOutcome>;
-  customerDelete(id: number, password: string): Promise<MutationOutcome>;
   agentList(): Promise<ListResult<AgentDto>>;
 
   posList(filter: PosFilter): Promise<ListResult<PosDto>>;
@@ -1323,7 +1320,6 @@ export interface GlbApi {
   tidConfigList(filter: ConfigTidFilter): Promise<ListResult<ConfigTidDto>>;
   tidConfigCreate(input: ConfigTidInput): Promise<MutationOutcome>;
   tidConfigUpdate(id: number, input: ConfigTidInput): Promise<MutationOutcome>;
-  tidConfigDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
 
   // ── Cấu hình ngành nghề (G-CFG.7 §11 Pha I1) ──
   industryList(filter: IndustryFilter): Promise<ListResult<IndustryDto>>;
