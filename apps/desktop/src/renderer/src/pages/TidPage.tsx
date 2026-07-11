@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Plus, Loader2, CreditCard, Link2, RefreshCw, Undo2, PackageCheck, Send, Download, History, Tag } from 'lucide-react';
+import { Plus, Loader2, CreditCard, Link2, RefreshCw, Undo2, PackageCheck, Send, Download, History, Tag, Trophy, FilterX } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate } from '@glb/shared';
-import type { TidDto, UndeliveredTidDto, PosDto, CustomerDto, AgentDto, TidRefs, TimelineEventDto, CreateTidInput } from '../../../preload/index.d';
+import type { TidDto, UndeliveredTidDto, PosDto, CustomerDto, AgentDto, TidRefs, TimelineEventDto, CreateTidInput, TidRevenueRankRow } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
 import { Modal } from '../components/Modal.js';
 import { Button } from '../components/Button.js';
@@ -15,7 +15,14 @@ import { exportCsv } from '../lib/exportCsv.js';
 import { StatusTab, FeePreview } from './TidConfigPage.js';
 
 const TID_STATUSES = ['UNASSIGNED', 'ACTIVE', 'DEAD', 'CLOSED', 'RECALLED'];
-type Tab = 'all' | 'undelivered' | 'status';
+type Tab = 'all' | 'undelivered' | 'status' | 'ranking';
+
+/** VND, nhóm 3 số bằng dấu chấm (KHÔNG toLocaleString — R_UI QA gate). Giữ dấu âm. Đồng bộ RevenuePage. */
+function money(n: number): string {
+  const neg = n < 0;
+  const s = Math.abs(Math.round(n)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return (neg ? '−' : '') + s + 'đ';
+}
 
 export function TidPage({ user }: { user: AuthUser }): JSX.Element {
   const toast = useToast();
@@ -23,6 +30,7 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
   const canOps = hasPermission(user, 'TID_MANAGE'); // gán/đổi/thu hồi/giao (vận hành)
   const canConfig = hasPermission(user, 'CONFIG_TID_MANAGE'); // thêm/sửa/xóa cấu hình
   const canConfigView = hasPermission(user, 'CONFIG_TID_VIEW');
+  const canRevenue = hasPermission(user, 'REVENUE_VIEW'); // #13: tab xếp hạng doanh số (dữ liệu tài chính)
 
   const [tab, setTab] = useState<Tab>('all');
   const [rows, setRows] = useState<TidDto[]>([]);
@@ -36,6 +44,8 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
   const [industries, setIndustries] = useState<{ id: number; code: string; name: string }[]>([]);
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+  const [deliveredFrom, setDeliveredFrom] = useState(''); // #14 "Kỳ giao" (deliveredAt) từ ngày
+  const [deliveredTo, setDeliveredTo] = useState(''); // #14 "Kỳ giao" (deliveredAt) đến ngày
   const [creating, setCreating] = useState(false);
   const [action, setAction] = useState<{ tid: TidDto; kind: 'assign' | 'replace' | 'recall' | 'deliver' } | null>(null);
   const [timelineTid, setTimelineTid] = useState<TidDto | null>(null);
@@ -54,7 +64,9 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
         delivered: deliverFilter ? deliverFilter === 'yes' : undefined,
         industryId: industryFilter ? Number(industryFilter) : undefined,
         fromDate: fromDate || undefined,
-        toDate: toDate || undefined
+        toDate: toDate || undefined,
+        deliveredFrom: deliveredFrom || undefined,
+        deliveredTo: deliveredTo || undefined
       });
       if (res.ok && res.data) setRows(res.data);
       else if (res.message) toast.alert(res.message);
@@ -62,9 +74,9 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
     setLoading(false);
   }
   useEffect(() => {
-    if (tab !== 'status') void reload();
+    if (tab !== 'status' && tab !== 'ranking') void reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, statusFilter, assignFilter, deliverFilter, industryFilter]);
+  }, [tab, statusFilter, assignFilter, deliverFilter, industryFilter, deliveredFrom, deliveredTo]);
 
   // LANE A (#11): nạp danh sách ngành nghề (active) cho bộ lọc — dùng tidRefs (không cần quyền ngành nghề).
   useEffect(() => {
@@ -79,6 +91,8 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
     setIndustryFilter('');
     setFromDate('');
     setToDate('');
+    setDeliveredFrom('');
+    setDeliveredTo('');
     setTimeout(reload, 0);
   }
 
@@ -111,8 +125,8 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
               onClick={() =>
                 exportCsv(
                   'tid',
-                  ['TID', 'MID', 'HKD', 'Ngành nghề', 'Ngân hàng', 'Đối tác', 'Gán máy POS', 'Giao cho khách', 'Vòng đời'],
-                  rows.map((t) => [t.tid, t.mid ?? '', t.hkdName ?? '', t.industryName ?? '', t.bankCode ?? t.bank ?? '', t.partnerName ?? '', t.deviceAssigned ? (t.posSerial ?? 'Đã gán') : (t.customerDeviceSerial ? 'Máy khách' : 'Chưa gán'), t.delivered ? 'Đã giao' : 'Chưa giao', statusLabel(t.status)])
+                  ['TID', 'MID', 'HKD', 'Ngành nghề', 'Ngân hàng', 'Đối tác', 'Gán máy POS', 'Giao cho khách', 'Khách hàng đang giữ', 'Vòng đời'],
+                  rows.map((t) => [t.tid, t.mid ?? '', t.hkdName ?? '', t.industryName ?? '', t.bankCode ?? t.bank ?? '', t.partnerName ?? '', t.deviceAssigned ? (t.posSerial ?? 'Đã gán') : (t.customerDeviceSerial ? 'Máy khách' : 'Chưa gán'), t.delivered ? 'Đã giao' : 'Chưa giao', t.holdingCustomerName ?? '', statusLabel(t.status)])
                 )
               }
             >
@@ -135,6 +149,11 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
         <TabBtn active={tab === 'undelivered'} onClick={() => setTab('undelivered')}>
           <PackageCheck className="mr-1 h-4 w-4" /> TID chưa giao {undelivered.length > 0 && <span className="ml-1 rounded-full bg-danger px-1.5 text-xs text-white">{undelivered.length}</span>}
         </TabBtn>
+        {canRevenue && (
+          <TabBtn active={tab === 'ranking'} onClick={() => setTab('ranking')}>
+            <Trophy className="mr-1 h-4 w-4" /> Xếp hạng doanh số
+          </TabBtn>
+        )}
         {canConfigView && (
           <TabBtn active={tab === 'status'} onClick={() => setTab('status')}>
             <Tag className="mr-1 h-4 w-4" /> Trạng thái TID cấu hình
@@ -143,6 +162,7 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
       </div>
 
       {tab === 'status' && <StatusTab canManage={canConfig} />}
+      {tab === 'ranking' && <RevenueRankingTab />}
 
       {/* 2 nhóm StatBar theo 2 chiều độc lập (§3.4). Đếm CLIENT từ tidList (trả full). */}
       {tab === 'all' && (
@@ -184,7 +204,29 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
         />
       )}
 
-      {tab !== 'status' && (
+      {/* #14 "Kỳ giao" — bộ lọc khoảng ngày giao (deliveredAt), áp dụng ngay khi chọn (useEffect). */}
+      {tab === 'all' && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 text-sm text-slate-500">
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Kỳ giao</span>
+          <span className="text-xs">Từ</span>
+          <input type="date" className={inputCls} value={deliveredFrom} onChange={(e) => setDeliveredFrom(e.target.value)} />
+          <span className="text-xs">đến</span>
+          <input type="date" className={inputCls} value={deliveredTo} onChange={(e) => setDeliveredTo(e.target.value)} />
+          {(deliveredFrom || deliveredTo) && (
+            <button
+              onClick={() => {
+                setDeliveredFrom('');
+                setDeliveredTo('');
+              }}
+              className="flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium text-brand hover:bg-brand/10"
+            >
+              <FilterX className="h-3.5 w-3.5" /> Bỏ kỳ giao
+            </button>
+          )}
+        </div>
+      )}
+
+      {(tab === 'all' || tab === 'undelivered') && (
         <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs uppercase tracking-wide text-slate-500">
@@ -195,6 +237,7 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
                 <th className="px-4 py-3">Ngân hàng</th>
                 <th className="px-4 py-3">Gán máy POS</th>
                 <th className="px-4 py-3">Giao cho khách</th>
+                <th className="px-4 py-3">Khách hàng đang giữ</th>
                 <th className="px-4 py-3">Trạng thái</th>
                 {tab === 'undelivered' && <th className="px-4 py-3">Số ngày tồn</th>}
                 {tab === 'all' && <th className="px-4 py-3 text-right">Thao tác</th>}
@@ -203,14 +246,14 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
             <tbody className="divide-y divide-line">
               {loading && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
+                  <td colSpan={9} className="px-4 py-8 text-center text-slate-400">
                     <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                   </td>
                 </tr>
               )}
               {!loading && tab === 'all' && rows.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-slate-400">
+                  <td colSpan={9} className="px-4 py-10 text-center text-slate-400">
                     <CreditCard className="mx-auto mb-2 h-6 w-6" />
                     Chưa có TID.
                   </td>
@@ -218,7 +261,7 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
               )}
               {!loading && tab === 'undelivered' && undelivered.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-slate-400">
+                  <td colSpan={9} className="px-4 py-10 text-center text-slate-400">
                     <PackageCheck className="mx-auto mb-2 h-6 w-6" />
                     Không có TID nào chưa giao. 🎉
                   </td>
@@ -236,6 +279,7 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
                   <td className="px-4 py-3">
                     <DeliverCell t={t} />
                   </td>
+                  <td className="px-4 py-3 text-slate-600">{t.holdingCustomerName ?? '—'}</td>
                   <td className="px-4 py-3">
                     <StatusPill status={t.status} />
                   </td>
@@ -294,6 +338,138 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
         />
       )}
       {timelineTid && <TidTimelineModal tid={timelineTid} onClose={() => setTimelineTid(null)} />}
+    </div>
+  );
+}
+
+// ── #13 Xếp hạng doanh số theo TID — kỳ mặc định tháng hiện tại + lọc kỳ (tháng khác / from–to) ──
+/** yyyy-mm → { from: 'yyyy-mm-01', to: 'yyyy-mm-<lastDay>' }. */
+function monthBounds(ym: string): { from: string; to: string } {
+  const [y, m] = ym.split('-').map(Number);
+  const last = new Date(y, m, 0).getDate(); // ngày 0 của tháng sau = ngày cuối tháng này
+  return { from: `${ym}-01`, to: `${ym}-${String(last).padStart(2, '0')}` };
+}
+function currentMonthStr(): string {
+  const n = new Date();
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function RevenueRankingTab(): JSX.Element {
+  const toast = useToast();
+  const [rows, setRows] = useState<TidRevenueRankRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [month, setMonth] = useState(currentMonthStr()); // ô chọn tháng (hiển thị + nhanh)
+  const [from, setFrom] = useState(''); // kỳ tùy chỉnh — rỗng = dùng mặc định (server tính tháng hiện tại)
+  const [to, setTo] = useState('');
+
+  async function load(f?: string, t?: string): Promise<void> {
+    setLoading(true);
+    const res = await window.api.tidRevenueRanking({ from: f || undefined, to: t || undefined });
+    if (res.ok && res.data) setRows(res.data);
+    else if (res.message) toast.alert(res.message);
+    setLoading(false);
+  }
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function applyMonth(ym: string): void {
+    setMonth(ym);
+    if (!ym) return;
+    const b = monthBounds(ym);
+    setFrom('');
+    setTo('');
+    void load(b.from, b.to);
+  }
+  function reset(): void {
+    setMonth(currentMonthStr());
+    setFrom('');
+    setTo('');
+    void load();
+  }
+  const total = rows.reduce((s, r) => s + r.revenue, 0);
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          Xếp hạng doanh số theo TID {rows.length > 0 && <span className="ml-1 text-slate-500">· {rows.length} TID · tổng {money(total)}</span>}
+        </div>
+        <Button
+          variant="confirm"
+          icon={<Download className="h-4 w-4" />}
+          onClick={() => exportCsv('xep_hang_doanh_so_tid', ['Hạng', 'Chuỗi TID', 'HKD', 'Khách', 'Ngành nghề', 'Doanh số', 'Hoạt động'], rows.map((r) => [r.rank, r.tid, r.hkdName ?? '', r.customerName ?? '', r.industryName ?? '', money(r.revenue), r.active ? 'Đang hoạt động' : 'Ngừng']))}
+        >
+          Xuất Excel
+        </Button>
+      </div>
+
+      <div className="mb-3 flex flex-wrap items-center gap-2 text-sm text-slate-500">
+        <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Kỳ</span>
+        <input type="month" className={inputCls} value={month} onChange={(e) => applyMonth(e.target.value)} />
+        <span className="text-xs">hoặc từ</span>
+        <input type="date" className={inputCls} value={from} onChange={(e) => setFrom(e.target.value)} />
+        <span className="text-xs">đến</span>
+        <input type="date" className={inputCls} value={to} onChange={(e) => setTo(e.target.value)} />
+        <button onClick={() => load(from, to)} className="rounded-md bg-brand px-3 py-2 text-sm font-medium text-white hover:bg-brand-hover">
+          Lọc
+        </button>
+        <button onClick={reset} title="Về kỳ mặc định (tháng hiện tại)" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-brand/10 text-brand hover:bg-brand/20">
+          <FilterX className="h-4 w-4" /> Xóa lọc
+        </button>
+      </div>
+
+      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
+        <table className="w-full text-sm">
+          <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs uppercase tracking-wide text-slate-500">
+            <tr>
+              <th className="px-4 py-3">Hạng</th>
+              <th className="px-4 py-3">Chuỗi TID</th>
+              <th className="px-4 py-3">HKD</th>
+              <th className="px-4 py-3">Khách</th>
+              <th className="px-4 py-3">Ngành nghề</th>
+              <th className="px-4 py-3 text-right">Doanh số</th>
+              <th className="px-4 py-3">Hoạt động</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-line">
+            {loading && (
+              <tr>
+                <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
+                  <Loader2 className="mx-auto h-5 w-5 animate-spin" />
+                </td>
+              </tr>
+            )}
+            {!loading && rows.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-4 py-10 text-center text-slate-400">
+                  <Trophy className="mx-auto mb-2 h-6 w-6" />
+                  Chưa có giao dịch nào trong kỳ này.
+                </td>
+              </tr>
+            )}
+            {!loading &&
+              rows.map((r) => (
+                <tr key={r.tidId} className="hover:bg-appbg/60">
+                  <td className="px-4 py-3 font-semibold text-slate-700">{r.rank}</td>
+                  <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700">{r.tid}</td>
+                  <td className="px-4 py-3 text-slate-600">{r.hkdName ?? '—'}</td>
+                  <td className="px-4 py-3 text-slate-600">{r.customerName ?? '—'}</td>
+                  <td className="px-4 py-3 text-slate-600">{r.industryName ?? '—'}</td>
+                  <td className="px-4 py-3 text-right font-semibold text-slate-800">{money(r.revenue)}</td>
+                  <td className="px-4 py-3">
+                    {r.active ? (
+                      <span className="rounded bg-success/15 px-1.5 py-0.5 text-xs font-medium text-success">Đang hoạt động</span>
+                    ) : (
+                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-500">Ngừng</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

@@ -159,6 +159,8 @@ export function registerIpc(): void {
   ipcMain.handle('tid:create', async (_e, input: tidSvc.CreateTidUnifiedInput) => tidSvc.createTidUnified(input));
   ipcMain.handle('tid:refs', async () => tidSvc.tidRefs());
   ipcMain.handle('tid:timeline', async (_e, tid: string) => tidSvc.tidTimeline(tid));
+  // #13: xếp hạng doanh số theo TID (mặc định tháng hiện tại + lọc kỳ). Gate REVENUE_VIEW (trong service).
+  ipcMain.handle('tid:revenueRanking', async (_e, filter: tidSvc.TidRevenueRankFilter) => tidSvc.tidRevenueRanking(filter));
   ipcMain.handle('tid:assign', async (_e, args: { tid: string; input: tidSvc.AssignTidInput }) => tidSvc.assignTid(args.tid, args.input));
   ipcMain.handle('tid:replace', async (_e, args: { tid: string; input: tidSvc.ReplaceTidInput }) => tidSvc.replaceTid(args.tid, args.input));
   ipcMain.handle('tid:recall', async (_e, args: { tid: string; input: tidSvc.RecallTidInput }) => tidSvc.recallTid(args.tid, args.input));

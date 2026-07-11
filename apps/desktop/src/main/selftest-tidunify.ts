@@ -232,9 +232,94 @@ export async function runTidUnifySelfTest(): Promise<number> {
   const fInd2 = await tidSvc.listTids({ industryId: ind2Id });
   assert('LANE A: lọc listTids theo industryId → đúng tập (chỉ industry2)', (fInd2.data ?? []).length >= 1 && (fInd2.data ?? []).every((t) => t.industryId === ind2Id) && (fInd2.data ?? []).some((t) => t.tid === 'TID-K2-IND2'), { rows: (fInd2.data ?? []).map((t) => t.tid) });
 
+  // ── #13 — Xếp hạng doanh số theo TID (mặc định tháng hiện tại + lọc kỳ) ──
+  const now = new Date();
+  const cur = (d: number): Date => new Date(now.getFullYear(), now.getMonth(), d, 12, 0, 0);
+  const prev = (d: number): Date => new Date(now.getFullYear(), now.getMonth() - 1, d, 12, 0, 0);
+  const ymCur = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const prevYm = `${prev(1).getFullYear()}-${String(prev(1).getMonth() + 1).padStart(2, '0')}`;
+  const mkTxn = async (tidId: number, amt: number, when: Date, extra: Record<string, unknown> = {}): Promise<void> => {
+    await db.transaction.create({ data: { code: `GD_ST30_${tidId}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, tidId, customerId, amount: amt, revenuePartner: amt, revenueSell: 0, revenueAmount: amt, txnDate: when, status: 'POSTED', ...extra } });
+  };
+  const r1 = await tidSvc.createTidUnified({ tid: 'TID-K2-R1', ...baseCfg });
+  const r2 = await tidSvc.createTidUnified({ tid: 'TID-K2-R2', ...baseCfg });
+  const r3 = await tidSvc.createTidUnified({ tid: 'TID-K2-R3', ...baseCfg });
+  assert('#13 seed: tạo 3 TID xếp hạng', r1.ok && r2.ok && r3.ok, { r1: r1.error, r2: r2.error, r3: r3.error });
+  const r1Id = r1.id!, r2Id = r2.id!, r3Id = r3.id!;
+  await db.tid.update({ where: { id: r1Id }, data: { status: 'ACTIVE', customerId } }); // active=true + có khách giữ
+  await db.tid.update({ where: { id: r2Id }, data: { status: 'ACTIVE' } }); // active=true; R3 giữ UNASSIGNED → active=false
+  // R1 = 5,000,000 (3M + 2M) tháng hiện tại.
+  await mkTxn(r1Id, 3_000_000, cur(15));
+  await mkTxn(r1Id, 2_000_000, cur(16));
+  // R2 = 8,000,000 tháng hiện tại + 20,000,000 THÁNG TRƯỚC (không tính vào mặc định).
+  await mkTxn(r2Id, 8_000_000, cur(10));
+  await mkTxn(r2Id, 20_000_000, prev(15));
+  // R3 = 1,000,000 (POSTED). Mọi trạng thái loại trừ (I-3): CANCELLED + CANCEL_PENDING + writtenOff +
+  // deletedAt → CHỈ 1,000,000 được tính (khoá cứng where status='POSTED' AND writtenOffAt/deletedAt IS NULL).
+  await mkTxn(r3Id, 1_000_000, cur(12));
+  await mkTxn(r3Id, 9_000_000, cur(12), { status: 'CANCELLED' });
+  await mkTxn(r3Id, 9_000_000, cur(12), { status: 'CANCEL_PENDING' });
+  await mkTxn(r3Id, 9_000_000, cur(12), { writtenOffAt: new Date() });
+  await mkTxn(r3Id, 9_000_000, cur(12), { deletedAt: new Date() });
+
+  const rank = await tidSvc.tidRevenueRanking();
+  const rmap = new Map((rank.data ?? []).map((r) => [r.tid, r]));
+  assert('#13: ranking mặc định tháng hiện tại đúng 3 TID có doanh số>0', (rank.data ?? []).length === 3, { n: rank.data?.length, rows: (rank.data ?? []).map((r) => `${r.tid}:${r.revenue}`) });
+  assert('#13: R2 hạng 1 = 8,000,000', rmap.get('TID-K2-R2')?.rank === 1 && rmap.get('TID-K2-R2')?.revenue === 8_000_000, { r: rmap.get('TID-K2-R2') });
+  assert('#13: R1 hạng 2 = 5,000,000', rmap.get('TID-K2-R1')?.rank === 2 && rmap.get('TID-K2-R1')?.revenue === 5_000_000, { r: rmap.get('TID-K2-R1') });
+  assert('#13: R3 hạng 3 = 1,000,000 (loại CANCELLED + CANCEL_PENDING + writtenOff + deleted)', rmap.get('TID-K2-R3')?.rank === 3 && rmap.get('TID-K2-R3')?.revenue === 1_000_000, { r: rmap.get('TID-K2-R3') });
+  assert('#13: sắp doanh số GIẢM DẦN', (rank.data ?? []).every((r, i, a) => i === 0 || a[i - 1].revenue >= r.revenue));
+  assert('#13: active flag đúng (R1/R2 ACTIVE=true, R3 UNASSIGNED=false)', rmap.get('TID-K2-R1')?.active === true && rmap.get('TID-K2-R2')?.active === true && rmap.get('TID-K2-R3')?.active === false, { a1: rmap.get('TID-K2-R1')?.active, a3: rmap.get('TID-K2-R3')?.active });
+  assert('#13: DTO đủ hkd/khách/ngành', rmap.get('TID-K2-R1')?.hkdName === 'HKD Xưởng K2' && rmap.get('TID-K2-R1')?.customerName === 'Anh K2' && rmap.get('TID-K2-R1')?.industryName === 'Vận tải K2', { r: rmap.get('TID-K2-R1') });
+  // Lọc kỳ THÁNG TRƯỚC → chỉ R2 (20M).
+  const rankPrev = await tidSvc.tidRevenueRanking({ from: `${prevYm}-01`, to: `${prevYm}-28` });
+  const pmap = new Map((rankPrev.data ?? []).map((r) => [r.tid, r]));
+  assert('#13: lọc kỳ tháng trước → chỉ R2 (20,000,000) hạng 1', (rankPrev.data ?? []).length === 1 && pmap.get('TID-K2-R2')?.revenue === 20_000_000 && pmap.get('TID-K2-R2')?.rank === 1, { n: rankPrev.data?.length, rows: (rankPrev.data ?? []).map((r) => `${r.tid}:${r.revenue}`) });
+
+  // I-2/B24 regression — BIÊN THÁNG (chống lệch múi giờ): kỳ MẶC ĐỊNH (bound local) và kỳ CHỌN-tháng-này
+  // (từ/đến qua month-picker) PHẢI cho CÙNG con số. GD 00:30 mùng 1 (local, trong tháng) phải tính; GD
+  // 05:00 mùng 1 tháng sau (local, ngoài tháng) KHÔNG tính — trước fix dateRange-UTC sẽ phân loại nhầm.
+  const r4 = await tidSvc.createTidUnified({ tid: 'TID-K2-R4B', ...baseCfg });
+  const r4Id = r4.id!;
+  const firstThis = new Date(now.getFullYear(), now.getMonth(), 1, 0, 30, 0); // 00:30 mùng 1 local — TRONG kỳ
+  const firstNext = new Date(now.getFullYear(), now.getMonth() + 1, 1, 5, 0, 0); // 05:00 mùng 1 tháng sau — NGOÀI
+  await mkTxn(r4Id, 4_000_000, firstThis);
+  await mkTxn(r4Id, 7_000_000, firstNext);
+  const lastDayCur = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const rankDef = await tidSvc.tidRevenueRanking(); // đường mặc định (bound local)
+  const rankExpl = await tidSvc.tidRevenueRanking({ from: `${ymCur}-01`, to: `${ymCur}-${String(lastDayCur).padStart(2, '0')}` }); // đường chọn-kỳ
+  const r4Def = (rankDef.data ?? []).find((r) => r.tid === 'TID-K2-R4B')?.revenue ?? -1;
+  const r4Expl = (rankExpl.data ?? []).find((r) => r.tid === 'TID-K2-R4B')?.revenue ?? -1;
+  assert('#13 B24: biên tháng — kỳ mặc định == kỳ chọn-tháng-này == 4,000,000 (không lệch múi giờ, loại GD tháng sau)', r4Def === 4_000_000 && r4Expl === 4_000_000, { def: r4Def, expl: r4Expl });
+
+  // ── #14 — "Kỳ giao" (deliveredFrom/deliveredTo) + cột "Khách hàng đang giữ" ──
+  const cd1 = await tidSvc.createTidUnified({ tid: 'TID-K2-DEL1', ...baseCfg, deliver: { deliveredAt: cur(5).toISOString(), customerId } });
+  const cd2 = await tidSvc.createTidUnified({ tid: 'TID-K2-DEL2', ...baseCfg, deliver: { deliveredAt: cur(20).toISOString(), customerId } });
+  assert('#14 seed: tạo DEL1 (giao mùng 5) + DEL2 (giao 20)', cd1.ok && cd2.ok, { d1: cd1.error, d2: cd2.error });
+  const fDel = await tidSvc.listTids({ search: 'TID-K2-DEL', deliveredFrom: `${ymCur}-01`, deliveredTo: `${ymCur}-10` });
+  const delSet = new Set((fDel.data ?? []).map((t) => t.tid));
+  assert('#14: lọc Kỳ giao [01..10] → DEL1 lọt, DEL2 KHÔNG', delSet.has('TID-K2-DEL1') && !delSet.has('TID-K2-DEL2'), { rows: [...delSet] });
+  const del1Row = (fDel.data ?? []).find((t) => t.tid === 'TID-K2-DEL1');
+  assert('#14: DEL1 đã giao & còn sống → holdingCustomerName = tên khách', del1Row?.holdingCustomerName === 'Anh K2', { h: del1Row?.holdingCustomerName });
+  // TID chưa giao → holding trống.
+  await tidSvc.createTidUnified({ tid: 'TID-K2-HOLD0', ...baseCfg });
+  const h0 = await tidSvc.listTids({ search: 'TID-K2-HOLD0' });
+  assert('#14: TID chưa giao → holdingCustomerName trống', h0.data?.[0]?.holdingCustomerName === null, { h: h0.data?.[0]?.holdingCustomerName });
+  // TID gán + giao (ACTIVE) → holding = khách; sau THU HỒI (RECALLED) → holding trống.
+  const sHR = 'SN-K2-HR';
+  await mkDevice(sHR);
+  const hr = await tidSvc.createTidUnified({ tid: 'TID-K2-HR', ...baseCfg, assign: { posSerial: sHR, customerId }, deliver: { deliveredAt: cur(5).toISOString(), customerId } });
+  assert('#14 seed: TID_HR gán + giao', hr.ok === true, hr.error);
+  const hrBefore = await tidSvc.listTids({ search: 'TID-K2-HR' });
+  assert('#14: TID_HR ACTIVE + đã giao → holding = khách', hrBefore.data?.[0]?.holdingCustomerName === 'Anh K2', { h: hrBefore.data?.[0]?.holdingCustomerName });
+  await tidSvc.recallTid('TID-K2-HR', { occurredAt: cur(6).toISOString() });
+  const hrAfter = await tidSvc.listTids({ search: 'TID-K2-HR' });
+  assert('#14: TID_HR sau RECALLED → holding trống (khách đã trả)', hrAfter.data?.[0]?.holdingCustomerName === null && hrAfter.data?.[0]?.status === 'RECALLED', { h: hrAfter.data?.[0]?.holdingCustomerName, s: hrAfter.data?.[0]?.status });
+
   // ── (9) quyền vai ──────────────────────────────────────────────────────
   await userSvc.createUser({ fullName: 'Kho K2', username: 'whk2user', password: 'Ware@123456', roleCodes: ['WAREHOUSE'] }).catch(() => undefined);
   await userSvc.createUser({ fullName: 'Sale K2', username: 'salesk2user', password: 'Sales@123456', roleCodes: ['SALES'] }).catch(() => undefined);
+  await userSvc.createUser({ fullName: 'Kế toán K2', username: 'acck2user', password: 'Acct@123456', roleCodes: ['ACCOUNTANT'] }).catch(() => undefined);
   await logout();
 
   await login('whk2user', 'Ware@123456');
@@ -244,15 +329,26 @@ export async function runTidUnifySelfTest(): Promise<number> {
   assert('WAREHOUSE: tạo TID (chưa gán) OK (CONFIG_TID_MANAGE)', whCreate.ok === true, whCreate.error);
   const whAssign = await tidSvc.createTidUnified({ tid: 'TID-K2-WH2', ...baseCfg, assign: { posSerial: sA, customerId } });
   assert('WAREHOUSE: tạo kèm GÁN bị chặn FORBIDDEN (thiếu TID_MANAGE)', whAssign.ok === false && whAssign.error === 'FORBIDDEN', { e: whAssign.error });
+  const whRank = await tidSvc.tidRevenueRanking({});
+  assert('#13: WAREHOUSE (không REVENUE_VIEW) → ranking FORBIDDEN', whRank.ok === false && whRank.error === 'FORBIDDEN', { e: whRank.error });
   await logout();
 
   await login('salesk2user', 'Sales@123456');
   const slRefs = await tidSvc.tidRefs();
   const slList = await tidSvc.listTids({});
   const slCreate = await tidSvc.createTidUnified({ tid: 'TID-K2-SL', ...baseCfg });
+  const slRank = await tidSvc.tidRevenueRanking({});
   assert('SALES: tidRefs FORBIDDEN', slRefs.ok === false && slRefs.error === 'FORBIDDEN');
   assert('SALES: listTids FORBIDDEN', slList.ok === false && slList.error === 'FORBIDDEN');
   assert('SALES: createTidUnified FORBIDDEN', slCreate.ok === false && slCreate.error === 'FORBIDDEN');
+  assert('#13: SALES → ranking FORBIDDEN', slRank.ok === false && slRank.error === 'FORBIDDEN');
+  await logout();
+
+  // I-3 positive — ACCOUNTANT (được grant REVENUE_VIEW ở seed role cũ) PHẢI xem được ranking. Khoá cứng
+  // chống hồi quy lớp bug "permission gán role cũ" (memory feedback_verify_before_claim_and_db_upgrade_gap).
+  await login('acck2user', 'Acct@123456');
+  const accRank = await tidSvc.tidRevenueRanking({});
+  assert('#13: ACCOUNTANT (có REVENUE_VIEW) → ranking OK (positive, khoá grant role cũ)', accRank.ok === true && Array.isArray(accRank.data), { e: accRank.error, n: accRank.data?.length });
   await logout();
 
   await login(ADMIN.u, ADMIN.p);

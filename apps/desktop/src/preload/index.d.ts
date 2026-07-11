@@ -192,6 +192,8 @@ export interface TidDto {
   note: string | null;
   customerName: string | null;
   agentName: string | null;
+  // #14 — "Khách hàng đang giữ": customerName khi đã giao & còn sống (không CLOSED/RECALLED); else null.
+  holdingCustomerName: string | null;
 }
 export interface UndeliveredTidDto extends TidDto {
   agingDays: number;
@@ -266,6 +268,24 @@ export interface TidFilter {
   industryId?: number;
   fromDate?: string;
   toDate?: string;
+  // #14 — "Kỳ giao": lọc theo deliveredAt trong khoảng (ngầm = đã giao).
+  deliveredFrom?: string;
+  deliveredTo?: string;
+}
+/** #13 — Xếp hạng doanh số theo TID (mặc định tháng hiện tại nếu from/to trống). */
+export interface TidRevenueRankFilter {
+  from?: string;
+  to?: string;
+}
+export interface TidRevenueRankRow {
+  rank: number;
+  tidId: number;
+  tid: string;
+  hkdName: string | null;
+  customerName: string | null;
+  industryName: string | null;
+  revenue: number;
+  active: boolean;
 }
 /** PHASE K2 (Q-T5) — form Thêm TID hợp nhất (đầy đủ): cho phép chưa gán + chưa giao. */
 export interface CreateTidInput {
@@ -1116,6 +1136,7 @@ export interface GlbApi {
   tidCreate(input: CreateTidInput): Promise<MutationOutcome>;
   tidRefs(): Promise<{ ok: boolean; data?: TidRefs; error?: string; message?: string }>;
   tidTimeline(tid: string): Promise<ListResult<TimelineEventDto>>;
+  tidRevenueRanking(filter: TidRevenueRankFilter): Promise<ListResult<TidRevenueRankRow>>;
   tidAssign(tid: string, input: AssignTidInput): Promise<MutationOutcome>;
   tidReplace(tid: string, input: ReplaceTidInput): Promise<MutationOutcome>;
   tidRecall(tid: string, input: RecallTidInput): Promise<MutationOutcome>;

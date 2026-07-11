@@ -83,6 +83,7 @@ const api = {
   tidCreate: (input: unknown) => ipcRenderer.invoke('tid:create', input),
   tidRefs: () => ipcRenderer.invoke('tid:refs'),
   tidTimeline: (tid: string) => ipcRenderer.invoke('tid:timeline', tid),
+  tidRevenueRanking: (filter: unknown) => ipcRenderer.invoke('tid:revenueRanking', filter),
   tidAssign: (tid: string, input: unknown) => ipcRenderer.invoke('tid:assign', { tid, input }),
   tidReplace: (tid: string, input: unknown) => ipcRenderer.invoke('tid:replace', { tid, input }),
   tidRecall: (tid: string, input: unknown) => ipcRenderer.invoke('tid:recall', { tid, input }),

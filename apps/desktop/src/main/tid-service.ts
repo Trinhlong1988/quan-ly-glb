@@ -52,6 +52,9 @@ export interface TidDto {
   // ── tên tra cứu (Giao cho khách / đại lý) ──
   customerName: string | null;
   agentName: string | null;
+  // ── #14 "Khách hàng đang giữ": customerName KHI đã giao (deliveredAt != null) & còn sống
+  //    (status ∉ CLOSED/RECALLED); ngược lại null (chưa giao / đã đóng / đã thu hồi = không còn giữ). ──
+  holdingCustomerName: string | null;
 }
 
 export interface UndeliveredTidDto extends TidDto {
@@ -85,6 +88,9 @@ export interface TidFilter {
   /** ISO date bounds on openedAt (R_UX_FILTER). */
   fromDate?: string;
   toDate?: string;
+  /** #14 "Kỳ giao" — lọc theo deliveredAt trong khoảng [deliveredFrom, deliveredTo] (ngầm = đã giao). */
+  deliveredFrom?: string;
+  deliveredTo?: string;
 }
 
 interface TidRow {
@@ -173,7 +179,15 @@ function toDto(t: TidRow, maps: TidNameMaps): TidDto {
     dossierSourceCode: t.dossierSourceId != null ? maps.dsources.get(t.dossierSourceId) ?? null : null,
     note: t.note,
     customerName: t.customerId != null ? maps.customers.get(t.customerId) ?? null : null,
-    agentName: t.agentId != null ? maps.agents.get(t.agentId) ?? null : null
+    agentName: t.agentId != null ? maps.agents.get(t.agentId) ?? null : null,
+    // #14: "đang giữ" = đã giao (deliveredAt != null) & còn sống (không CLOSED/RECALLED). TID chưa
+    // giao / đã đóng / đã thu hồi (khách đã trả) → trống.
+    holdingCustomerName:
+      t.deliveredAt != null && t.status !== 'CLOSED' && t.status !== 'RECALLED'
+        ? t.customerId != null
+          ? maps.customers.get(t.customerId) ?? null
+          : null
+        : null
   };
 }
 
@@ -181,6 +195,17 @@ function toDto(t: TidRow, maps: TidNameMaps): TidDto {
 export async function listTids(filter: TidFilter = {}): Promise<{ ok: boolean; data?: TidDto[]; error?: string; message?: string }> {
   const g = await requireTidView();
   if (!g.ok) return g;
+  // #14 "Kỳ giao": deliveredAt trong khoảng → ngầm là "đã giao". Kết hợp với bộ lọc "Giao cho khách"
+  //   (Q-T2): "chưa giao" (delivered=false) THẮNG (deliveredAt=null, bỏ qua khoảng vô nghĩa); ngược
+  //   lại khoảng ngày (nếu có) ưu tiên, rồi mới tới cờ đã/chưa giao.
+  // B24: Kỳ giao cũng dùng localDayBounds (local half-open) — đồng nhất #13, tránh lệch ~7h ICT khi
+  // deliveredAt sát biên ngày (dateRange UTC sẽ loại nhầm TID giao rạng sáng đầu kỳ).
+  const delRange = localDayBounds(filter.deliveredFrom, filter.deliveredTo);
+  let deliveredAtWhere: { gte?: Date; lt?: Date } | { not: null } | null | undefined;
+  if (filter.delivered === false) deliveredAtWhere = null;
+  else if (delRange) deliveredAtWhere = delRange;
+  else if (filter.delivered === true) deliveredAtWhere = { not: null };
+  else deliveredAtWhere = undefined;
   const rows = await g.db.tid.findMany({
     where: {
       deletedAt: null,
@@ -191,7 +216,7 @@ export async function listTids(filter: TidFilter = {}): Promise<{ ok: boolean; d
       industryId: filter.industryId ?? undefined,
       // 2 chiều độc lập (Q-T2): lọc theo posSerial / deliveredAt null / not-null (AND).
       posSerial: filter.deviceAssigned === undefined ? undefined : filter.deviceAssigned ? { not: null } : null,
-      deliveredAt: filter.delivered === undefined ? undefined : filter.delivered ? { not: null } : null,
+      deliveredAt: deliveredAtWhere,
       OR: filter.search
         ? [{ tid: { contains: filter.search, mode: 'insensitive' } }, { mid: { contains: filter.search, mode: 'insensitive' } }, { hkdName: { contains: filter.search, mode: 'insensitive' } }]
         : undefined
@@ -850,4 +875,95 @@ function parseWhen(iso?: string | null): Date {
   if (!iso) return new Date();
   const d = new Date(iso);
   return isNaN(d.getTime()) ? new Date() : d;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #13 — Xếp hạng doanh số theo TID. Doanh số 1 TID = Σ revenueAmount các Transaction cùng tidId,
+// txnDate ∈ kỳ, status='POSTED', writtenOffAt IS NULL, deletedAt IS NULL (loại CANCELLED + GD ghi
+// giảm nợ xấu). Kỳ mặc định = THÁNG HIỆN TẠI (server tự tính bound bằng new Date() nếu from/to trống).
+// GATE = REVENUE_VIEW (dữ liệu doanh thu tài chính; least-privilege — WAREHOUSE có TID_VIEW nhưng
+// KHÔNG được xem doanh số; nhất quán với nhóm quyền "Doanh thu & Công nợ" của RevenuePage/DebtPage).
+// ─────────────────────────────────────────────────────────────────────────────
+export interface TidRevenueRankFilter {
+  from?: string;
+  to?: string;
+}
+export interface TidRevenueRankRow {
+  rank: number;
+  tidId: number;
+  tid: string;
+  hkdName: string | null;
+  customerName: string | null;
+  industryName: string | null;
+  revenue: number;
+  active: boolean;
+}
+
+// B24: bound kỳ theo LOCAL-day, half-open [gte, lt) — ĐỒNG NHẤT với đường mặc định (dưới) + dashboard
+// computeMonthProfit. KHÔNG dùng dateRange() ở đây: nó parse 'yyyy-mm-dd' theo new Date() = nửa đêm UTC
+// và lte end-of-day-UTC; trên máy ICT (UTC+7) lệch ~7h so với bound local → cùng một tháng bấm lại
+// month-picker ra số khác + GD sát biên phân loại nhầm. Một endpoint tiền tệ chỉ có MỘT quy ước biên.
+function localDayBounds(from?: string, to?: string): { gte?: Date; lt?: Date } | undefined {
+  const parseLocal = (s: string, addDays: number): Date | null => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+    if (!m) return null;
+    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + addDays);
+    return isNaN(d.getTime()) ? null : d;
+  };
+  const b: { gte?: Date; lt?: Date } = {};
+  const gte = from ? parseLocal(from, 0) : null; // đầu ngày `from` (local)
+  const lt = to ? parseLocal(to, 1) : null; // `to` inclusive → nửa đêm ngày kế (half-open)
+  if (gte) b.gte = gte;
+  if (lt) b.lt = lt;
+  return b.gte || b.lt ? b : undefined;
+}
+
+export async function tidRevenueRanking(filter: TidRevenueRankFilter = {}): Promise<{ ok: boolean; data?: TidRevenueRankRow[]; error?: string; message?: string }> {
+  const g = await requirePermission('REVENUE_VIEW', { action: 'REVENUE_VIEW' });
+  if (!g.ok) return g;
+  const db = g.db;
+
+  // Kỳ: mặc định THÁNG HIỆN TẠI (bound [đầu tháng, đầu tháng sau) local); có from/to → localDayBounds
+  // (cùng quy ước local half-open). Không đụng biểu phí/tiền — chỉ tổng hợp revenueAmount đã snapshot.
+  let txnDate: { gte?: Date; lt?: Date } | undefined;
+  if (!filter.from && !filter.to) {
+    const now = new Date();
+    txnDate = { gte: new Date(now.getFullYear(), now.getMonth(), 1), lt: new Date(now.getFullYear(), now.getMonth() + 1, 1) };
+  } else {
+    txnDate = localDayBounds(filter.from, filter.to);
+  }
+
+  const grouped = await db.transaction.groupBy({
+    by: ['tidId'],
+    where: { status: 'POSTED', deletedAt: null, writtenOffAt: null, txnDate },
+    _sum: { revenueAmount: true }
+  });
+  // Chỉ TID có ≥1 giao dịch trong kỳ (revenue>0) + sắp doanh số GIẢM DẦN.
+  const withRev = grouped
+    .map((row) => ({ tidId: row.tidId, revenue: row._sum.revenueAmount ?? 0 }))
+    .filter((r) => r.revenue > 0)
+    .sort((a, b) => b.revenue - a.revenue);
+
+  const tidIds = withRev.map((r) => r.tidId);
+  // S-1: lọc deletedAt:null — TID đã soft-delete KHÔNG hiện trong bảng xếp hạng (đồng nhất listTids luôn
+  // lọc deletedAt:null); dù còn GD POSTED cũ thì cũng loại khỏi ranking + re-rank liên tục.
+  const tids = await db.tid.findMany({ where: { id: { in: tidIds }, deletedAt: null }, select: { id: true, tid: true, hkdName: true, status: true, customerId: true, industryId: true } });
+  const tidMap = new Map(tids.map((t) => [t.id, t]));
+  const custMap = new Map((await db.customer.findMany({ where: { id: { in: distinctIds(tids.map((t) => t.customerId)) } }, select: { id: true, nickname: true, fullName: true } })).map((c) => [c.id, c.nickname || c.fullName]));
+  const indMap = new Map((await db.industry.findMany({ where: { id: { in: distinctIds(tids.map((t) => t.industryId)) } }, select: { id: true, name: true } })).map((i) => [i.id, i.name]));
+
+  const data: TidRevenueRankRow[] = withRev.filter((r) => tidMap.has(r.tidId)).map((r, idx) => {
+    const t = tidMap.get(r.tidId);
+    return {
+      rank: idx + 1,
+      tidId: r.tidId,
+      tid: t?.tid ?? String(r.tidId),
+      hkdName: t?.hkdName ?? null,
+      customerName: t && t.customerId != null ? custMap.get(t.customerId) ?? null : null,
+      industryName: t && t.industryId != null ? indMap.get(t.industryId) ?? null : null,
+      revenue: r.revenue,
+      active: t?.status === 'ACTIVE'
+    };
+  });
+  return { ok: true, data };
 }
