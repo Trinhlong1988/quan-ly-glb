@@ -31,6 +31,9 @@ export interface TidDto {
   delivered: boolean;
   customerDeviceSerial: string | null;
   dossierId: number | null;
+  // ── LANE A (#11) — Ngành nghề của TID ──
+  industryId: number | null;
+  industryName: string | null;
   // ── cấu hình hợp nhất (§1/§9) ──
   bankId: number | null;
   bankCode: string | null;
@@ -77,6 +80,8 @@ export interface TidFilter {
   /** PHASE K2 Q-T2 — 2 bộ lọc độc lập (derive posSerial / deliveredAt). */
   deviceAssigned?: boolean;
   delivered?: boolean;
+  /** LANE A (#11) — lọc TID theo ngành nghề. */
+  industryId?: number;
   /** ISO date bounds on openedAt (R_UX_FILTER). */
   fromDate?: string;
   toDate?: string;
@@ -97,6 +102,7 @@ interface TidRow {
   createdAt: Date;
   customerDeviceSerial: string | null;
   dossierId: number | null;
+  industryId: number | null;
   bankId: number | null;
   partnerId: number | null;
   hkdName: string | null;
@@ -113,6 +119,7 @@ interface TidNameMaps {
   dsources: Map<number, string>;
   customers: Map<number, string>;
   agents: Map<number, string>;
+  industries: Map<number, string>;
 }
 function distinctIds(arr: (number | null)[]): number[] {
   return [...new Set(arr.filter((x): x is number => typeof x === 'number'))];
@@ -125,7 +132,8 @@ async function buildTidMaps(db: Db, rows: TidRow[]): Promise<TidNameMaps> {
     statuses: new Map((await db.tidConfigStatus.findMany({ where: { id: { in: distinctIds(rows.map((r) => r.configStatusId)) } }, select: { id: true, name: true } })).map((s) => [s.id, s.name])),
     dsources: new Map((await db.dossierSource.findMany({ where: { id: { in: distinctIds(rows.map((r) => r.dossierSourceId)) } }, select: { id: true, code: true } })).map((s) => [s.id, s.code])),
     customers: new Map((await db.customer.findMany({ where: { id: { in: distinctIds(rows.map((r) => r.customerId)) } }, select: { id: true, nickname: true, fullName: true } })).map((c) => [c.id, c.nickname || c.fullName])),
-    agents: new Map((await db.agent.findMany({ where: { id: { in: distinctIds(rows.map((r) => r.agentId)) } }, select: { id: true, name: true } })).map((a) => [a.id, a.name]))
+    agents: new Map((await db.agent.findMany({ where: { id: { in: distinctIds(rows.map((r) => r.agentId)) } }, select: { id: true, name: true } })).map((a) => [a.id, a.name])),
+    industries: new Map((await db.industry.findMany({ where: { id: { in: distinctIds(rows.map((r) => r.industryId)) } }, select: { id: true, name: true } })).map((i) => [i.id, i.name]))
   };
 }
 function toDto(t: TidRow, maps: TidNameMaps): TidDto {
@@ -148,6 +156,8 @@ function toDto(t: TidRow, maps: TidNameMaps): TidDto {
     delivered: t.deliveredAt != null,
     customerDeviceSerial: t.customerDeviceSerial,
     dossierId: t.dossierId,
+    industryId: t.industryId,
+    industryName: t.industryId != null ? maps.industries.get(t.industryId) ?? null : null,
     bankId: t.bankId,
     bankCode: bank?.code ?? null,
     bankName: bank?.name ?? null,
@@ -177,6 +187,8 @@ export async function listTids(filter: TidFilter = {}): Promise<{ ok: boolean; d
       bank: filter.bank || undefined,
       status: filter.status || undefined,
       openedAt: dateRange(filter.fromDate, filter.toDate),
+      // LANE A (#11): lọc TID theo ngành nghề (AND với các bộ lọc khác).
+      industryId: filter.industryId ?? undefined,
       // 2 chiều độc lập (Q-T2): lọc theo posSerial / deliveredAt null / not-null (AND).
       posSerial: filter.deviceAssigned === undefined ? undefined : filter.deviceAssigned ? { not: null } : null,
       deliveredAt: filter.delivered === undefined ? undefined : filter.delivered ? { not: null } : null,
@@ -269,6 +281,7 @@ export interface CreateTidUnifiedInput {
   tid: string;
   mid?: string | null;
   dossierId?: number | null; // Q-T3 link HKD
+  industryId: number; // #11 LANE A: ngành nghề — BẮT BUỘC khi tạo TID
   hkdName: string; // giữ text (hiển thị/backfill)
   partnerId: number;
   bankId: number;
@@ -305,6 +318,10 @@ export async function createTidUnified(input: CreateTidUnifiedInput): Promise<Mu
     const d = await db.dossier.findUnique({ where: { id: input.dossierId } });
     if (!d || d.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Hồ sơ HKD đã chọn không tồn tại.' };
   }
+  // LANE A (#11): ngành nghề BẮT BUỘC + phải tồn tại + đang dùng (active). Không FK cứng → validate ở service.
+  if (input.industryId == null) return { ok: false, error: 'VALIDATION', message: 'Phải chọn ngành nghề khi tạo TID.' };
+  const ind = await db.industry.findUnique({ where: { id: input.industryId } });
+  if (!ind || ind.deletedAt || !ind.active) return { ok: false, error: 'VALIDATION', message: 'Phải chọn ngành nghề khi tạo TID.' };
 
   // Kiểm chứng nhánh assign/deliver TRƯỚC transaction (tránh abort trong tx).
   let devAgentId: number | null = null;
@@ -357,6 +374,7 @@ export async function createTidUnified(input: CreateTidUnifiedInput): Promise<Mu
           partnerId: input.partnerId,
           hkdName,
           dossierId: input.dossierId ?? null,
+          industryId: input.industryId, // #11 LANE A: gắn ngành nghề (đã validate tồn tại + active)
           receiveAccountId: input.receiveAccountId ?? null,
           issuedAt: parseDateOrNull(input.issuedAt),
           configStatusId: input.configStatusId ?? null,
@@ -446,16 +464,22 @@ export interface TidRefs {
   banks: { id: number; code: string; name: string }[];
   /** partnerId → danh sách bankId liên kết (PartnerBank alive). */
   partnerBanks: Record<number, number[]>;
+  /** LANE A (#11) — ngành nghề đang dùng (active) để chọn khi tạo TID. */
+  industries: { id: number; code: string; name: string }[];
 }
 export async function tidRefs(): Promise<{ ok: boolean; data?: TidRefs; error?: string; message?: string }> {
   const g = await requirePermission('CONFIG_TID_VIEW', { action: 'CONFIG_TID_VIEW' });
   if (!g.ok) return g;
   const db = g.db;
-  const [dossiers, partners, banks, links] = await Promise.all([
+  // LANE A (#11): đọc industries TRỰC TIẾP qua db (KHÔNG qua listIndustries) — tránh phụ thuộc quyền
+  // CONFIG_INDUSTRY_VIEW mà WAREHOUSE không có (nhưng WAREHOUSE PHẢI tạo được TID). Nhất quán với
+  // cách tidRefs đọc dossier/partner/bank trực tiếp (D1: giữ role cũ, không siết thêm quyền cho picker).
+  const [dossiers, partners, banks, links, industries] = await Promise.all([
     db.dossier.findMany({ where: { deletedAt: null }, orderBy: { id: 'asc' }, select: { id: true, hkdName: true, ownerName: true } }),
     db.partner.findMany({ where: { deletedAt: null }, orderBy: { id: 'asc' }, select: { id: true, code: true, name: true } }),
     db.bank.findMany({ where: { deletedAt: null }, orderBy: { id: 'asc' }, select: { id: true, code: true, name: true } }),
-    db.partnerBank.findMany({ where: { deletedAt: null }, select: { partnerId: true, bankId: true } })
+    db.partnerBank.findMany({ where: { deletedAt: null }, select: { partnerId: true, bankId: true } }),
+    db.industry.findMany({ where: { deletedAt: null, active: true }, orderBy: { id: 'asc' }, select: { id: true, code: true, name: true } })
   ]);
   const partnerBanks: Record<number, number[]> = {};
   for (const l of links) (partnerBanks[l.partnerId] ??= []).push(l.bankId);
@@ -465,7 +489,8 @@ export async function tidRefs(): Promise<{ ok: boolean; data?: TidRefs; error?: 
       dossiers: dossiers.map((d) => ({ id: d.id, hkdName: d.hkdName, ownerName: d.ownerName ?? null })),
       partners,
       banks,
-      partnerBanks
+      partnerBanks,
+      industries
     }
   };
 }

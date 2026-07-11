@@ -31,6 +31,8 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
   const [statusFilter, setStatusFilter] = useState('');
   const [assignFilter, setAssignFilter] = useState(''); // '', 'yes', 'no'
   const [deliverFilter, setDeliverFilter] = useState('');
+  const [industryFilter, setIndustryFilter] = useState(''); // LANE A (#11) — lọc theo ngành nghề (industryId)
+  const [industries, setIndustries] = useState<{ id: number; code: string; name: string }[]>([]);
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [creating, setCreating] = useState(false);
@@ -49,6 +51,7 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
         status: statusFilter || undefined,
         deviceAssigned: assignFilter ? assignFilter === 'yes' : undefined,
         delivered: deliverFilter ? deliverFilter === 'yes' : undefined,
+        industryId: industryFilter ? Number(industryFilter) : undefined,
         fromDate: fromDate || undefined,
         toDate: toDate || undefined
       });
@@ -60,13 +63,19 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
   useEffect(() => {
     if (tab !== 'status') void reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, statusFilter, assignFilter, deliverFilter]);
+  }, [tab, statusFilter, assignFilter, deliverFilter, industryFilter]);
+
+  // LANE A (#11): nạp danh sách ngành nghề (active) cho bộ lọc — dùng tidRefs (không cần quyền ngành nghề).
+  useEffect(() => {
+    if (canView) window.api.tidRefs().then((r) => r.ok && r.data && setIndustries(r.data.industries));
+  }, [canView]);
 
   function resetFilters(): void {
     setSearch('');
     setStatusFilter('');
     setAssignFilter('');
     setDeliverFilter('');
+    setIndustryFilter('');
     setFromDate('');
     setToDate('');
     setTimeout(reload, 0);
@@ -101,8 +110,8 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
               onClick={() =>
                 exportCsv(
                   'tid',
-                  ['TID', 'MID', 'HKD', 'Ngân hàng', 'Đối tác', 'Gán máy POS', 'Giao cho khách', 'Vòng đời'],
-                  rows.map((t) => [t.tid, t.mid ?? '', t.hkdName ?? '', t.bankCode ?? t.bank ?? '', t.partnerName ?? '', t.deviceAssigned ? (t.posSerial ?? 'Đã gán') : (t.customerDeviceSerial ? 'Máy khách' : 'Chưa gán'), t.delivered ? 'Đã giao' : 'Chưa giao', statusLabel(t.status)])
+                  ['TID', 'MID', 'HKD', 'Ngành nghề', 'Ngân hàng', 'Đối tác', 'Gán máy POS', 'Giao cho khách', 'Vòng đời'],
+                  rows.map((t) => [t.tid, t.mid ?? '', t.hkdName ?? '', t.industryName ?? '', t.bankCode ?? t.bank ?? '', t.partnerName ?? '', t.deviceAssigned ? (t.posSerial ?? 'Đã gán') : (t.customerDeviceSerial ? 'Máy khách' : 'Chưa gán'), t.delivered ? 'Đã giao' : 'Chưa giao', statusLabel(t.status)])
                 )
               }
             >
@@ -165,6 +174,7 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
           selects={[
             { key: 'assign', placeholder: 'Gán máy POS (tất cả)', value: assignFilter, options: [{ value: 'yes', label: 'Đã gán máy' }, { value: 'no', label: 'Chưa gán máy' }], onChange: setAssignFilter },
             { key: 'deliver', placeholder: 'Giao cho khách (tất cả)', value: deliverFilter, options: [{ value: 'yes', label: 'Đã giao' }, { value: 'no', label: 'Chưa giao' }], onChange: setDeliverFilter },
+            { key: 'industry', placeholder: 'Ngành nghề (tất cả)', value: industryFilter, options: industries.map((i) => ({ value: String(i.id), label: `${i.code} · ${i.name}` })), onChange: setIndustryFilter },
             { key: 'status', placeholder: 'Tất cả trạng thái', value: statusFilter, options: TID_STATUSES.map((s) => ({ value: s, label: statusLabel(s) })), onChange: setStatusFilter }
           ]}
           onApply={reload}
@@ -179,6 +189,7 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
               <tr>
                 <th className="px-4 py-3">TID</th>
                 <th className="px-4 py-3">HKD</th>
+                <th className="px-4 py-3">Ngành nghề</th>
                 <th className="px-4 py-3">Ngân hàng</th>
                 <th className="px-4 py-3">Gán máy POS</th>
                 <th className="px-4 py-3">Giao cho khách</th>
@@ -215,6 +226,7 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
                 <tr key={t.id} className={tab === 'undelivered' && (t as UndeliveredTidDto).agingDays >= 30 ? 'bg-danger/5' : 'hover:bg-appbg/60'}>
                   <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700">{t.tid}</td>
                   <td className="px-4 py-3 text-slate-600">{t.hkdName ?? '—'}</td>
+                  <td className="px-4 py-3 text-slate-600">{t.industryName ?? '—'}</td>
                   <td className="px-4 py-3 text-slate-600">{t.bankCode ?? t.bank ?? '—'}</td>
                   <td className="px-4 py-3">
                     <AssignCell t={t} />
@@ -340,6 +352,7 @@ function TidCreateForm({ canOps, onClose, onSaved }: { canOps: boolean; onClose:
   const [hkdName, setHkdName] = useState('');
   const [partnerId, setPartnerId] = useState('');
   const [bankId, setBankId] = useState('');
+  const [industryId, setIndustryId] = useState(''); // LANE A (#11) — ngành nghề BẮT BUỘC
   const [tid, setTid] = useState('');
   const [mid, setMid] = useState('');
   const [issuedAt, setIssuedAt] = useState('');
@@ -383,6 +396,7 @@ function TidCreateForm({ canOps, onClose, onSaved }: { canOps: boolean; onClose:
     if (!tid.trim()) return toast.alert('Chuỗi TID bắt buộc.', 'Thiếu thông tin');
     if (!partnerId) return toast.alert('Vui lòng chọn đối tác.', 'Thiếu thông tin');
     if (!bankId) return toast.alert('Vui lòng chọn ngân hàng.', 'Thiếu thông tin');
+    if (!industryId) return toast.alert('Phải chọn ngành nghề khi tạo TID.', 'Thiếu thông tin');
     if (!hkdName.trim()) return toast.alert('Tên Hộ Kinh Doanh bắt buộc (chọn HKD hoặc nhập tay).', 'Thiếu thông tin');
     if (assignMode === 'pos') {
       if (!posSerial) return toast.alert('Chọn máy POS để gán.', 'Thiếu thông tin');
@@ -396,6 +410,7 @@ function TidCreateForm({ canOps, onClose, onSaved }: { canOps: boolean; onClose:
       tid: tid.trim(),
       mid: mid.trim() || null,
       dossierId: dossierId ? Number(dossierId) : null,
+      industryId: Number(industryId),
       hkdName: hkdName.trim(),
       partnerId: Number(partnerId),
       bankId: Number(bankId),
@@ -465,6 +480,16 @@ function TidCreateForm({ canOps, onClose, onSaved }: { canOps: boolean; onClose:
                   ))}
                 </select>
               )}
+            </Field>
+            <Field label="Ngành nghề" required hint="Bắt buộc — theo ĐKKD của HKD">
+              <select className={inputCls} value={industryId} onChange={(e) => setIndustryId(e.target.value)}>
+                <option value="">— Chọn ngành nghề —</option>
+                {refs.industries.map((i) => (
+                  <option key={i.id} value={i.id}>
+                    {i.code} · {i.name}
+                  </option>
+                ))}
+              </select>
             </Field>
           </div>
 

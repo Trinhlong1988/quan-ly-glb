@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Plus, Loader2, HardDrive, History, Wrench, Download, List, PackagePlus, Building2, Cpu, Tag } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate, fmtTimeSec } from '@glb/shared';
-import type { PosDto, TimelineEventDto, CustomerDto, AgentDto } from '../../../preload/index.d';
+import type { PosDto, TimelineEventDto, CustomerDto, AgentDto, LiteRef } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
 import { Modal } from '../components/Modal.js';
 import { Button } from '../components/Button.js';
@@ -74,10 +74,13 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
   const toast = useToast();
   const [rows, setRows] = useState<PosDto[]>([]);
   const [agents, setAgents] = useState<AgentDto[]>([]);
+  const [models, setModels] = useState<LiteRef[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [agentId, setAgentId] = useState('');
+  // LANE B (#24) — lọc "Chủng loại" phía client trên tập rows (posList trả full, không phân trang).
+  const [modelFilter, setModelFilter] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [creating, setCreating] = useState(false);
@@ -102,13 +105,26 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
   useEffect(() => {
     void reload();
     window.api.agentList().then((r) => r.ok && r.data && setAgents(r.data));
+    window.api.posModelLite().then((r) => r.ok && r.data && setModels(r.data));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Lọc chủng loại (client-side) trên tập đã lọc phía server. Ưu tiên posModelId; nếu DTO thiếu id
+  // nhưng có tên khớp option đang chọn thì fallback theo posModelName.
+  const selectedModel = models.find((m) => String(m.id) === modelFilter);
+  const filteredRows = modelFilter
+    ? rows.filter((d) =>
+        d.posModelId != null
+          ? String(d.posModelId) === modelFilter
+          : !!selectedModel && d.posModelName === selectedModel.name
+      )
+    : rows;
 
   function resetFilters(): void {
     setSearch('');
     setStatusFilter('');
     setAgentId('');
+    setModelFilter('');
     setFromDate('');
     setToDate('');
     setTimeout(reload, 0);
@@ -117,7 +133,7 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
-        <div className="text-sm text-slate-500">{rows.length} máy POS</div>
+        <div className="text-sm text-slate-500">{filteredRows.length} máy POS</div>
         <div className="flex items-center gap-2">
           <Button
             variant="confirm"
@@ -126,7 +142,7 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
               exportCsv(
                 'may_pos',
                 ['Serial', 'Chủng loại', 'Nhà cung cấp', 'Giá nhập', 'Ngày nhập', 'Trạng thái', 'TID hiện tại', 'Khách', 'Đại lý'],
-                rows.map((d) => [d.serial, d.posModelName ?? '', d.supplierName ?? '', d.importPrice ?? '', d.importedAt ? fmtDate(d.importedAt) : '', statusLabel(d.status), d.currentTid ?? '', d.customerName ?? '', d.agentName ?? ''])
+                filteredRows.map((d) => [d.serial, d.posModelName ?? '', d.supplierName ?? '', d.importPrice ?? '', d.importedAt ? fmtDate(d.importedAt) : '', statusLabel(d.status), d.currentTid ?? '', d.customerName ?? '', d.agentName ?? ''])
               )
             }
           >
@@ -150,7 +166,9 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
         onToDate={setToDate}
         selects={[
           { key: 'status', placeholder: 'Tất cả trạng thái', value: statusFilter, options: POS_STATUSES.map((s) => ({ value: s, label: statusLabel(s) })), onChange: setStatusFilter },
-          { key: 'agent', placeholder: 'Tất cả đại lý', value: agentId, options: agents.map((a) => ({ value: String(a.id), label: a.name })), onChange: setAgentId }
+          { key: 'agent', placeholder: 'Tất cả đại lý', value: agentId, options: agents.map((a) => ({ value: String(a.id), label: a.name })), onChange: setAgentId },
+          // Lọc chủng loại (client-side) — đổi giá trị là lọc ngay, không cần bấm "Lọc".
+          { key: 'model', placeholder: 'Tất cả chủng loại', value: modelFilter, options: models.map((m) => ({ value: String(m.id), label: m.name })), onChange: setModelFilter }
         ]}
         onApply={reload}
         onReset={resetFilters}
@@ -159,10 +177,10 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
       {/* Bộ đếm (đếm CLIENT từ posList — trả full, không phân trang; theo tập kết quả lọc hiện tại). */}
       <StatBar
         items={[
-          { label: 'Tổng máy', value: rows.length, tone: 'bg-brand-tint text-brand' },
+          { label: 'Tổng máy', value: filteredRows.length, tone: 'bg-brand-tint text-brand' },
           ...POS_STATUSES.map((s) => ({
             label: statusLabel(s),
-            value: rows.filter((d) => d.status === s).length,
+            value: filteredRows.filter((d) => d.status === s).length,
             tone: statusTone(s)
           }))
         ]}
@@ -192,16 +210,16 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
                 </td>
               </tr>
             )}
-            {!loading && rows.length === 0 && (
+            {!loading && filteredRows.length === 0 && (
               <tr>
                 <td colSpan={10} className="px-4 py-10 text-center text-slate-400">
                   <HardDrive className="mx-auto mb-2 h-6 w-6" />
-                  Chưa có máy POS.
+                  {rows.length === 0 ? 'Chưa có máy POS.' : 'Không có máy POS khớp bộ lọc.'}
                 </td>
               </tr>
             )}
             {!loading &&
-              rows.map((d) => (
+              filteredRows.map((d) => (
                 <tr key={d.id} className="hover:bg-appbg/60">
                   <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700">{d.serial}</td>
                   <td className="px-4 py-3 text-slate-600">{d.posModelName ?? '—'}</td>

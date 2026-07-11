@@ -173,6 +173,9 @@ export interface TidDto {
   delivered: boolean;
   customerDeviceSerial: string | null;
   dossierId: number | null;
+  // LANE A (#11) — Ngành nghề của TID.
+  industryId: number | null;
+  industryName: string | null;
   bankId: number | null;
   bankCode: string | null;
   bankName: string | null;
@@ -198,6 +201,8 @@ export interface TidRefs {
   partners: { id: number; code: string; name: string }[];
   banks: { id: number; code: string; name: string }[];
   partnerBanks: Record<number, number[]>;
+  // LANE A (#11) — ngành nghề active để chọn khi tạo TID.
+  industries: { id: number; code: string; name: string }[];
 }
 export interface UndeliveredSummary {
   count: number;
@@ -257,6 +262,8 @@ export interface TidFilter {
   status?: string;
   deviceAssigned?: boolean;
   delivered?: boolean;
+  // LANE A (#11) — lọc TID theo ngành nghề.
+  industryId?: number;
   fromDate?: string;
   toDate?: string;
 }
@@ -265,6 +272,8 @@ export interface CreateTidInput {
   tid: string;
   mid?: string | null;
   dossierId?: number | null;
+  // LANE A (#11) — ngành nghề BẮT BUỘC khi tạo TID.
+  industryId: number;
   hkdName: string;
   partnerId: number;
   bankId: number;

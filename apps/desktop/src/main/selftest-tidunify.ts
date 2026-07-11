@@ -19,6 +19,7 @@ import * as supplySvc from './pos-supply-service.js';
 import * as bankSvc from './bank-config-service.js';
 import * as userSvc from './user-service.js';
 import * as notifySvc from './notification-service.js';
+import * as industrySvc from './industry-service.js';
 
 let failures = 0;
 function assert(name: string, cond: boolean, extra?: unknown): void {
@@ -58,10 +59,16 @@ export async function runTidUnifySelfTest(): Promise<number> {
   const customerId = cust.id!;
   assert('master model/supplier/customer created', model.ok && supplier.ok && cust.ok && typeof statusId === 'number');
 
+  // ── LANE A (#11) master: ngành nghề (1 active, 1 ngừng dùng) ────────────
+  const industryRes = await industrySvc.createIndustry({ name: 'Vận tải K2' });
+  assert('master: tạo ngành nghề active', industryRes.ok === true, industryRes.error);
+  const industryId = industryRes.id!;
+  const inactiveInd = await db.industry.create({ data: { code: 'NGHK2X', name: 'Ngành ngừng dùng K2', active: false } });
+
   const mkDevice = async (serial: string): Promise<void> => {
     await supplySvc.createPosIntake({ posModelId: modelId, serial, intakeStatusId: statusId!, supplierId, importPrice: 1_000_000, importedAt: '2026-07-01' });
   };
-  const baseCfg = { hkdName: 'HKD Xưởng K2', dossierId: dossier.id, partnerId, bankId };
+  const baseCfg = { hkdName: 'HKD Xưởng K2', dossierId: dossier.id, partnerId, bankId, industryId };
 
   // ── (9-refs) tidRefs endpoint (D1) ─────────────────────────────────────
   const refs = await tidSvc.tidRefs();
@@ -200,6 +207,30 @@ export async function runTidUnifySelfTest(): Promise<number> {
   const tlA = await tidSvc.tidTimeline('TID-K2-A');
   const typesA = (tlA.data ?? []).map((e) => e.eventType);
   assert('FIX3: timeline TID_A có TID_ASSIGN TRƯỚC TID_DELIVERED dù deliveredAt lùi ngày', typesA.indexOf('TID_ASSIGN') >= 0 && typesA.indexOf('TID_DELIVERED') > typesA.indexOf('TID_ASSIGN'), { types: typesA });
+
+  // ── LANE A (#11) — Ngành nghề cho TID ──────────────────────────────────
+  // tidRefs (lấy ở trên) trả industries ACTIVE, LOẠI inactive.
+  assert('LANE A: tidRefs trả ngành active + loại inactive', (refs.data?.industries ?? []).some((i) => i.id === industryId) && !(refs.data?.industries ?? []).some((i) => i.id === inactiveInd.id), { n: refs.data?.industries?.length });
+  // TID_A đã tạo với industryId → DTO trả industryId + industryName resolve đúng.
+  assert('LANE A: DTO TID_A có industryId + industryName', A?.industryId === industryId && A?.industryName === 'Vận tải K2', { id: A?.industryId, name: A?.industryName });
+  // Tạo TID THIẾU industryId → VALIDATION (bắt buộc chọn ngành nghề). Cast để bỏ field required test runtime guard.
+  const noInd = await tidSvc.createTidUnified({ tid: 'TID-K2-NOIND', hkdName: 'HKD Xưởng K2', dossierId: dossier.id, partnerId, bankId } as tidSvc.CreateTidUnifiedInput);
+  assert('LANE A: tạo TID thiếu ngành nghề → VALIDATION', noInd.ok === false && noInd.error === 'VALIDATION', { e: noInd.error });
+  const noIndRow = await db.tid.findUnique({ where: { tid: 'TID-K2-NOIND' } });
+  assert('LANE A: TID thiếu ngành nghề KHÔNG được tạo (không mồ côi)', noIndRow === null);
+  // industryId KHÔNG tồn tại → VALIDATION.
+  const badInd = await tidSvc.createTidUnified({ tid: 'TID-K2-BADIND', ...baseCfg, industryId: 999999 });
+  assert('LANE A: industryId không tồn tại → VALIDATION', badInd.ok === false && badInd.error === 'VALIDATION', { e: badInd.error });
+  // industryId KHÔNG active (ngừng dùng) → VALIDATION.
+  const inactInd = await tidSvc.createTidUnified({ tid: 'TID-K2-INACTIND', ...baseCfg, industryId: inactiveInd.id });
+  assert('LANE A: industryId không active → VALIDATION', inactInd.ok === false && inactInd.error === 'VALIDATION', { e: inactInd.error });
+  // Lọc listTids theo ngành nghề riêng (industry2) → CHỈ TID gắn industry2.
+  const industry2 = await industrySvc.createIndustry({ name: 'Tạp hóa K2' });
+  const ind2Id = industry2.id!;
+  const cInd2 = await tidSvc.createTidUnified({ tid: 'TID-K2-IND2', ...baseCfg, industryId: ind2Id });
+  assert('LANE A: tạo TID với industry2 OK', cInd2.ok === true, cInd2.error);
+  const fInd2 = await tidSvc.listTids({ industryId: ind2Id });
+  assert('LANE A: lọc listTids theo industryId → đúng tập (chỉ industry2)', (fInd2.data ?? []).length >= 1 && (fInd2.data ?? []).every((t) => t.industryId === ind2Id) && (fInd2.data ?? []).some((t) => t.tid === 'TID-K2-IND2'), { rows: (fInd2.data ?? []).map((t) => t.tid) });
 
   // ── (9) quyền vai ──────────────────────────────────────────────────────
   await userSvc.createUser({ fullName: 'Kho K2', username: 'whk2user', password: 'Ware@123456', roleCodes: ['WAREHOUSE'] }).catch(() => undefined);

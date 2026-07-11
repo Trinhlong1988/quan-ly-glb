@@ -263,6 +263,9 @@ model Tid {
   // ── PHASE K2 (§5/§8) — hợp nhất TID + máy của khách (Q-T6) + link HKD (Q-T3) ──
   customerDeviceSerial String? @map("customer_device_serial") // Q-T6: serial máy CỦA KHÁCH (không tạo PosDevice)
   dossierId        Int?      @map("dossier_id") // Q-T3: link Hồ sơ HKD (Dossier); giữ hkdName text để hiển thị/backfill
+  // ── LANE A (#11) — Ngành nghề cho TID ──
+  industryId       Int?      @map("industry_id") // #11: Ngành nghề (Industry). Nullable ở DB (TID cũ = null);
+  //                                                "bắt buộc" enforce ở tầng tạo (createTidUnified), không phá dữ liệu cũ.
   createdBy        Int?      @map("created_by")
   updatedBy        Int?      @map("updated_by")
   deletedAt        DateTime? @map("deleted_at") @db.Timestamptz(3) // soft-delete cho cấu hình TID (§9b)
@@ -273,6 +276,7 @@ model Tid {
   @@index([partnerId])
   @@index([bankId])
   @@index([dossierId])
+  @@index([industryId])
   @@map("tids")
 }
 
