@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Search, FilterX } from 'lucide-react';
+import { Search, FilterX, RefreshCw } from 'lucide-react';
 import { inputCls } from './Field.js';
 
 /** A dropdown dimension (đại lý, ngân hàng, trạng thái, vai trò…). */
@@ -26,6 +26,7 @@ export function FilterBar({
   selects = [],
   onApply,
   onReset,
+  onRefresh,
   debounceMs = 300
 }: {
   search: string;
@@ -38,6 +39,8 @@ export function FilterBar({
   selects?: FilterSelect[];
   onApply: () => void;
   onReset: () => void;
+  /** Tải lại dữ liệu mới nhất (giữ nguyên bộ lọc). Mặc định = onApply (re-query với filter hiện tại). */
+  onRefresh?: () => void;
   /** Độ trễ (ms) lọc realtime khi gõ ô tìm kiếm. 0 = tắt debounce (chỉ lọc khi Enter/bấm Lọc). */
   debounceMs?: number;
 }): JSX.Element {
@@ -103,6 +106,13 @@ export function FilterBar({
         className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-brand/10 text-brand hover:bg-brand/20"
       >
         <FilterX className="h-4 w-4" /> Xóa lọc
+      </button>
+      <button
+        onClick={onRefresh ?? onApply}
+        title="Tải lại dữ liệu mới nhất (giữ nguyên bộ lọc)"
+        className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200"
+      >
+        <RefreshCw className="h-4 w-4" /> Làm mới
       </button>
     </div>
   );
