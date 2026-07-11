@@ -77,14 +77,16 @@ interface SessionState {
 let current: SessionState | null = null;
 
 /** Danh sách phiên CÒN SỐNG (chưa hết hạn + nhịp tim còn) của 1 user — trừ phiên `exceptId` nếu có. */
-async function liveSessionsOf(db: Db, userId: number, exceptId?: string): Promise<{ id: string; deviceInfo: string | null; lastSeenAt: Date }[]> {
+async function liveSessionsOf(db: Db, userId: number, exceptId?: string): Promise<{ id: string; deviceInfo: string | null; deviceId: string | null; lastSeenAt: Date }[]> {
   const now = Date.now();
   const rows = await db.loginSession.findMany({
     where: { userId, expiresAt: { gt: new Date(now) }, lastSeenAt: { gt: new Date(now - SESSION_STALE_MS) }, ...(exceptId ? { id: { not: exceptId } } : {}) },
-    select: { id: true, deviceInfo: true, lastSeenAt: true }
+    select: { id: true, deviceInfo: true, deviceId: true, lastSeenAt: true }
   });
   return rows;
 }
+// Khóa nhận diện thiết bị: ưu tiên deviceId (GUID bền, chống giả mạo); selftest/không có GUID → dùng deviceInfo.
+const deviceKey = (deviceId: string | null | undefined, deviceInfo: string | null | undefined): string | null => deviceId ?? deviceInfo ?? null;
 
 /** Build the flattened AuthUser (roles + effective permissions) from the DB. */
 async function buildAuthUser(db: Db, userId: number): Promise<AuthUser> {
@@ -130,13 +132,26 @@ export interface LoginOutcome {
 export interface LoginOpts {
   /** true = đăng nhập tại đây, ĐĂNG XUẤT thiết bị đang đăng nhập (sau khi người dùng xác nhận). */
   force?: boolean;
-  /** Tên máy/thiết bị (os.hostname) để hiển thị + lưu vào phiên. */
+  /** Tên máy/thiết bị (os.hostname) để HIỂN THỊ + lưu vào phiên (nhãn, có thể giả mạo). */
   deviceInfo?: string;
+  /** R48 — GUID/1-cài-đặt (userData): KHÓA nhận diện thiết bị (same-device detect chống giả mạo hostname). */
+  deviceId?: string;
 }
+
+// R48 Pha 2 — KHÓA TẠM THỜI: sai ≥5 lần → khóa, nhưng TỰ MỞ sau LOCKOUT_COOLDOWN (chống DoS khóa vĩnh viễn
+// mọi admin). Admin vẫn mở tay sớm được. Attacker chỉ khóa được 1 nạn nhân tối đa cooldown, không vĩnh viễn.
+const LOCKOUT_COOLDOWN_MS = 15 * 60 * 1000;
 
 export async function login(username: string, password: string, opts: LoginOpts = {}): Promise<LoginOutcome> {
   const db = getDb();
-  const row = await db.user.findFirst({ where: { username, deletedAt: null } });
+  let row = await db.user.findFirst({ where: { username, deletedAt: null } });
+
+  // #1 — Nếu đang LOCKED do sai mật khẩu nhưng ĐÃ QUA cooldown → tự mở khóa rồi mới xét đăng nhập.
+  if (row && row.status === 'LOCKED' && row.lockedAt && Date.now() - row.lockedAt.getTime() >= LOCKOUT_COOLDOWN_MS) {
+    await db.user.update({ where: { id: row.id }, data: { status: 'ACTIVE', failedAttempts: 0, lockedAt: null } });
+    await writeAudit(db, { actorUserId: row.id, action: 'USER_AUTO_UNLOCKED', targetType: 'User', targetId: String(row.id), after: { username: row.username, reason: 'hết thời gian tạm khóa' } });
+    row = await db.user.findFirst({ where: { username, deletedAt: null } });
+  }
 
   const record: AuthUserRecord | null = row
     ? {
@@ -167,7 +182,7 @@ export async function login(username: string, password: string, opts: LoginOpts 
         return {
           ok: false,
           error: 'STATUS_LOCKED',
-          message: `Tài khoản đã bị khóa do sai mật khẩu quá ${MAX_FAILED_ATTEMPTS} lần. Vui lòng liên hệ quản trị để mở khóa.`
+          message: `Tài khoản tạm khóa do sai mật khẩu quá ${MAX_FAILED_ATTEMPTS} lần. Tự mở sau 15 phút, hoặc liên hệ quản trị mở sớm.`
         };
       }
     }
@@ -188,21 +203,21 @@ export async function login(username: string, password: string, opts: LoginOpts 
   // R46 — 1 tài khoản 1 thiết bị. Serialize theo user (advisory lock) rồi kiểm/ghi phiên trong CÙNG transaction.
   // Đăng nhập lại trên CÙNG thiết bị (khớp deviceInfo) → thay thế IM LẶNG (app khởi động lại / đăng nhập lại
   // không cần hỏi). Chỉ CHẶN + hỏi khi đang đăng nhập ở thiết bị KHÁC.
-  const dev = opts.deviceInfo ?? null;
+  const myKey = deviceKey(opts.deviceId, opts.deviceInfo); // khóa nhận diện thiết bị (GUID ưu tiên)
   const outcome = await db.$transaction(async (txc) => {
     await txc.$executeRawUnsafe('SELECT pg_advisory_xact_lock($1, $2)', LOGIN_LOCK_KEY, userId);
     const live = await liveSessionsOf(txc as unknown as Db, userId);
-    const sameDevice = live.filter((o) => (o.deviceInfo ?? null) === dev);
-    const otherDevices = live.filter((o) => (o.deviceInfo ?? null) !== dev);
+    const sameDevice = live.filter((o) => deviceKey(o.deviceId, o.deviceInfo) === myKey);
+    const otherDevices = live.filter((o) => deviceKey(o.deviceId, o.deviceInfo) !== myKey);
     if (otherDevices.length > 0 && !opts.force) {
-      // Đang đăng nhập ở thiết bị khác + CHƯA xác nhận → KHÔNG tạo phiên, trả tên thiết bị để hỏi.
+      // Đang đăng nhập ở thiết bị KHÁC (khác GUID) + CHƯA xác nhận → KHÔNG tạo phiên, trả tên thiết bị để hỏi.
       return { blocked: true as const, otherDevice: otherDevices[0].deviceInfo ?? 'thiết bị khác' };
     }
     // Xóa phiên cùng thiết bị (thay thế) + (nếu force) phiên thiết bị khác (đá ra → kick ở heartbeat).
     const toDelete = [...sameDevice, ...(opts.force ? otherDevices : [])].map((o) => o.id);
     if (toDelete.length > 0) await txc.loginSession.deleteMany({ where: { userId, id: { in: toDelete } } });
     await txc.loginSession.create({
-      data: { id: sessionId, userId, expiresAt: new Date(Date.now() + SESSION_TTL_MS), lastSeenAt: new Date(), deviceInfo: dev }
+      data: { id: sessionId, userId, expiresAt: new Date(Date.now() + SESSION_TTL_MS), lastSeenAt: new Date(), deviceInfo: opts.deviceInfo ?? null, deviceId: opts.deviceId ?? null }
     });
     return { blocked: false as const };
   });
@@ -278,6 +293,32 @@ export async function listOnlineUsers(): Promise<{ ok: boolean; error?: string; 
 
 export function me(): AuthUser | null {
   return current?.user ?? null;
+}
+
+/**
+ * R48 Pha 2 (#3) — GUARD AUTHORITATIVE: xác thực phiên hiện tại còn SỐNG trong DB (id + chưa hết hạn) trên
+ * MỖI thao tác có quyền → kick (đăng nhập thiết bị khác) hoặc hết hạn TTL THU HỒI quyền ngay (không chờ nhịp
+ * tim renderer). Đồng thời làm mới status + forceChangePassword từ DB. Trả null (và null hóa current) nếu phiên
+ * chết / user bị khóa/xóa. 1 truy vấn có index.
+ */
+export async function validateCurrentSession(): Promise<{ user: AuthUser; forceChangePassword: boolean } | null> {
+  if (!current) return null;
+  const db = getDb();
+  const s = await db.loginSession.findFirst({
+    where: { id: current.sessionId, expiresAt: { gt: new Date() } },
+    include: { user: { select: { status: true, deletedAt: true, forceChangePassword: true } } }
+  });
+  if (!s || !s.user || s.user.deletedAt || s.user.status === 'DELETED' || s.user.status === 'LOCKED') {
+    current = null;
+    return null;
+  }
+  current.user.forceChangePassword = s.user.forceChangePassword;
+  return { user: current.user, forceChangePassword: s.user.forceChangePassword };
+}
+
+/** R48 Pha 2 (#4) — cho guard tính lần re-auth SAI (mật khẩu/level2 khi xác nhận thao tác) vào bộ đếm khóa. */
+export async function penalizeFailedAuth(userId: number, label: string): Promise<void> {
+  await registerFailedAuth(getDb(), userId, label);
 }
 
 export async function logout(): Promise<void> {

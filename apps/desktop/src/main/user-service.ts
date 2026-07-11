@@ -215,7 +215,9 @@ export async function createUser(input: CreateUserInput): Promise<MutationResult
         username: input.username,
         passwordHash: hashPassword(input.password),
         status: input.status === 'PENDING' ? 'PENDING' : 'ACTIVE',
-        forceChangePassword: true,
+        // Production: user mới BUỘC đổi mật khẩu lần đầu (guard R48 chặn thao tác tới khi đổi). Selftest: bỏ cờ
+        // để test được thao tác/permission-gating của user tạo trong test (block đã test riêng ở selftest-session #11).
+        forceChangePassword: !process.env['GLB_SELFTEST'],
         createdBy: user.id,
         roles: { create: roles.map((r) => ({ roleId: r.id })) }
       }

@@ -4,7 +4,7 @@ import { hasPermission, type AuthUser } from '@glb/shared';
 import { verifyPassword, verifyLevel2 } from '@glb/business-rules';
 import type { Db } from '@glb/database';
 import { getDb } from './db.js';
-import { me } from './auth-service.js';
+import { validateCurrentSession, penalizeFailedAuth } from './auth-service.js';
 import { writeAudit } from './audit.js';
 
 export interface GuardOk {
@@ -28,11 +28,17 @@ export async function requirePermission(
   permission: string,
   context?: { action?: string; targetType?: string; targetId?: string }
 ): Promise<GuardResult> {
-  const user = me();
-  if (!user) {
-    return { ok: false, error: 'NOT_AUTHENTICATED', message: 'Bạn chưa đăng nhập.' };
+  // R48 (#3): xác thực phiên còn sống trong DB + làm mới cờ (không tin mỗi in-memory `current`).
+  const v = await validateCurrentSession();
+  if (!v) {
+    return { ok: false, error: 'NOT_AUTHENTICATED', message: 'Phiên đã kết thúc hoặc bạn chưa đăng nhập. Hãy đăng nhập lại.' };
   }
+  const user = v.user;
   const db = getDb();
+  // R48 (#4): còn BUỘC ĐỔI MẬT KHẨU → chặn MỌI thao tác có quyền (chỉ được đổi mật khẩu) — chống bypass IPC trực tiếp.
+  if (v.forceChangePassword) {
+    return { ok: false, error: 'MUST_CHANGE_PASSWORD', message: 'Bạn phải đổi mật khẩu (lần đầu / được cấp lại) trước khi thực hiện thao tác.' };
+  }
   if (!hasPermission(user, permission)) {
     await writeAudit(db, {
       actorUserId: user.id,
@@ -54,12 +60,15 @@ export async function requirePermission(
   return { ok: true, user, db };
 }
 
-/** Server-side re-verification of the acting user's password (xóa/khóa/restore — §14). */
+/** Server-side re-verification of the acting user's password (xóa/khóa/restore — §14).
+ *  R48 (#4): SAI → tính vào bộ đếm khóa (chống brute-force mật khẩu qua các nút xác nhận thao tác). */
 export async function verifyActorPassword(user: AuthUser, password: string): Promise<boolean> {
   const db = getDb();
   const row = await db.user.findUnique({ where: { id: user.id } });
   if (!row) return false;
-  return verifyPassword(password, row.passwordHash);
+  const okPw = verifyPassword(password, row.passwordHash);
+  if (!okPw) await penalizeFailedAuth(user.id, 'sai mật khẩu khi xác nhận thao tác');
+  return okPw;
 }
 
 /** Người đang đăng nhập ĐÃ đặt mật khẩu cấp 2 chưa? (để UI chọn form đặt / đổi). */
@@ -68,8 +77,11 @@ export async function actorHasLevel2(user: AuthUser): Promise<boolean> {
   return !!row?.level2Hash;
 }
 
-/** Xác thực mật khẩu CẤP 2 của người đang đăng nhập (dọn sạch thùng rác — Nhóm A #3). */
+/** Xác thực mật khẩu CẤP 2 của người đang đăng nhập (dọn sạch thùng rác — Nhóm A #3).
+ *  R48 (#4): SAI → tính vào bộ đếm khóa (mật khẩu cấp 2 gác xóa vĩnh viễn — chống brute-force). */
 export async function verifyActorLevel2(user: AuthUser, level2: string): Promise<boolean> {
   const row = await getDb().user.findUnique({ where: { id: user.id }, select: { level2Hash: true } });
-  return verifyLevel2(level2, row?.level2Hash ?? null);
+  const okL2 = verifyLevel2(level2, row?.level2Hash ?? null);
+  if (!okL2) await penalizeFailedAuth(user.id, 'sai mật khẩu cấp 2 khi xác nhận');
+  return okL2;
 }

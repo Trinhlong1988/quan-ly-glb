@@ -149,6 +149,8 @@ export async function runNhomASelfTest(): Promise<number> {
   const relog = await login('locktest', 'Fresh@123456');
   ok('locktest đăng nhập MK mới sau reset → ok', relog.ok === true, relog.error);
   ok('locktest bị ép đổi mật khẩu (mustChangePassword)', relog.mustChangePassword === true, { must: relog.mustChangePassword });
+  // R48 Pha 2: locktest còn forceChangePassword=true → guard chặn mọi thao tác tới khi HOÀN TẤT đổi mật khẩu.
+  await changePassword('Fresh@123456', 'Fresh2@123456', 'Fresh2@123456');
   // hòm thư locktest có SECURITY_RESET
   const lockUserInbox = await msg.listInbox();
   const resetMsg = (lockUserInbox.data ?? []).find((m) => m.category === 'SECURITY_RESET');

@@ -86,6 +86,17 @@ app.whenReady().then(async () => {
   }
   registerIpc();
 
+  // R48 Pha 2 — SELFTEST: coi admin đã "đổi mật khẩu lần đầu" (bỏ forceChangePassword) để test thao tác;
+  // nếu không, guard mới (R48 #4) sẽ CHẶN mọi thao tác của adminroot khi cờ còn bật. Chỉ DB throwaway.
+  if (process.env['GLB_SELFTEST'] && process.env['GLB_SELFTEST'] !== '1' && process.env['GLB_SELFTEST'] !== '23') {
+    try {
+      const { getDb } = await import('./db.js');
+      await getDb().user.updateMany({ where: { username: 'adminroot' }, data: { forceChangePassword: false } });
+    } catch {
+      /* bỏ qua — nếu lỗi, selftest sẽ tự báo */
+    }
+  }
+
   // Headless smoke test (CI / audit): GLB_SELFTEST=1 exercises the real login path then exits.
   if (process.env['GLB_SELFTEST'] === '1') {
     await runSelfTest();

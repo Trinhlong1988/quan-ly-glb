@@ -159,7 +159,8 @@ model LoginSession {
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   expiresAt  DateTime @map("expires_at") @db.Timestamptz(3)
   lastSeenAt DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(3)
-  deviceInfo String?  @map("device_info")
+  deviceInfo String?  @map("device_info") // NHÃN hiển thị (hostname) — CÓ THỂ giả mạo, chỉ để hiện.
+  deviceId   String?  @map("device_id") // R48 — GUID/1-cài-đặt (userData), KHÓA nhận diện thiết bị (chống giả mạo hostname).
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

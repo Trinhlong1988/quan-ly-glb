@@ -2,6 +2,7 @@
 // DB throwaway Postgres (advisory lock cần Postgres). Số thật, real service.
 import { login, logout, heartbeat, listOnlineUsers } from './auth-service.js';
 import { getDb } from './db.js';
+import { hashPassword } from '@glb/business-rules';
 
 let pass = 0, fail = 0;
 function ok(name: string, cond: boolean, extra?: unknown): void {
@@ -71,6 +72,42 @@ export async function runSessionSelfTest(): Promise<number> {
   ]);
   ok('2 force song song đều ok', f1.ok === true && f2.ok === true, { f1: f1.error, f2: f2.error });
   ok('sau tương tranh: đúng 1 phiên sống (không nhân đôi)', (await countLive()) === 1, { live: await countLive() });
+
+  // ═══ 9) R48 Pha 2 — device-GUID: cùng GUID (dù hostname đổi) = same device; khác GUID = thiết bị khác ═══
+  await db.loginSession.deleteMany({ where: { userId: uid } });
+  await login('adminroot', PW, { deviceId: 'GUID-A', deviceInfo: 'MAY-1' });
+  const sameG = await login('adminroot', PW, { deviceId: 'GUID-A', deviceInfo: 'MAY-1-DOI-TEN' });
+  ok('cùng deviceId (GUID) dù hostname đổi → thay thế im lặng', sameG.ok === true, sameG);
+  ok('vẫn 1 phiên (không nhân đôi)', (await countLive()) === 1, { live: await countLive() });
+  const otherG = await login('adminroot', PW, { deviceId: 'GUID-B', deviceInfo: 'MAY-2' });
+  ok('khác deviceId → SESSION_ACTIVE_ELSEWHERE (chống giả mạo hostname)', otherG.ok === false && otherG.error === 'SESSION_ACTIVE_ELSEWHERE', otherG);
+
+  // ═══ 10) R48 Pha 2 (#3) — guard re-validate: phiên bị xóa (kick) → thao tác có quyền BỊ THU HỒI ngay ═══
+  await db.loginSession.deleteMany({ where: { userId: uid } });
+  await login('adminroot', PW, { deviceId: 'GUID-A' });
+  await db.loginSession.deleteMany({ where: { userId: uid } }); // mô phỏng bị đá khỏi DB
+  const gone = await listOnlineUsers(); // gated bởi requirePermission → validateCurrentSession thấy phiên chết
+  ok('phiên bị xóa → thao tác có quyền NOT_AUTHENTICATED (không chờ nhịp tim)', gone.ok === false && gone.error === 'NOT_AUTHENTICATED', gone);
+
+  // ═══ 11) R48 Pha 2 (#4) — forceChangePassword CHẶN mọi thao tác qua guard ═══
+  await login('adminroot', PW, { deviceId: 'GUID-A' });
+  await db.user.create({ data: { username: 'fcptest001', fullName: 'FCP Test', passwordHash: hashPassword('User@123456'), status: 'ACTIVE', forceChangePassword: true } });
+  await login('fcptest001', 'User@123456', { deviceId: 'G-FCP' });
+  const blocked = await listOnlineUsers();
+  ok('user còn forceChangePassword → thao tác bị chặn MUST_CHANGE_PASSWORD', blocked.ok === false && blocked.error === 'MUST_CHANGE_PASSWORD', blocked);
+
+  // ═══ 12) R48 Pha 2 (#1) — khóa TẠM THỜI: sai 5 lần → khóa; quá cooldown + đúng → TỰ MỞ ═══
+  const lockUser = await db.user.create({ data: { username: 'locktest001', fullName: 'Lock Test', passwordHash: hashPassword('User@123456'), status: 'ACTIVE', forceChangePassword: false } });
+  for (let i = 0; i < 5; i++) await login('locktest001', 'SAI_MAT_KHAU', {});
+  const lu = await db.user.findUnique({ where: { id: lockUser.id } });
+  ok('sai 5 lần → tài khoản LOCKED', lu?.status === 'LOCKED', { status: lu?.status });
+  const stillLocked = await login('locktest001', 'User@123456', {});
+  ok('trong cooldown → vẫn khóa (chưa tự mở)', stillLocked.ok === false, { err: stillLocked.error });
+  await db.user.update({ where: { id: lockUser.id }, data: { lockedAt: new Date(Date.now() - 20 * 60 * 1000) } });
+  const unlocked = await login('locktest001', 'User@123456', { deviceId: 'G-LOCK' });
+  ok('quá cooldown (>15p) + mật khẩu đúng → TỰ MỞ KHÓA + đăng nhập ok', unlocked.ok === true, { err: unlocked.error });
+  const lu2 = await db.user.findUnique({ where: { id: lockUser.id } });
+  ok('tự mở khóa → status ACTIVE + reset đếm sai', lu2?.status === 'ACTIVE' && lu2?.failedAttempts === 0, { status: lu2?.status, fa: lu2?.failedAttempts });
 
   await logout();
   // eslint-disable-next-line no-console

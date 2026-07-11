@@ -175,6 +175,7 @@ export type AuditAction =
   | 'DEBT_QUALITY_PERMS_GRANTED'
   // ── Nhóm A — Bảo mật & tài khoản ──
   | 'USER_AUTO_LOCKED'
+  | 'USER_AUTO_UNLOCKED'
   | 'PASSWORD_RESET_BY_ADMIN'
   | 'LEVEL2_SET'
   | 'LEVEL2_RESET'

@@ -17,7 +17,7 @@ import { exportCsv } from '../lib/exportCsv.js';
 const ACTION_LABEL: Record<AuditAction, string> = {
   LOGIN_SUCCESS: 'Đăng nhập thành công', LOGIN_FAILED: 'Đăng nhập thất bại', PERMISSION_DENIED: 'Từ chối quyền',
   USER_CREATED: 'Tạo nhân sự', USER_UPDATED: 'Sửa nhân sự', USER_LOCKED: 'Khóa nhân sự', USER_UNLOCKED: 'Mở khóa nhân sự', USER_DELETED: 'Xóa nhân sự',
-  USER_AUTO_LOCKED: 'Tự khóa nhân sự (sai quá số lần)', PASSWORD_RESET_BY_ADMIN: 'Admin đặt lại mật khẩu',
+  USER_AUTO_LOCKED: 'Tự khóa nhân sự (sai quá số lần)', USER_AUTO_UNLOCKED: 'Tự mở khóa (hết thời gian tạm khóa)', PASSWORD_RESET_BY_ADMIN: 'Admin đặt lại mật khẩu',
   LEVEL2_SET: 'Đặt mật khẩu cấp 2', LEVEL2_RESET: 'Đặt lại mật khẩu cấp 2',
   TRASH_PURGED: 'Xóa vĩnh viễn khỏi thùng rác', TRASH_EMPTIED: 'Dọn sạch thùng rác',
   ROLE_CREATED: 'Tạo vai trò', ROLE_UPDATED: 'Sửa vai trò', ROLE_LOCKED: 'Khóa vai trò', ROLE_UNLOCKED: 'Mở khóa vai trò', ROLE_DELETED: 'Xóa vai trò',

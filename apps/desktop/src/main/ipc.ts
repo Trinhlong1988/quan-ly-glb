@@ -29,6 +29,7 @@ import * as importSvc from './import-service.js';
 import * as exportSvc from './export-service.js';
 import { readAttachmentDataUrl } from './file-store.js';
 import { requirePermission } from './guard.js';
+import { deviceId } from './device-id.js';
 import * as trashSvc from './trash-service.js';
 import * as msgSvc from './message-service.js';
 import * as dashboardSvc from './dashboard-service.js';
@@ -50,8 +51,8 @@ export function registerIpc(): void {
   // ---- Auth (Phase A) ----------------------------------------------------
   ipcMain.handle('auth:login', async (_e, args: { username: string; password: string; remember?: boolean; force?: boolean }) => {
     const { username, password, remember, force } = args ?? ({} as never);
-    // R46: gắn tên thiết bị (hostname) để hiển thị "đang đăng nhập ở thiết bị khác".
-    const result = await auth.login(username, password, { force, deviceInfo: os.hostname() });
+    // R46: hostname để HIỂN THỊ; R48: deviceId (GUID bền, sinh ở main) làm KHÓA same-device chống giả mạo.
+    const result = await auth.login(username, password, { force, deviceInfo: os.hostname(), deviceId: deviceId() });
     if (result.ok) {
       if (remember) saveRemembered(username, password);
       else clearRemembered();
