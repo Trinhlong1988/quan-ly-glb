@@ -456,7 +456,7 @@ function StaffForm({
 
   return (
     <>
-      <Modal title={editing ? 'Sửa thông tin nhân sự' : 'Thêm nhân sự mới'} onClose={onClose} width="max-w-2xl">
+      <Modal title={editing ? 'Sửa thông tin nhân sự' : 'Thêm nhân sự mới'} onClose={onClose} width="max-w-2xl" onSubmit={() => (editing ? setPendingConfirm(true) : void save())}>
         {editing ? (
           <div className="mb-3 rounded-md bg-brand-tint px-3 py-2 text-sm text-brand">
             Mã nhân viên: <span className="font-mono font-semibold">{target!.employeeCode ?? '—'}</span> (tự sinh, không đổi)

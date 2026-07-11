@@ -310,7 +310,8 @@ function DossierForm({ mode, row, sources, onClose, onSaved }: { mode: 'create' 
     cccdIssuePlace: row?.cccdIssuePlace ?? '',
     cccdExpiry: row?.cccdExpiry ? row.cccdExpiry.slice(0, 10) : '',
     permanentAddress: row?.permanentAddress ?? '',
-    currentAddress: row?.currentAddress ?? ''
+    currentAddress: row?.currentAddress ?? '',
+    email: row?.email ?? ''
   });
   const [dkkdFront, setDkkdFront] = useState<string | null | undefined>(undefined);
   const [dkkdBack, setDkkdBack] = useState<string | null | undefined>(undefined);
@@ -340,7 +341,8 @@ function DossierForm({ mode, row, sources, onClose, onSaved }: { mode: 'create' 
       cccdIssuePlace: f.cccdIssuePlace || null,
       cccdExpiry: f.cccdExpiry || null,
       permanentAddress: f.permanentAddress || null,
-      currentAddress: f.currentAddress || null
+      currentAddress: f.currentAddress || null,
+      email: f.email || null
     };
     if (dkkdFront !== undefined) input.dkkdFrontSrc = dkkdFront;
     if (dkkdBack !== undefined) input.dkkdBackSrc = dkkdBack;
@@ -353,7 +355,7 @@ function DossierForm({ mode, row, sources, onClose, onSaved }: { mode: 'create' 
   }
 
   return (
-    <Modal title={mode === 'edit' ? `Sửa hồ sơ ${row?.hkdName}` : 'Thêm hồ sơ HKD'} onClose={onClose} width="max-w-3xl">
+    <Modal title={mode === 'edit' ? `Sửa hồ sơ ${row?.hkdName}` : 'Thêm hồ sơ HKD'} onClose={onClose} width="max-w-3xl" onSubmit={() => void save()}>
       <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Thông tin Hộ Kinh Doanh</div>
       <div className="grid grid-cols-2 gap-4">
         <Field label="Nguồn hồ sơ" required><select className={inputCls} value={f.sourceId} onChange={set('sourceId')} autoFocus><option value="">— Chọn nguồn —</option>{sources.map((s) => <option key={s.id} value={s.id}>{s.code}</option>)}</select></Field>
@@ -375,6 +377,7 @@ function DossierForm({ mode, row, sources, onClose, onSaved }: { mode: 'create' 
         <Field label="Ngày hết hạn CCCD"><input type="date" className={inputCls} value={f.cccdExpiry} onChange={set('cccdExpiry')} /></Field>
         <Field label="Địa chỉ thường trú"><input className={inputCls} value={f.permanentAddress} onChange={set('permanentAddress')} /></Field>
         <Field label="Nơi ở hiện tại"><input className={inputCls} value={f.currentAddress} onChange={set('currentAddress')} /></Field>
+        <Field label="Email"><input className={inputCls} value={f.email} onChange={set('email')} /></Field>
       </div>
       <div className="mb-2 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400">Ảnh đính kèm (PNG/JPG/PDF — mặt sau không bắt buộc)</div>
       <div className="grid grid-cols-2 gap-4 rounded-lg border border-line bg-appbg/50 p-3">

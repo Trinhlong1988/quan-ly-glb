@@ -189,7 +189,7 @@ function FundForm({ mode, row, users, onClose, onSaved }: { mode: 'create' | 'ed
   }
 
   return (
-    <Modal title={mode === 'edit' ? `Sửa quỹ ${row?.code ?? ''}` : 'Thêm quỹ'} onClose={onClose} width="max-w-md">
+    <Modal title={mode === 'edit' ? `Sửa quỹ ${row?.code ?? ''}` : 'Thêm quỹ'} onClose={onClose} width="max-w-md" onSubmit={() => void save()}>
       <Field label="Tên quỹ" required hint="Ví dụ: Quỹ tiền mặt VP, TK VCB 199…"><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} autoFocus /></Field>
       <Field label="Loại quỹ" required>
         <select className={inputCls} value={type} onChange={(e) => setType(e.target.value)}>

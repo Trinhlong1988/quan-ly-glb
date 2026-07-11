@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Plus, Pencil, Trash2, Loader2, UserRound, Download } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission } from '@glb/shared';
-import type { CustomerDto, AgentDto } from '../../../preload/index.d';
+import type { CustomerDto } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
 import { Modal } from '../components/Modal.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
@@ -14,9 +14,6 @@ import { ImportButton } from '../components/ImportModal.js';
 import { StatusBadge, useStatusOptions, statusSelectOptions, toneCls } from '../components/StatusBadge.js';
 import { exportCsv } from '../lib/exportCsv.js';
 
-// Tông màu luân phiên (palette design system) cho bộ đếm theo đại lý — không phải trạng thái.
-const AGENT_TONES = ['bg-indigo-50 text-indigo-600', 'bg-emerald-50 text-emerald-600', 'bg-amber-50 text-amber-600', 'bg-sky-50 text-sky-600', 'bg-violet-50 text-violet-600', 'bg-rose-50 text-rose-600'];
-
 // Bộ đếm TOÀN CỤC (độc lập bộ lọc list) cho dash StatBar — khớp shape countCustomers ở main.
 type CustomerCounts = { total: number; active: number; locked: number; cancelled: number; unassigned: number; byAgent: { agentId: number; count: number }[] };
 
@@ -26,10 +23,8 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
   const { options: statusOptions } = useStatusOptions('CUSTOMER');
   const [rows, setRows] = useState<CustomerDto[]>([]);
   const [counts, setCounts] = useState<CustomerCounts | null>(null);
-  const [agents, setAgents] = useState<AgentDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [agentId, setAgentId] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
@@ -46,7 +41,6 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
     setLoading(true);
     const res = await window.api.customerList({
       search: search || undefined,
-      agentId: agentId ? Number(agentId) : undefined,
       status: statusFilter || undefined,
       fromDate: fromDate || undefined,
       toDate: toDate || undefined
@@ -61,13 +55,11 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
   useEffect(() => {
     void reload();
     void window.api.customerCounts().then((r) => r.ok && r.data && setCounts(r.data));
-    window.api.agentList().then((r) => r.ok && r.data && setAgents(r.data));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function resetFilters(): void {
     setSearch('');
-    setAgentId('');
     setStatusFilter('');
     setFromDate('');
     setToDate('');
@@ -112,13 +104,6 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
         onToDate={setToDate}
         selects={[
           {
-            key: 'agent',
-            placeholder: 'Tất cả đại lý',
-            value: agentId,
-            options: agents.map((a) => ({ value: String(a.id), label: a.name })),
-            onChange: setAgentId
-          },
-          {
             key: 'status',
             placeholder: 'Tất cả trạng thái',
             value: statusFilter,
@@ -130,7 +115,7 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
         onReset={resetFilters}
       />
 
-      {/* Dash bộ đếm TOÀN CỤC (countCustomers ở main, độc lập bộ lọc): tổng + trạng thái (hoạt động/khóa/hủy) + theo đại lý.
+      {/* Dash bộ đếm TOÀN CỤC (countCustomers ở main, độc lập bộ lọc): tổng + trạng thái (hoạt động/khóa/hủy).
           "Đã khóa"/"Đã hủy" LUÔN hiện (kể cả =0) — Mr.Long yêu cầu không được ẩn. */}
       <StatBar
         items={[
@@ -148,17 +133,7 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
                       ? counts?.cancelled ?? 0
                       : rows.filter((c) => c.status === o.code).length;
               return { label: o.label, value, tone: toneCls(o.tone) };
-            }),
-          ...agents
-            .map((a, i) => ({
-              label: a.name,
-              value: counts?.byAgent.find((x) => x.agentId === a.id)?.count ?? 0,
-              tone: AGENT_TONES[i % AGENT_TONES.length]
-            }))
-            .filter((it) => it.value > 0),
-          ...((counts?.unassigned ?? 0) > 0
-            ? [{ label: 'Chưa gán đại lý', value: counts?.unassigned ?? 0, tone: 'bg-slate-100 text-slate-500' }]
-            : [])
+            })
         ]}
       />
 
@@ -232,7 +207,6 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
       {(creating || editing) && (
         <CustomerForm
           target={editing}
-          agents={agents}
           onClose={() => {
             setCreating(false);
             setEditing(null);
@@ -285,7 +259,7 @@ function IconBtn({ children, title, variant, onClick }: { children: JSX.Element;
   );
 }
 
-function CustomerForm({ target, agents, onClose, onSaved }: { target: CustomerDto | null; agents: AgentDto[]; onClose: () => void; onSaved: () => void }): JSX.Element {
+function CustomerForm({ target, onClose, onSaved }: { target: CustomerDto | null; onClose: () => void; onSaved: () => void }): JSX.Element {
   const toast = useToast();
   const { options: statusOptions } = useStatusOptions('CUSTOMER');
   const editing = !!target;
@@ -295,7 +269,6 @@ function CustomerForm({ target, agents, onClose, onSaved }: { target: CustomerDt
   const [email, setEmail] = useState(target?.email ?? '');
   const [address, setAddress] = useState(target?.address ?? '');
   const [note, setNote] = useState(target?.note ?? '');
-  const [agentId, setAgentId] = useState(target?.agentId ? String(target.agentId) : '');
   const [status, setStatus] = useState(target?.status ?? 'ACTIVE');
   const [busy, setBusy] = useState(false);
 
@@ -309,7 +282,6 @@ function CustomerForm({ target, agents, onClose, onSaved }: { target: CustomerDt
       phone: phone || null,
       email: email || null,
       address: address || null,
-      agentId: agentId ? Number(agentId) : null,
       note: note || null,
       status
     };
@@ -325,7 +297,7 @@ function CustomerForm({ target, agents, onClose, onSaved }: { target: CustomerDt
   }
 
   return (
-    <Modal title={editing ? `Sửa khách hàng ${target!.code}` : 'Thêm khách hàng mới'} onClose={onClose} width="max-w-xl">
+    <Modal title={editing ? `Sửa khách hàng ${target!.code}` : 'Thêm khách hàng mới'} onClose={onClose} width="max-w-xl" onSubmit={() => void save()}>
       {editing && (
         <div className="mb-3 rounded-md bg-brand-tint px-3 py-2 text-sm text-brand">
           Mã khách hàng: <span className="font-mono font-semibold">{target!.code}</span> (không đổi)
@@ -346,14 +318,6 @@ function CustomerForm({ target, agents, onClose, onSaved }: { target: CustomerDt
         </Field>
         <Field label="Địa chỉ">
           <input className={inputCls} value={address} onChange={(e) => setAddress(e.target.value)} />
-        </Field>
-        <Field label="Đại lý" hint="Đại lý phụ trách khách hàng này (có thể để trống).">
-          <select className={inputCls} value={agentId} onChange={(e) => setAgentId(e.target.value)}>
-            <option value="">— Không gán đại lý —</option>
-            {agents.map((a) => (
-              <option key={a.id} value={String(a.id)}>{a.name}</option>
-            ))}
-          </select>
         </Field>
         <Field label="Ghi chú">
           <input className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} />

@@ -462,6 +462,7 @@ model Partner {
   status        String    @default("UNSIGNED") // trạng thái hợp đồng hợp tác: SIGNED | UNSIGNED | TERMINATED (mã tra trong StatusOption entity=PARTNER)
   address       String?
   phone         String?
+  email         String?
   contactPerson String?   @map("contact_person")
   createdBy     Int?      @map("created_by")
   createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -731,6 +732,7 @@ model Dossier {
   cccdExpiry       DateTime? @map("cccd_expiry") // Ngày hết hạn
   permanentAddress String?   @map("permanent_address") // Địa chỉ thường trú
   currentAddress   String?   @map("current_address") // Nơi ở hiện tại
+  email            String? // Địa chỉ email liên hệ
   // Ảnh ĐKKD (đặt tên theo Tên HKD) + CCCD (đặt tên theo Tên chủ hộ). Mặt sau không bắt buộc.
   dkkdFrontPath    String?   @map("dkkd_front_path")
   dkkdFrontName    String?   @map("dkkd_front_name")

@@ -409,6 +409,7 @@ export interface PartnerDto extends AuditTrail {
   status: string; // SIGNED | UNSIGNED | TERMINATED (tra StatusOption entity=PARTNER)
   address: string | null;
   phone: string | null;
+  email: string | null;
   contactPerson: string | null;
   bankIds: number[];
 }
@@ -424,6 +425,7 @@ export interface CreatePartnerInput {
   status?: string;
   address?: string | null;
   phone?: string | null;
+  email?: string | null;
   contactPerson?: string | null;
 }
 export interface UpdatePartnerInput {
@@ -432,6 +434,7 @@ export interface UpdatePartnerInput {
   status?: string;
   address?: string | null;
   phone?: string | null;
+  email?: string | null;
   contactPerson?: string | null;
 }
 
@@ -737,6 +740,7 @@ export interface DossierDto extends AuditTrail {
   cccdExpiry: string | null;
   permanentAddress: string | null;
   currentAddress: string | null;
+  email: string | null;
   dkkdFrontPath: string | null;
   dkkdFrontName: string | null;
   dkkdBackPath: string | null;
@@ -771,6 +775,7 @@ export interface DossierInput {
   cccdExpiry?: string | null;
   permanentAddress?: string | null;
   currentAddress?: string | null;
+  email?: string | null;
   note?: string | null;
   dkkdFrontSrc?: string | null;
   dkkdBackSrc?: string | null;

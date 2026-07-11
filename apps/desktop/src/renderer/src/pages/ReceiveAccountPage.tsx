@@ -141,7 +141,7 @@ function SourceForm({ mode, row, onClose, onSaved }: { mode: 'create' | 'edit'; 
     else toast.alert(res.message ?? 'Lưu nguồn thất bại', 'Không lưu được');
   }
   return (
-    <Modal title={mode === 'edit' ? 'Sửa nguồn tài khoản' : 'Thêm nguồn tài khoản'} onClose={onClose} width="max-w-md">
+    <Modal title={mode === 'edit' ? 'Sửa nguồn tài khoản' : 'Thêm nguồn tài khoản'} onClose={onClose} width="max-w-md" onSubmit={() => void save()}>
       <Field label="Tên nguồn" required hint="Ví dụ: Khách hàng, Nội bộ"><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} autoFocus /></Field>
       <div className="mt-6 flex justify-end gap-2">
         <Button variant="neutral" onClick={onClose}>Hủy</Button>
@@ -328,7 +328,7 @@ function AccountForm({ mode, row, sources, banks, customers, onClose, onSaved }:
   }
 
   return (
-    <Modal title={mode === 'edit' ? `Sửa tài khoản ${row?.accountNumber}` : 'Thêm tài khoản nhận tiền'} onClose={onClose} width="max-w-2xl">
+    <Modal title={mode === 'edit' ? `Sửa tài khoản ${row?.accountNumber}` : 'Thêm tài khoản nhận tiền'} onClose={onClose} width="max-w-2xl" onSubmit={() => void save()}>
       <div className="grid grid-cols-2 gap-4">
         <Field label="Nguồn tài khoản" required><select className={inputCls} value={f.sourceId} onChange={set('sourceId')} autoFocus><option value="">— Chọn nguồn —</option>{sources.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
         <Field label="Gắn khách hàng" hint="Bỏ trống = Nội bộ"><select className={inputCls} value={f.customerId} onChange={set('customerId')}><option value="">— Nội bộ —</option>{customers.map((c) => <option key={c.id} value={c.id}>{c.nickname} ({c.fullName})</option>)}</select></Field>

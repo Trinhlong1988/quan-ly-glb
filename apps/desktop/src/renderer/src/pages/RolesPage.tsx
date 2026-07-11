@@ -299,7 +299,7 @@ function RoleForm({
 
   return (
     <>
-      <Modal title={editing ? 'Sửa vai trò' : 'Thêm vai trò mới'} onClose={onClose} width="max-w-2xl">
+      <Modal title={editing ? 'Sửa vai trò' : 'Thêm vai trò mới'} onClose={onClose} width="max-w-2xl" onSubmit={() => (editing ? setPendingConfirm(true) : void save())}>
         <div className="grid grid-cols-2 gap-4">
           <Field label="Tên vai trò" required>
             <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="Marketing" />

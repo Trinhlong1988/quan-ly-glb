@@ -3,29 +3,24 @@ import {
   LayoutDashboard,
   Users,
   ShieldCheck,
-  ScrollText,
   Settings,
-  DatabaseBackup,
   LogOut,
   ChevronDown,
-  UserRound,
   HardDrive,
   CreditCard,
   Landmark,
   Wallet,
   FolderKanban,
-  Trash2,
   Inbox,
   KeyRound,
   TrendingUp,
+  ClipboardCheck,
+  Loader2,
+  RefreshCw,
+  UserRound,
   BarChart3,
   Coins,
-  Wrench,
-  ClipboardCheck,
-  Receipt,
-  PiggyBank,
-  Loader2,
-  RefreshCw
+  PiggyBank
 } from 'lucide-react';
 import type { DashboardStats } from '../../../preload/index.d';
 import type { AuthUser } from '@glb/shared';
@@ -34,24 +29,15 @@ import { MessagesDrawer } from '../components/MessagesDrawer.js';
 import { ChangePasswordModal } from '../components/ChangePasswordModal.js';
 import { Level2PasswordModal } from '../components/Level2PasswordModal.js';
 import { StaffManagementPage } from './StaffManagementPage.js';
-import { AuditPage } from './AuditPage.js';
-import { BackupPage } from './BackupPage.js';
-import { SettingsPage } from './SettingsPage.js';
-import { CustomersPage } from './CustomersPage.js';
+import { FinancePage } from './FinancePage.js';
+import { SystemConfigPage } from './SystemConfigPage.js';
 import { PosPage } from './PosPage.js';
 import { TidPage } from './TidPage.js';
-import { TrashPage } from './TrashPage.js';
 import { BankConfigPage } from './BankConfigPage.js';
 import { ReceiveAccountPage } from './ReceiveAccountPage.js';
 import { DossierPage } from './DossierPage.js';
-import { CashCategoryConfigPage } from './CashCategoryConfigPage.js';
-import { FundPage } from './FundPage.js';
-import { CashEntryPage } from './CashEntryPage.js';
-import { CashflowReportPage } from './CashflowReportPage.js';
-import { RevenuePage } from './RevenuePage.js';
-import { DebtPage } from './DebtPage.js';
+import { RevenueDebtPage } from './RevenueDebtPage.js';
 import { ApprovalPage } from './ApprovalPage.js';
-import { MaintenancePage } from './MaintenancePage.js';
 import { UpdateBanner } from '../components/UpdateBanner.js';
 
 interface MenuItem {
@@ -71,28 +57,18 @@ interface MenuItem {
 const MENU: MenuItem[] = [
   { key: 'dashboard', label: 'Trang chủ', icon: <LayoutDashboard className="h-[18px] w-[18px]" />, perms: ['DASHBOARD_VIEW'] },
   { key: 'staff', label: 'Quản Lý Nhân Sự', icon: <Users className="h-[18px] w-[18px]" />, perms: ['USER_READ', 'ROLE_READ'] },
-  { key: 'customers', label: 'Quản Lý Khách Hàng', icon: <UserRound className="h-[18px] w-[18px]" />, perms: ['CUSTOMER_VIEW'] },
   // PHASE K1 — gộp "Cấu hình máy POS" vào "Quản Lý Máy POS" (1 trang nhiều tab). Menu hiện với AI có
   // POS_VIEW HOẶC CONFIG_POS_SUPPLY_VIEW (hasAnyPermission) — không mất quyền của user chỉ-cấu-hình.
   { key: 'pos', label: 'Quản Lý Máy POS', icon: <HardDrive className="h-[18px] w-[18px]" />, perms: ['POS_VIEW', 'CONFIG_POS_SUPPLY_VIEW'] },
   // R3: "Cấu hình ngân hàng" nay gồm tab "Phí mua-cài máy-bán" (gộp Cấu hình % phí POS cũ) + tab "Ngành nghề" → menu hiện với CONFIG_BANK_VIEW HOẶC CONFIG_FEE_VIEW HOẶC CONFIG_INDUSTRY_VIEW.
   { key: 'bankcfg', label: 'Cấu hình ngân hàng', icon: <Landmark className="h-[18px] w-[18px]" />, perms: ['CONFIG_BANK_VIEW', 'CONFIG_FEE_VIEW', 'CONFIG_INDUSTRY_VIEW'] },
-  { key: 'revenue', label: 'Quản Lý Doanh Thu', icon: <TrendingUp className="h-[18px] w-[18px]" />, perms: ['REVENUE_VIEW'] },
-  { key: 'debt', label: 'Quản Lý Công Nợ', icon: <Coins className="h-[18px] w-[18px]" />, perms: ['DEBT_VIEW'] },
+  { key: 'revdebt', label: 'Quản Lý Doanh Thu & Công Nợ', icon: <TrendingUp className="h-[18px] w-[18px]" />, perms: ['REVENUE_VIEW', 'DEBT_VIEW'] },
   { key: 'rcvacct', label: 'Quản Lý Tài Khoản Nhận Tiền', icon: <Wallet className="h-[18px] w-[18px]" />, perms: ['CONFIG_RCV_ACCT_VIEW'] },
   { key: 'dossier', label: 'Quản Lý Hồ Sơ HKD', icon: <FolderKanban className="h-[18px] w-[18px]" />, perms: ['CONFIG_DOSSIER_VIEW'] },
-  { key: 'cashcatcfg', label: 'Cấu hình thu – chi', icon: <Wallet className="h-[18px] w-[18px]" />, perms: ['CASHCAT_VIEW'] },
-  { key: 'fund', label: 'Quỹ', icon: <PiggyBank className="h-[18px] w-[18px]" />, perms: ['FUND_VIEW'] },
-  { key: 'cashthu', label: 'Phiếu thu', icon: <Receipt className="h-[18px] w-[18px]" />, perms: ['CASHENTRY_VIEW'] },
-  { key: 'cashchi', label: 'Phiếu chi', icon: <Receipt className="h-[18px] w-[18px]" />, perms: ['CASHENTRY_VIEW'] },
-  { key: 'cashreport', label: 'Báo cáo thu – chi', icon: <BarChart3 className="h-[18px] w-[18px]" />, perms: ['CASHENTRY_VIEW'] },
+  { key: 'finance', label: 'Quản Lý Tài Chính', icon: <Wallet className="h-[18px] w-[18px]" />, perms: ['CASHENTRY_VIEW', 'FUND_VIEW', 'CASHCAT_VIEW'] },
   { key: 'tid', label: 'Quản Lý TID', icon: <CreditCard className="h-[18px] w-[18px]" />, perms: ['TID_VIEW', 'CONFIG_TID_VIEW'], badge: 'undeliveredTid' },
   { key: 'approval', label: 'Duyệt Hủy Bill', icon: <ClipboardCheck className="h-[18px] w-[18px]" />, perms: ['BILL_CANCEL_APPROVE'] },
-  { key: 'audit', label: 'Nhật ký hệ thống', icon: <ScrollText className="h-[18px] w-[18px]" />, perms: ['AUDIT_LOG_VIEW'] },
-  { key: 'trash', label: 'Thùng rác', icon: <Trash2 className="h-[18px] w-[18px]" />, perms: ['TRASH_VIEW'] },
-  { key: 'settings', label: 'Cài đặt', icon: <Settings className="h-[18px] w-[18px]" />, perms: ['SYSTEM_SETTING_VIEW'] },
-  { key: 'backup', label: 'Sao lưu & Phục hồi', icon: <DatabaseBackup className="h-[18px] w-[18px]" />, perms: ['BACKUP_CREATE', 'BACKUP_RESTORE'] },
-  { key: 'maintenance', label: 'Bảo Trì Hệ Thống', icon: <Wrench className="h-[18px] w-[18px]" />, perms: ['STORAGE_VIEW'] }
+  { key: 'system', label: 'Quản Lý Cấu Hình Hệ Thống', icon: <Settings className="h-[18px] w-[18px]" />, perms: ['AUDIT_LOG_VIEW', 'SYSTEM_SETTING_VIEW', 'BACKUP_CREATE', 'BACKUP_RESTORE', 'STORAGE_VIEW', 'TRASH_VIEW'] }
 ];
 
 export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => void }): JSX.Element {
@@ -297,26 +273,16 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
         {/* Content */}
         <main className="flex-1 overflow-auto p-6">
           {activeItem?.key === 'dashboard' && <Home user={user} visibleCount={visible.length} />}
-          {activeItem?.key === 'customers' && <CustomersPage user={user} />}
           {activeItem?.key === 'pos' && <PosPage user={user} />}
           {activeItem?.key === 'tid' && <TidPage user={user} />}
           {activeItem?.key === 'staff' && <StaffManagementPage user={user} />}
-          {activeItem?.key === 'audit' && <AuditPage />}
           {activeItem?.key === 'bankcfg' && <BankConfigPage user={user} />}
           {activeItem?.key === 'rcvacct' && <ReceiveAccountPage user={user} />}
           {activeItem?.key === 'dossier' && <DossierPage user={user} />}
-          {activeItem?.key === 'cashcatcfg' && <CashCategoryConfigPage user={user} />}
-          {activeItem?.key === 'fund' && <FundPage user={user} />}
-          {activeItem?.key === 'cashthu' && <CashEntryPage user={user} kind="THU" />}
-          {activeItem?.key === 'cashchi' && <CashEntryPage user={user} kind="CHI" />}
-          {activeItem?.key === 'cashreport' && <CashflowReportPage user={user} />}
-          {activeItem?.key === 'revenue' && <RevenuePage user={user} />}
-          {activeItem?.key === 'debt' && <DebtPage user={user} />}
+          {activeItem?.key === 'finance' && <FinancePage user={user} />}
+          {activeItem?.key === 'revdebt' && <RevenueDebtPage user={user} />}
           {activeItem?.key === 'approval' && <ApprovalPage user={user} />}
-          {activeItem?.key === 'trash' && <TrashPage user={user} />}
-          {activeItem?.key === 'settings' && <SettingsPage user={user} />}
-          {activeItem?.key === 'backup' && <BackupPage user={user} />}
-          {activeItem?.key === 'maintenance' && <MaintenancePage user={user} />}
+          {activeItem?.key === 'system' && <SystemConfigPage user={user} />}
         </main>
       </div>
 

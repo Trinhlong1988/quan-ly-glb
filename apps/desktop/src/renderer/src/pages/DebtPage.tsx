@@ -311,7 +311,7 @@ function ClassifyModal({ gd, onClose, onDone }: { gd: DebtOpenTxnDto; onClose: (
   }
 
   return (
-    <Modal title={`Phân loại công nợ · GD ${gd.code ?? '#' + gd.id}`} onClose={onClose}>
+    <Modal title={`Phân loại công nợ · GD ${gd.code ?? '#' + gd.id}`} onClose={onClose} onSubmit={() => void submit()}>
       <div className="space-y-4">
         <div className="rounded-lg bg-appbg/60 px-3 py-2 text-sm text-slate-600">
           Đối tượng: <b>{gd.customerName ?? gd.partnerName ?? '—'}</b> · Tổng còn nợ: <b>{money(gd.remainingPartner + gd.remainingSell)}</b>
@@ -357,7 +357,7 @@ function WriteOffModal({ gd, onClose, onDone }: { gd: DebtOpenTxnDto; onClose: (
   }
 
   return (
-    <Modal title={`Ghi giảm nợ xấu · GD ${gd.code ?? '#' + gd.id}`} onClose={onClose}>
+    <Modal title={`Ghi giảm nợ xấu · GD ${gd.code ?? '#' + gd.id}`} onClose={onClose} onSubmit={() => void submit()}>
       <div className="space-y-4">
         <div className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-3 text-sm text-rose-700">
           <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
@@ -443,7 +443,7 @@ function DebtReceiptModal({
   }
 
   return (
-    <Modal title={`Thu công nợ · GD ${gd.code ?? '#' + gd.id}`} onClose={onClose}>
+    <Modal title={`Thu công nợ · GD ${gd.code ?? '#' + gd.id}`} onClose={onClose} onSubmit={() => void submit()}>
       <div className="space-y-4">
         <div className="rounded-lg bg-appbg/60 px-3 py-2 text-sm text-slate-600">
           <div>Đối tượng: <b>{gd.customerName ?? gd.partnerName ?? '—'}</b></div>

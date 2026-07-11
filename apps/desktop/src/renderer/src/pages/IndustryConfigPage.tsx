@@ -156,7 +156,7 @@ function IndustryForm({ mode, row, onClose, onSaved }: { mode: 'create' | 'edit'
   }
 
   return (
-    <Modal title={mode === 'edit' ? `Sửa ngành nghề ${row?.code}` : 'Thêm ngành nghề'} onClose={onClose} width="max-w-md">
+    <Modal title={mode === 'edit' ? `Sửa ngành nghề ${row?.code}` : 'Thêm ngành nghề'} onClose={onClose} width="max-w-md" onSubmit={() => void save()}>
       <Field label="Tên ngành nghề" required hint="Ví dụ: vận tải, tạp hóa, cà phê, ăn uống"><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} autoFocus /></Field>
       <Field label="Trạng thái sử dụng">
         <select className={inputCls} value={active ? '1' : '0'} onChange={(e) => setActive(e.target.value === '1')}>

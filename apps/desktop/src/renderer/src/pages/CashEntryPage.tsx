@@ -200,7 +200,7 @@ function CashEntryForm({ kind, cats, funds, users, onClose, onSaved }: { kind: '
   }
 
   return (
-    <Modal title={isThu ? 'Lập phiếu thu' : 'Lập phiếu chi'} onClose={onClose} width="max-w-lg">
+    <Modal title={isThu ? 'Lập phiếu thu' : 'Lập phiếu chi'} onClose={onClose} width="max-w-lg" onSubmit={() => void save()}>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Danh mục" required>
           <select className={inputCls} value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>

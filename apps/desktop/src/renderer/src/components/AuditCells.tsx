@@ -12,33 +12,38 @@ export interface AuditTrailRow {
   updatedAt: string;
 }
 
-/** Số cột khối audit trail (dùng cho colSpan hàng loading/empty). */
+/** Số cột khối audit trail (dùng cho colSpan hàng loading/empty). Đủ giờ = 6; chỉ ngày = 4. */
 export const AUDIT_TRAIL_COLS = 6;
+export const AUDIT_TRAIL_COLS_DATE_ONLY = 4;
 
-/** 6 ô <th> tiêu đề (đặt trong <tr> của <thead>). */
-export function AuditTrailHeadCells(): JSX.Element {
+/**
+ * Ô <th> tiêu đề khối audit trail (đặt trong <tr> của <thead>).
+ * dateOnly=true → chỉ Người tạo · Ngày tạo · Người sửa · Ngày sửa (bỏ Giờ) — dùng cho menu Cấu hình ngân hàng
+ * (R18, Mr.Long 11/7: bảng chỉ cần Ngày; giờ chi tiết vẫn còn ở Nhật ký/lịch sử truy vết).
+ */
+export function AuditTrailHeadCells({ dateOnly }: { dateOnly?: boolean } = {}): JSX.Element {
   return (
     <>
       <th className="px-4 py-3">Người tạo</th>
       <th className="px-4 py-3">Ngày tạo</th>
-      <th className="px-4 py-3">Giờ tạo</th>
+      {!dateOnly && <th className="px-4 py-3">Giờ tạo</th>}
       <th className="px-4 py-3">Người sửa</th>
       <th className="px-4 py-3">Ngày sửa</th>
-      <th className="px-4 py-3">Giờ sửa</th>
+      {!dateOnly && <th className="px-4 py-3">Giờ sửa</th>}
     </>
   );
 }
 
-/** 6 ô <td> dữ liệu tương ứng (đặt trong <tr> của <tbody>). */
-export function AuditTrailCells({ row }: { row: AuditTrailRow }): JSX.Element {
+/** Ô <td> dữ liệu tương ứng (đặt trong <tr> của <tbody>). dateOnly=true → bỏ 2 ô Giờ. */
+export function AuditTrailCells({ row, dateOnly }: { row: AuditTrailRow; dateOnly?: boolean }): JSX.Element {
   return (
     <>
       <td className="px-4 py-3 text-slate-600">{row.createdByName ?? '—'}</td>
       <td className="px-4 py-3 text-xs text-slate-500">{fmtDate(row.createdAt)}</td>
-      <td className="px-4 py-3 text-xs text-slate-500">{fmtTime(row.createdAt)}</td>
+      {!dateOnly && <td className="px-4 py-3 text-xs text-slate-500">{fmtTime(row.createdAt)}</td>}
       <td className="px-4 py-3 text-slate-600">{row.updatedByName ?? '—'}</td>
       <td className="px-4 py-3 text-xs text-slate-500">{fmtDate(row.updatedAt)}</td>
-      <td className="px-4 py-3 text-xs text-slate-500">{fmtTime(row.updatedAt)}</td>
+      {!dateOnly && <td className="px-4 py-3 text-xs text-slate-500">{fmtTime(row.updatedAt)}</td>}
     </>
   );
 }

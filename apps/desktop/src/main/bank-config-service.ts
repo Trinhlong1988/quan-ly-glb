@@ -378,6 +378,7 @@ export interface PartnerDto extends AuditTrail {
   status: string; // SIGNED | UNSIGNED | TERMINATED (mã tra StatusOption entity=PARTNER)
   address: string | null;
   phone: string | null;
+  email: string | null;
   contactPerson: string | null;
   bankIds: number[];
 }
@@ -393,6 +394,7 @@ export interface CreatePartnerInput {
   status?: string;
   address?: string | null;
   phone?: string | null;
+  email?: string | null;
   contactPerson?: string | null;
 }
 export interface UpdatePartnerInput {
@@ -401,6 +403,7 @@ export interface UpdatePartnerInput {
   status?: string;
   address?: string | null;
   phone?: string | null;
+  email?: string | null;
   contactPerson?: string | null;
 }
 
@@ -436,6 +439,7 @@ export async function listPartners(filter: PartnerFilter = {}): Promise<{ ok: bo
       status: r.status,
       address: r.address,
       phone: r.phone,
+      email: r.email,
       contactPerson: r.contactPerson,
       bankIds: linkMap.get(r.id) ?? [],
       ...trail(r, names)
@@ -471,6 +475,7 @@ export async function createPartner(input: CreatePartnerInput): Promise<Mutation
         status,
         address: input.address?.trim() || null,
         phone: input.phone?.trim() || null,
+        email: input.email?.trim() || null,
         contactPerson: input.contactPerson?.trim() || null,
         createdBy: user.id
       }
@@ -523,6 +528,7 @@ export async function updatePartner(id: number, input: UpdatePartnerInput): Prom
         status,
         address: input.address !== undefined ? input.address?.trim() || null : row.address,
         phone: input.phone !== undefined ? input.phone?.trim() || null : row.phone,
+        email: input.email !== undefined ? input.email?.trim() || null : row.email,
         contactPerson: input.contactPerson !== undefined ? input.contactPerson?.trim() || null : row.contactPerson,
         updatedBy: user.id
       }

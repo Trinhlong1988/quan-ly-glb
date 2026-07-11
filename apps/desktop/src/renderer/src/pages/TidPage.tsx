@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Plus, Loader2, CreditCard, Link2, RefreshCw, Undo2, PackageCheck, Send, Download, History, Tag, Trophy, FilterX } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate } from '@glb/shared';
-import type { TidDto, UndeliveredTidDto, PosDto, CustomerDto, AgentDto, TidRefs, TimelineEventDto, CreateTidInput, TidRevenueRankRow } from '../../../preload/index.d';
+import type { TidDto, UndeliveredTidDto, PosDto, CustomerDto, TidRefs, TimelineEventDto, CreateTidInput, TidRevenueRankRow } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
 import { Modal } from '../components/Modal.js';
 import { Button } from '../components/Button.js';
@@ -543,7 +543,6 @@ function TidCreateForm({ canOps, onClose, onSaved }: { canOps: boolean; onClose:
   const [refs, setRefs] = useState<TidRefs | null>(null);
   const [devices, setDevices] = useState<PosDto[]>([]);
   const [customers, setCustomers] = useState<CustomerDto[]>([]);
-  const [agents, setAgents] = useState<AgentDto[]>([]);
   const [busy, setBusy] = useState(false);
 
   const [dossierId, setDossierId] = useState('');
@@ -563,7 +562,6 @@ function TidCreateForm({ canOps, onClose, onSaved }: { canOps: boolean; onClose:
   // giao khách
   const [deliverNow, setDeliverNow] = useState(false);
   const [deliverCustomerId, setDeliverCustomerId] = useState('');
-  const [deliverAgentId, setDeliverAgentId] = useState('');
   const [deliveredAt, setDeliveredAt] = useState('');
 
   useEffect(() => {
@@ -571,7 +569,6 @@ function TidCreateForm({ canOps, onClose, onSaved }: { canOps: boolean; onClose:
     if (canOps) {
       window.api.posList({}).then((r) => r.ok && r.data && setDevices(r.data));
       window.api.customerList({}).then((r) => r.ok && r.data && setCustomers(r.data));
-      window.api.agentList().then((r) => r.ok && r.data && setAgents(r.data));
     }
   }, [canOps]);
 
@@ -616,7 +613,7 @@ function TidCreateForm({ canOps, onClose, onSaved }: { canOps: boolean; onClose:
       note: note.trim() || null,
       customerDeviceSerial: assignMode === 'customer' ? customerDeviceSerial.trim() || null : null,
       assign: assignMode === 'pos' ? { posSerial, customerId: Number(assignCustomerId) } : undefined,
-      deliver: wantDeliver ? { deliveredAt: deliveredAt ? new Date(deliveredAt).toISOString() : null, customerId: Number(deliverCust), toAgentId: deliverAgentId ? Number(deliverAgentId) : null } : undefined
+      deliver: wantDeliver ? { deliveredAt: deliveredAt ? new Date(deliveredAt).toISOString() : null, customerId: Number(deliverCust), toAgentId: null } : undefined
     };
     setBusy(true);
     const res = await window.api.tidCreate(input);
@@ -769,14 +766,6 @@ function TidCreateForm({ canOps, onClose, onSaved }: { canOps: boolean; onClose:
                         </select>
                       </Field>
                     )}
-                    <Field label="Đại lý" hint="Tùy chọn">
-                      <select className={inputCls} value={deliverAgentId} onChange={(e) => setDeliverAgentId(e.target.value)}>
-                        <option value="">— Không qua đại lý —</option>
-                        {agents.map((a) => (
-                          <option key={a.id} value={a.id}>{a.name}</option>
-                        ))}
-                      </select>
-                    </Field>
                     <Field label="Ngày giao" hint="Bỏ trống = hiện tại">
                       <input type="datetime-local" className={inputCls} value={deliveredAt} onChange={(e) => setDeliveredAt(e.target.value)} />
                     </Field>
@@ -807,10 +796,8 @@ function TidActionModal({ tid, kind, onClose, onDone }: { tid: TidDto; kind: 'as
   const toast = useToast();
   const [devices, setDevices] = useState<PosDto[]>([]);
   const [customers, setCustomers] = useState<CustomerDto[]>([]);
-  const [agents, setAgents] = useState<AgentDto[]>([]);
   const [posSerial, setPosSerial] = useState('');
   const [customerId, setCustomerId] = useState(tid.customerId ? String(tid.customerId) : '');
-  const [agentId, setAgentId] = useState('');
   const [newTid, setNewTid] = useState('');
   const [occurredAt, setOccurredAt] = useState('');
   const [note, setNote] = useState('');
@@ -823,7 +810,6 @@ function TidActionModal({ tid, kind, onClose, onDone }: { tid: TidDto; kind: 'as
     }
     if (kind === 'deliver') {
       window.api.customerList({}).then((r) => r.ok && r.data && setCustomers(r.data));
-      window.api.agentList().then((r) => r.ok && r.data && setAgents(r.data));
     }
   }, [kind]);
 
@@ -845,7 +831,7 @@ function TidActionModal({ tid, kind, onClose, onDone }: { tid: TidDto; kind: 'as
     } else {
       if (!customerId) return toast.alert('Phải chọn khách hàng nhận.');
       setBusy(true);
-      res = await window.api.tidMarkDelivered(tid.tid, { deliveredAt: when, customerId: Number(customerId), toAgentId: agentId ? Number(agentId) : null, note: note || null });
+      res = await window.api.tidMarkDelivered(tid.tid, { deliveredAt: when, customerId: Number(customerId), toAgentId: null, note: note || null });
     }
     setBusy(false);
     if (res.ok) {
@@ -895,14 +881,6 @@ function TidActionModal({ tid, kind, onClose, onDone }: { tid: TidDto; kind: 'as
                 <option value="">— Chọn khách hàng —</option>
                 {customers.map((c) => (
                   <option key={c.id} value={c.id}>{c.display}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Đại lý" hint="Tùy chọn — giao trực tiếp thì bỏ trống">
-              <select className={inputCls} value={agentId} onChange={(e) => setAgentId(e.target.value)}>
-                <option value="">— Không qua đại lý —</option>
-                {agents.map((a) => (
-                  <option key={a.id} value={a.id}>{a.name}</option>
                 ))}
               </select>
             </Field>
@@ -962,11 +940,8 @@ function TidTimelineModal({ tid, onClose }: { tid: TidDto; onClose: () => void }
                 )}
               </div>
               <div className="mt-1 text-xs text-slate-500">{fmtDate(e.occurredAt)}</div>
-              {(e.customerId != null || e.toAgentId != null) && (
-                <div className="mt-0.5 text-xs text-slate-500">
-                  {e.customerId != null && <>Khách #{e.customerId} </>}
-                  {e.toAgentId != null && <>· Đại lý #{e.toAgentId}</>}
-                </div>
+              {e.customerId != null && (
+                <div className="mt-0.5 text-xs text-slate-500">Khách #{e.customerId}</div>
               )}
               {e.note && <div className="mt-0.5 text-sm text-slate-600">{e.note}</div>}
             </li>

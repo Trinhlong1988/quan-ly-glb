@@ -14,7 +14,7 @@ import { FilterBar } from '../components/FilterBar.js';
 import { Button } from '../components/Button.js';
 import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../components/Selection.js';
 import { StatBar } from '../components/StatBar.js';
-import { AuditTrailHeadCells, AuditTrailCells, AUDIT_TRAIL_COLS } from '../components/AuditCells.js';
+import { AuditTrailHeadCells, AuditTrailCells, AUDIT_TRAIL_COLS_DATE_ONLY } from '../components/AuditCells.js';
 import { StatusBadge, useStatusOptions, statusSelectOptions, toneCls } from '../components/StatusBadge.js';
 import { TabBar, TabButton } from '../components/Tabs.js';
 import { exportCsv } from '../lib/exportCsv.js';
@@ -129,13 +129,13 @@ function BankTab({ canManage }: { canManage: boolean }): JSX.Element {
               <th className="px-4 py-3">Mã</th>
               <th className="px-4 py-3">Tên ngân hàng</th>
               <th className="px-4 py-3">Trạng thái</th>
-              <AuditTrailHeadCells />
+              <AuditTrailHeadCells dateOnly />
               {canManage && <th className="px-4 py-3 text-right">Thao tác</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {loading && <tr><td colSpan={(canManage ? 6 : 4) + AUDIT_TRAIL_COLS} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
-            {!loading && rows.length === 0 && <tr><td colSpan={(canManage ? 6 : 4) + AUDIT_TRAIL_COLS} className="px-4 py-10 text-center text-slate-400"><Landmark className="mx-auto mb-2 h-6 w-6" /> Chưa có ngân hàng.</td></tr>}
+            {loading && <tr><td colSpan={(canManage ? 6 : 4) + AUDIT_TRAIL_COLS_DATE_ONLY} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+            {!loading && rows.length === 0 && <tr><td colSpan={(canManage ? 6 : 4) + AUDIT_TRAIL_COLS_DATE_ONLY} className="px-4 py-10 text-center text-slate-400"><Landmark className="mx-auto mb-2 h-6 w-6" /> Chưa có ngân hàng.</td></tr>}
             {!loading && rows.map((b) => (
               <tr key={b.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(b.id) ? 'bg-brand-tint/40' : '')}>
                 {canManage && <SelectCell id={b.id} sel={sel} />}
@@ -143,7 +143,7 @@ function BankTab({ canManage }: { canManage: boolean }): JSX.Element {
                 <td className="px-4 py-3 font-mono text-xs font-semibold text-brand">{b.code}</td>
                 <td className="px-4 py-3 font-medium text-slate-800">{b.name}</td>
                 <td className="px-4 py-3"><StatusBadge entity="BANK" code={b.status} /></td>
-                <AuditTrailCells row={b} />
+                <AuditTrailCells row={b} dateOnly />
                 {canManage && (
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">
@@ -254,20 +254,20 @@ function CardTypeTab({ canManage }: { canManage: boolean }): JSX.Element {
               <th className="px-4 py-3">Mã</th>
               <th className="px-4 py-3">Tên loại thẻ</th>
               <th className="px-4 py-3">Ngân hàng</th>
-              <AuditTrailHeadCells />
+              <AuditTrailHeadCells dateOnly />
               {canManage && <th className="px-4 py-3 text-right">Thao tác</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {loading && <tr><td colSpan={(canManage ? 5 : 3) + AUDIT_TRAIL_COLS} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
-            {!loading && rows.length === 0 && <tr><td colSpan={(canManage ? 5 : 3) + AUDIT_TRAIL_COLS} className="px-4 py-10 text-center text-slate-400"><CreditCard className="mx-auto mb-2 h-6 w-6" /> Chưa có loại thẻ.</td></tr>}
+            {loading && <tr><td colSpan={(canManage ? 5 : 3) + AUDIT_TRAIL_COLS_DATE_ONLY} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+            {!loading && rows.length === 0 && <tr><td colSpan={(canManage ? 5 : 3) + AUDIT_TRAIL_COLS_DATE_ONLY} className="px-4 py-10 text-center text-slate-400"><CreditCard className="mx-auto mb-2 h-6 w-6" /> Chưa có loại thẻ.</td></tr>}
             {!loading && rows.map((c) => (
               <tr key={c.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(c.id) ? 'bg-brand-tint/40' : '')}>
                 {canManage && <SelectCell id={c.id} sel={sel} />}
                 <td className="px-4 py-3 font-mono text-xs font-semibold text-brand">{c.code}</td>
                 <td className="px-4 py-3 font-medium text-slate-800">{c.name}</td>
                 <td className="px-4 py-3 text-slate-600">{c.bankCode ? `${c.bankCode} · ${c.bankName}` : (c.bankName ?? '—')}</td>
-                <AuditTrailCells row={c} />
+                <AuditTrailCells row={c} dateOnly />
                 {canManage && (
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">
@@ -398,13 +398,13 @@ function PartnerTab({ canManage }: { canManage: boolean }): JSX.Element {
               <th className="px-4 py-3">Số điện thoại</th>
               <th className="px-4 py-3">Địa chỉ</th>
               <th className="px-4 py-3">Ngân hàng liên kết</th>
-              <AuditTrailHeadCells />
+              <AuditTrailHeadCells dateOnly />
               {canManage && <th className="px-4 py-3 text-right">Thao tác</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {loading && <tr><td colSpan={(canManage ? 9 : 7) + AUDIT_TRAIL_COLS} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
-            {!loading && rows.length === 0 && <tr><td colSpan={(canManage ? 9 : 7) + AUDIT_TRAIL_COLS} className="px-4 py-10 text-center text-slate-400"><Building2 className="mx-auto mb-2 h-6 w-6" /> Chưa có đối tác.</td></tr>}
+            {loading && <tr><td colSpan={(canManage ? 9 : 7) + AUDIT_TRAIL_COLS_DATE_ONLY} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+            {!loading && rows.length === 0 && <tr><td colSpan={(canManage ? 9 : 7) + AUDIT_TRAIL_COLS_DATE_ONLY} className="px-4 py-10 text-center text-slate-400"><Building2 className="mx-auto mb-2 h-6 w-6" /> Chưa có đối tác.</td></tr>}
             {!loading && rows.map((p) => (
               <tr key={p.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(p.id) ? 'bg-brand-tint/40' : '')}>
                 {canManage && <SelectCell id={p.id} sel={sel} />}
@@ -419,7 +419,7 @@ function PartnerTab({ canManage }: { canManage: boolean }): JSX.Element {
                     {p.bankIds.length === 0 ? <span className="text-slate-400">—</span> : p.bankIds.map((id) => <span key={id} className="rounded bg-brand-tint px-1.5 py-0.5 text-xs font-medium text-brand">{bankName(id)}</span>)}
                   </div>
                 </td>
-                <AuditTrailCells row={p} />
+                <AuditTrailCells row={p} dateOnly />
                 {canManage && (
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">
@@ -450,6 +450,7 @@ function PartnerForm({ mode, row, banks, onClose, onSaved }: { mode: 'create' | 
   const [status, setStatus] = useState(row?.status ?? 'UNSIGNED');
   const [address, setAddress] = useState(row?.address ?? '');
   const [phone, setPhone] = useState(row?.phone ?? '');
+  const [email, setEmail] = useState(row?.email ?? '');
   const [contactPerson, setContactPerson] = useState(row?.contactPerson ?? '');
   const [selectedBanks, setSelectedBanks] = useState<Set<number>>(new Set(row?.bankIds ?? []));
   const [busy, setBusy] = useState(false);
@@ -458,7 +459,7 @@ function PartnerForm({ mode, row, banks, onClose, onSaved }: { mode: 'create' | 
     if (!name.trim()) return toast.alert('Tên đối tác bắt buộc.', 'Thiếu thông tin');
     if (!code.trim()) return toast.alert('Mã đối tác bắt buộc.', 'Thiếu thông tin');
     setBusy(true);
-    const payload = { name: name.trim(), code: code.trim(), status, address: address || null, phone: phone || null, contactPerson: contactPerson || null };
+    const payload = { name: name.trim(), code: code.trim(), status, address: address || null, phone: phone || null, email: email || null, contactPerson: contactPerson || null };
     const res = mode === 'edit' && row ? await window.api.partnerUpdate(row.id, payload) : await window.api.partnerCreate(payload);
     if (!res.ok) { setBusy(false); return toast.alert(res.message ?? 'Lưu đối tác thất bại', 'Không lưu được'); }
     // Cập nhật liên kết ngân hàng ngay sau khi lưu đối tác (dùng id trả về khi tạo mới).
@@ -479,6 +480,7 @@ function PartnerForm({ mode, row, banks, onClose, onSaved }: { mode: 'create' | 
         <Field label="Trạng thái hợp đồng"><select className={inputCls} value={status} onChange={(e) => setStatus(e.target.value)}>{statusSelectOptions(partnerStatusOptions, row?.status).map((o) => <option key={o.code} value={o.code}>{o.label}</option>)}</select></Field>
         <Field label="Người liên hệ"><input className={inputCls} value={contactPerson} onChange={(e) => setContactPerson(e.target.value)} /></Field>
         <Field label="Số điện thoại"><input className={inputCls} value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
+        <Field label="Email"><input className={inputCls} value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
         <Field label="Địa chỉ"><input className={inputCls} value={address} onChange={(e) => setAddress(e.target.value)} /></Field>
         {/* Ngân hàng liên kết — tích chọn ngay khi thêm/sửa đối tác (đồng bộ style với LinkBanksModal). */}
         <div className="col-span-2">

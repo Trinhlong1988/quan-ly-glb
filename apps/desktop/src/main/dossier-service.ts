@@ -197,6 +197,7 @@ export interface DossierDto extends AuditTrail {
   cccdExpiry: string | null;
   permanentAddress: string | null;
   currentAddress: string | null;
+  email: string | null;
   dkkdFrontPath: string | null;
   dkkdFrontName: string | null;
   dkkdBackPath: string | null;
@@ -231,6 +232,7 @@ export interface DossierInput {
   cccdExpiry?: string | null;
   permanentAddress?: string | null;
   currentAddress?: string | null;
+  email?: string | null;
   note?: string | null;
   // Đính kèm: đường dẫn file nguồn (dialog) — undefined = giữ, null = gỡ.
   dkkdFrontSrc?: string | null;
@@ -278,6 +280,7 @@ export async function listDossiers(filter: DossierFilter = {}): Promise<{ ok: bo
       cccdExpiry: r.cccdExpiry ? r.cccdExpiry.toISOString() : null,
       permanentAddress: r.permanentAddress,
       currentAddress: r.currentAddress,
+      email: r.email,
       dkkdFrontPath: r.dkkdFrontPath,
       dkkdFrontName: r.dkkdFrontName,
       dkkdBackPath: r.dkkdBackPath,
@@ -330,6 +333,7 @@ export async function createDossier(input: DossierInput): Promise<MutationResult
       cccdExpiry: parseDate(input.cccdExpiry) ?? null,
       permanentAddress: input.permanentAddress?.trim() || null,
       currentAddress: input.currentAddress?.trim() || null,
+      email: input.email?.trim() || null,
       note: input.note?.trim() || null,
       createdBy: user.id
     }
@@ -374,6 +378,7 @@ export async function updateDossier(id: number, input: DossierInput): Promise<Mu
       cccdExpiry: input.cccdExpiry !== undefined ? parseDate(input.cccdExpiry) ?? null : row.cccdExpiry,
       permanentAddress: input.permanentAddress !== undefined ? input.permanentAddress?.trim() || null : row.permanentAddress,
       currentAddress: input.currentAddress !== undefined ? input.currentAddress?.trim() || null : row.currentAddress,
+      email: input.email !== undefined ? input.email?.trim() || null : row.email,
       note: input.note !== undefined ? input.note?.trim() || null : row.note,
       updatedBy: user.id
     }

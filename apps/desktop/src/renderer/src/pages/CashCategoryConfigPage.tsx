@@ -213,7 +213,7 @@ function CashCategoryForm({ mode, row, onClose, onSaved }: { mode: 'create' | 'e
   }
 
   return (
-    <Modal title={mode === 'edit' ? `Sửa danh mục ${row?.kind === 'THU' ? 'thu' : 'chi'}` : 'Thêm danh mục thu – chi'} onClose={onClose} width="max-w-md">
+    <Modal title={mode === 'edit' ? `Sửa danh mục ${row?.kind === 'THU' ? 'thu' : 'chi'}` : 'Thêm danh mục thu – chi'} onClose={onClose} width="max-w-md" onSubmit={() => void save()}>
       <Field label="Loại danh mục" required>
         <select className={inputCls} value={kind} disabled={mode === 'edit'} onChange={(e) => setKind(e.target.value as 'THU' | 'CHI')}>
           <option value="THU">Khoản thu</option>

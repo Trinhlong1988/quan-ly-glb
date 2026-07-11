@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Plus, Loader2, HardDrive, History, Wrench, Download, List, PackagePlus, Building2, Cpu, Tag } from 'lucide-react';
+import { Loader2, HardDrive, History, Wrench, Download, List, PackagePlus, Building2, Cpu, Tag } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate, fmtTimeSec } from '@glb/shared';
-import type { PosDto, TimelineEventDto, CustomerDto, AgentDto, LiteRef } from '../../../preload/index.d';
+import type { PosDto, TimelineEventDto, CustomerDto, LiteRef } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
 import { Modal } from '../components/Modal.js';
 import { Button } from '../components/Button.js';
@@ -68,17 +68,14 @@ export function PosPage({ user }: { user: AuthUser }): JSX.Element {
 function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
   const toast = useToast();
   const [rows, setRows] = useState<PosDto[]>([]);
-  const [agents, setAgents] = useState<AgentDto[]>([]);
   const [models, setModels] = useState<LiteRef[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [agentId, setAgentId] = useState('');
   // LANE B (#24) — lọc "Chủng loại" phía client trên tập rows (posList trả full, không phân trang).
   const [modelFilter, setModelFilter] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
-  const [creating, setCreating] = useState(false);
   const [timelineOf, setTimelineOf] = useState<PosDto | null>(null);
   const [actionOf, setActionOf] = useState<{ device: PosDto; event: string } | null>(null);
 
@@ -92,7 +89,6 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
     const res = await window.api.posList({
       search: search || undefined,
       status: statusFilter || undefined,
-      agentId: agentId ? Number(agentId) : undefined,
       fromDate: fromDate || undefined,
       toDate: toDate || undefined
     });
@@ -102,7 +98,6 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
   }
   useEffect(() => {
     void reload();
-    window.api.agentList().then((r) => r.ok && r.data && setAgents(r.data));
     window.api.posModelLite().then((r) => r.ok && r.data && setModels(r.data));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -121,7 +116,6 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
   function resetFilters(): void {
     setSearch('');
     setStatusFilter('');
-    setAgentId('');
     setModelFilter('');
     setFromDate('');
     setToDate('');
@@ -139,18 +133,13 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
             onClick={() =>
               exportCsv(
                 'may_pos',
-                ['Serial', 'Chủng loại', 'Nhà cung cấp', 'Giá nhập', 'Ngày nhập', 'Trạng thái', 'TID hiện tại', 'Khách', 'Đại lý'],
-                filteredRows.map((d) => [d.serial, d.posModelName ?? '', d.supplierName ?? '', d.importPrice ?? '', d.importedAt ? fmtDate(d.importedAt) : '', posStatusLabel(d.status), d.currentTid ?? '', d.customerName ?? '', d.agentName ?? ''])
+                ['Serial', 'Chủng loại', 'Nhà cung cấp', 'Giá nhập', 'Ngày nhập', 'Trạng thái', 'TID hiện tại', 'Khách'],
+                filteredRows.map((d) => [d.serial, d.posModelName ?? '', d.supplierName ?? '', d.importPrice ?? '', d.importedAt ? fmtDate(d.importedAt) : '', posStatusLabel(d.status), d.currentTid ?? '', d.customerName ?? ''])
               )
             }
           >
             Xuất Excel
           </Button>
-          {canManage && (
-            <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)}>
-              Thêm máy POS
-            </Button>
-          )}
         </div>
       </div>
 
@@ -164,7 +153,6 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
         onToDate={setToDate}
         selects={[
           { key: 'status', placeholder: 'Tất cả trạng thái', value: statusFilter, options: posOptions.filter((o) => o.active).map((o) => ({ value: o.code, label: o.label })), onChange: setStatusFilter },
-          { key: 'agent', placeholder: 'Tất cả đại lý', value: agentId, options: agents.map((a) => ({ value: String(a.id), label: a.name })), onChange: setAgentId },
           // Lọc chủng loại (client-side) — đổi giá trị là lọc ngay, không cần bấm "Lọc".
           { key: 'model', placeholder: 'Tất cả chủng loại', value: modelFilter, options: models.map((m) => ({ value: String(m.id), label: m.name })), onChange: setModelFilter }
         ]}
@@ -196,21 +184,20 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
               <th className="px-4 py-3">Trạng thái</th>
               <th className="px-4 py-3">TID hiện tại</th>
               <th className="px-4 py-3">Khách</th>
-              <th className="px-4 py-3">Đại lý</th>
               <th className="px-4 py-3 text-right">Thao tác</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
             {loading && (
               <tr>
-                <td colSpan={10} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={9} className="px-4 py-8 text-center text-slate-400">
                   <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                 </td>
               </tr>
             )}
             {!loading && filteredRows.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-4 py-10 text-center text-slate-400">
+                <td colSpan={9} className="px-4 py-10 text-center text-slate-400">
                   <HardDrive className="mx-auto mb-2 h-6 w-6" />
                   {rows.length === 0 ? 'Chưa có máy POS.' : 'Không có máy POS khớp bộ lọc.'}
                 </td>
@@ -229,7 +216,6 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
                   </td>
                   <td className="px-4 py-3 font-mono text-xs text-slate-500">{d.currentTid ?? '—'}</td>
                   <td className="px-4 py-3 text-slate-600">{d.customerName ?? '—'}</td>
-                  <td className="px-4 py-3 text-slate-600">{d.agentName ?? '—'}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
                       <button
@@ -261,15 +247,6 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
         </table>
       </div>
 
-      {creating && (
-        <PosForm
-          onClose={() => setCreating(false)}
-          onSaved={async () => {
-            setCreating(false);
-            await reload();
-          }}
-        />
-      )}
       {timelineOf && <TimelineModal device={timelineOf} onClose={() => setTimelineOf(null)} />}
       {actionOf && (
         <TransitionModal
@@ -295,7 +272,6 @@ const NEXT: Record<string, { key: string; label: string }[]> = {
   ],
   DEPLOYED: [
     { key: 'recall', label: 'Thu hồi về kho' },
-    { key: 'transferAgent', label: 'Chuyển đại lý' },
     { key: 'reportDamage', label: 'Báo hỏng' },
     { key: 'retire', label: 'Thanh lý' }
   ],
@@ -309,55 +285,6 @@ const NEXT: Record<string, { key: string; label: string }[]> = {
   ],
   RETIRED: []
 };
-
-function PosForm({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }): JSX.Element {
-  const toast = useToast();
-  const [serial, setSerial] = useState('');
-  const [model, setModel] = useState('');
-  const [bank, setBank] = useState('');
-  const [warehouseLoc, setWarehouseLoc] = useState('');
-  const [note, setNote] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  async function save(): Promise<void> {
-    if (!serial.trim()) return toast.alert('Serial máy POS bắt buộc.');
-    setBusy(true);
-    const res = await window.api.posCreate({ serial: serial.trim(), model: model || null, bank: bank || null, warehouseLoc: warehouseLoc || null, note: note || null });
-    setBusy(false);
-    if (res.ok) {
-      toast.success(`Đã thêm máy POS ${serial} (Trong kho)`);
-      onSaved();
-    } else {
-      toast.alert(res.message ?? 'Thêm máy POS thất bại');
-    }
-  }
-
-  return (
-    <Modal title="Thêm máy POS mới" onClose={onClose} width="max-w-xl" onSubmit={() => void save()}>
-      <div className="grid grid-cols-2 gap-4">
-        <Field label="Serial" required hint="Danh tính bất biến của máy">
-          <input className={inputCls} value={serial} onChange={(e) => setSerial(e.target.value)} autoFocus />
-        </Field>
-        <Field label="Model">
-          <input className={inputCls} value={model} onChange={(e) => setModel(e.target.value)} />
-        </Field>
-        <Field label="Ngân hàng">
-          <input className={inputCls} value={bank} onChange={(e) => setBank(e.target.value)} />
-        </Field>
-        <Field label="Vị trí kho">
-          <input className={inputCls} value={warehouseLoc} onChange={(e) => setWarehouseLoc(e.target.value)} />
-        </Field>
-        <Field label="Ghi chú">
-          <input className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} />
-        </Field>
-      </div>
-      <div className="mt-6 flex justify-end gap-2">
-        <Button variant="neutral" onClick={onClose}>Hủy</Button>
-        <Button variant="confirm" onClick={save} disabled={busy} icon={busy ? <Loader2 className="h-4 w-4 animate-spin" /> : undefined}>Thêm máy</Button>
-      </div>
-    </Modal>
-  );
-}
 
 function TimelineModal({ device, onClose }: { device: PosDto; onClose: () => void }): JSX.Element {
   const [events, setEvents] = useState<TimelineEventDto[] | null>(null);
@@ -395,7 +322,6 @@ function TimelineModal({ device, onClose }: { device: PosDto; onClose: () => voi
 const EVENT_LABELS: Record<string, string> = {
   deploy: 'Triển khai (giao khách)',
   recall: 'Thu hồi về kho',
-  transferAgent: 'Chuyển đại lý',
   reportDamage: 'Báo hỏng',
   sendRepair: 'Gửi bảo trì',
   receiveRepaired: 'Nhận sửa xong',
@@ -405,37 +331,31 @@ const EVENT_LABELS: Record<string, string> = {
 function TransitionModal({ device, event, onClose, onDone }: { device: PosDto; event: string; onClose: () => void; onDone: () => void }): JSX.Element {
   const toast = useToast();
   const [customers, setCustomers] = useState<CustomerDto[]>([]);
-  const [agents, setAgents] = useState<AgentDto[]>([]);
   const [customerId, setCustomerId] = useState('');
-  const [agentId, setAgentId] = useState('');
   const [occurredAt, setOccurredAt] = useState('');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [confirmRetire, setConfirmRetire] = useState(false);
 
   const needCustomer = event === 'deploy';
-  const needAgent = event === 'transferAgent';
 
   useEffect(() => {
     if (needCustomer) window.api.customerList({}).then((r) => r.ok && r.data && setCustomers(r.data));
-    if (needAgent) window.api.agentList().then((r) => r.ok && r.data && setAgents(r.data));
-  }, [needCustomer, needAgent]);
+  }, [needCustomer]);
 
   async function run(password?: string): Promise<void> {
     if (needCustomer && !customerId) return toast.alert('Phải chọn khách hàng nhận máy.');
-    if (needAgent && !agentId) return toast.alert('Phải chọn đại lý đích.');
     setBusy(true);
     const input = {
       occurredAt: occurredAt ? new Date(occurredAt).toISOString() : null,
       note: note || null,
       customerId: customerId ? Number(customerId) : null,
-      agentId: agentId ? Number(agentId) : null
+      agentId: null
     };
     let res;
     switch (event) {
       case 'deploy': res = await window.api.posDeploy(device.serial, input); break;
       case 'recall': res = await window.api.posRecall(device.serial, input); break;
-      case 'transferAgent': res = await window.api.posTransferAgent(device.serial, input); break;
       case 'reportDamage': res = await window.api.posReportDamage(device.serial, input); break;
       case 'sendRepair': res = await window.api.posSendRepair(device.serial, input); break;
       case 'receiveRepaired': res = await window.api.posReceiveRepaired(device.serial, input); break;
@@ -482,18 +402,6 @@ function TransitionModal({ device, event, onClose, onDone }: { device: PosDto; e
               {customers.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.display}
-                </option>
-              ))}
-            </select>
-          </Field>
-        )}
-        {needAgent && (
-          <Field label="Đại lý đích" required>
-            <select className={inputCls} value={agentId} onChange={(e) => setAgentId(e.target.value)}>
-              <option value="">— Chọn đại lý —</option>
-              {agents.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
                 </option>
               ))}
             </select>
