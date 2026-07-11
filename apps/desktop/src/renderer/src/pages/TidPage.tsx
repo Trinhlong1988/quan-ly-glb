@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Plus, Loader2, CreditCard, Link2, RefreshCw, Undo2, PackageCheck, Send, Download, History, Tag, Trophy, FilterX } from 'lucide-react';
+import { Plus, Loader2, CreditCard, Link2, RefreshCw, Undo2, PackageCheck, Send, Download, History, Tag, Trophy, FilterX, Percent, Trash2 } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate } from '@glb/shared';
-import type { TidDto, UndeliveredTidDto, PosDto, CustomerDto, TidRefs, TimelineEventDto, CreateTidInput, TidRevenueRankRow } from '../../../preload/index.d';
+import type { TidDto, UndeliveredTidDto, PosDto, CustomerDto, TidRefs, TimelineEventDto, CreateTidInput, TidRevenueRankRow, TidSellFeeRowDto } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
 import { Modal } from '../components/Modal.js';
 import { Button } from '../components/Button.js';
@@ -11,6 +11,7 @@ import { StatBar } from '../components/StatBar.js';
 import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
 import { ImportButton } from '../components/ImportModal.js';
+import { RequestCancelModal, type RequestCancelTarget } from '../components/RequestCancelModal.js';
 import { exportCsv } from '../lib/exportCsv.js';
 import { StatusTab, FeePreview } from './TidConfigPage.js';
 import { TabBar, TabButton } from '../components/Tabs.js';
@@ -32,6 +33,7 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
   const canConfig = hasPermission(user, 'CONFIG_TID_MANAGE'); // thêm/sửa/xóa cấu hình
   const canConfigView = hasPermission(user, 'CONFIG_TID_VIEW');
   const canRevenue = hasPermission(user, 'REVENUE_VIEW'); // #13: tab xếp hạng doanh số (dữ liệu tài chính)
+  const canCancelReq = hasPermission(user, 'TID_CANCEL_REQUEST'); // R34: yêu cầu hủy (xóa mềm qua duyệt)
 
   const [tab, setTab] = useState<Tab>('all');
   const [rows, setRows] = useState<TidDto[]>([]);
@@ -50,6 +52,8 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
   const [creating, setCreating] = useState(false);
   const [action, setAction] = useState<{ tid: TidDto; kind: 'assign' | 'replace' | 'recall' | 'deliver' } | null>(null);
   const [timelineTid, setTimelineTid] = useState<TidDto | null>(null);
+  const [sellFeeTid, setSellFeeTid] = useState<TidDto | null>(null); // R30: phí bán thực tế theo TID × thẻ
+  const [cancelTarget, setCancelTarget] = useState<RequestCancelTarget | null>(null); // R34: yêu cầu hủy TID
 
   async function reload(): Promise<void> {
     setLoading(true);
@@ -258,13 +262,13 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
                 <th className="px-4 py-3">Khách hàng đang giữ</th>
                 <th className="px-4 py-3">Trạng thái</th>
                 {tab === 'undelivered' && <th className="px-4 py-3">Số ngày tồn</th>}
-                {tab === 'all' && <th className="px-4 py-3 text-right">Thao tác</th>}
+                {(tab === 'all' || tab === 'undelivered') && <th className="px-4 py-3 text-right">Thao tác</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
               {loading && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-slate-400">
+                  <td colSpan={tab === 'undelivered' ? 10 : 9} className="px-4 py-8 text-center text-slate-400">
                     <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                   </td>
                 </tr>
@@ -279,7 +283,7 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
               )}
               {!loading && tab === 'undelivered' && undelivered.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-10 text-center text-slate-400">
+                  <td colSpan={10} className="px-4 py-10 text-center text-slate-400">
                     <PackageCheck className="mx-auto mb-2 h-6 w-6" />
                     Không có TID nào chưa giao. 🎉
                   </td>
@@ -308,12 +312,17 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
                       </span>
                     </td>
                   )}
-                  {tab === 'all' && (
+                  {(tab === 'all' || tab === 'undelivered') && (
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap justify-end gap-1">
                         <button onClick={() => setTimelineTid(t)} className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs text-slate-600 hover:bg-appbg hover:brightness-110">
                           <History className="h-3.5 w-3.5" /> Vòng đời TID
                         </button>
+                        {canOps && (
+                          <button onClick={() => setSellFeeTid(t)} className="flex items-center gap-1 rounded-md border border-brand/30 bg-brand/5 px-2 py-1 text-xs font-semibold text-brand hover:brightness-110" title="Phí bán thực tế theo loại thẻ (thỏa thuận khi giao)">
+                            <Percent className="h-3.5 w-3.5" /> Phí bán
+                          </button>
+                        )}
                         {canOps &&
                           actionsFor(t).map((a) => (
                             <button
@@ -324,6 +333,15 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
                               {a.icon} {a.label}
                             </button>
                           ))}
+                        {canCancelReq && (
+                          <button
+                            onClick={() => setCancelTarget({ entityType: 'Tid', entityId: t.id, entityLabel: t.tid, typeLabel: 'TID' })}
+                            title="Yêu cầu hủy"
+                            className="flex items-center gap-1 rounded-md border border-danger/30 bg-danger/5 px-2 py-1 text-xs font-semibold text-danger hover:brightness-110"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" /> Yêu cầu hủy
+                          </button>
+                        )}
                       </div>
                     </td>
                   )}
@@ -356,6 +374,23 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
         />
       )}
       {timelineTid && <TidTimelineModal tid={timelineTid} onClose={() => setTimelineTid(null)} />}
+      {sellFeeTid && (
+        <TidSellFeeModal
+          tid={sellFeeTid}
+          onClose={() => setSellFeeTid(null)}
+          onSaved={() => setSellFeeTid(null)}
+        />
+      )}
+      {cancelTarget && (
+        <RequestCancelModal
+          target={cancelTarget}
+          onClose={() => setCancelTarget(null)}
+          onDone={() => {
+            setCancelTarget(null);
+            void reload();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -716,12 +751,12 @@ function TidCreateForm({ canOps, onClose, onSaved }: { canOps: boolean; onClose:
                 <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Gán máy POS (tùy chọn)</div>
                 <div className="flex flex-wrap gap-4 text-sm">
                   <label className="flex items-center gap-1.5"><input type="radio" checked={assignMode === 'none'} onChange={() => setAssignMode('none')} /> Chưa gán</label>
-                  <label className="flex items-center gap-1.5"><input type="radio" checked={assignMode === 'pos'} onChange={() => setAssignMode('pos')} /> Gán máy của ta (IN_STOCK)</label>
-                  <label className="flex items-center gap-1.5"><input type="radio" checked={assignMode === 'customer'} onChange={() => setAssignMode('customer')} /> Máy của khách</label>
+                  <label className="flex items-center gap-1.5"><input type="radio" checked={assignMode === 'pos'} onChange={() => setAssignMode('pos')} /> Gắn máy của công ty</label>
+                  <label className="flex items-center gap-1.5"><input type="radio" checked={assignMode === 'customer'} onChange={() => setAssignMode('customer')} /> Gắn máy của khách</label>
                 </div>
                 {assignMode === 'pos' && (
                   <div className="mt-3 grid grid-cols-2 gap-4">
-                    <Field label="Máy POS (IN_STOCK)" required>
+                    <Field label="Máy POS trong kho công ty" required>
                       <select className={inputCls} value={posSerial} onChange={(e) => setPosSerial(e.target.value)}>
                         <option value="">— Chọn máy POS —</option>
                         {inStock.map((d) => (
@@ -915,6 +950,129 @@ const TID_EVENT_LABELS: Record<string, string> = {
   RECALL: 'Thu hồi máy',
   RETIRE: 'Thanh lý'
 };
+
+// R30 — Phí bán THỰC TẾ theo TID × loại thẻ. Nhập khi giao máy; cột "Niêm yết" (FeeRate.phiBan hiệu lực)
+// để đối chiếu tránh điền sai. Để trống = dùng niêm yết. Doanh thu GD sau đó ưu tiên phí thực tế này.
+function pctText(p: number | null): string {
+  if (p == null) return '—';
+  return `${String(p).replace('.', ',')}%`;
+}
+function TidSellFeeModal({ tid, onClose, onSaved }: { tid: TidDto; onClose: () => void; onSaved: () => void }): JSX.Element {
+  const toast = useToast();
+  const [rows, setRows] = useState<TidSellFeeRowDto[] | null>(null);
+  const [hasPartner, setHasPartner] = useState(true);
+  const [edited, setEdited] = useState<Record<number, string>>({});
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    window.api.tidSellFeeList(tid.id).then((r) => {
+      if (!alive) return;
+      if (r.ok && r.data) {
+        setRows(r.data.rows);
+        setHasPartner(r.data.partnerId != null);
+        const init: Record<number, string> = {};
+        for (const row of r.data.rows) init[row.cardTypeId] = row.phiBanThucTe != null ? String(row.phiBanThucTe) : '';
+        setEdited(init);
+      } else {
+        toast.alert(r.message ?? 'Không tải được phí bán.');
+        setRows([]);
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, [tid.id]);
+
+  async function save(): Promise<void> {
+    if (!rows || rows.length === 0) return;
+    const entries = rows.map((row) => {
+      const raw = (edited[row.cardTypeId] ?? '').trim().replace(',', '.');
+      return { cardTypeId: row.cardTypeId, phiBan: raw === '' ? null : Number(raw) };
+    });
+    for (const e of entries) {
+      if (e.phiBan != null && (!Number.isFinite(e.phiBan) || e.phiBan < 0 || e.phiBan > 100)) {
+        toast.alert('Phí bán phải là số trong khoảng 0–100%.');
+        return;
+      }
+    }
+    setBusy(true);
+    const res = await window.api.tidSellFeeSet({ tidId: tid.id, entries });
+    setBusy(false);
+    if (res.ok) {
+      toast.success('Đã lưu phí bán thực tế.');
+      onSaved();
+    } else {
+      toast.alert(res.message ?? 'Lưu phí bán thất bại.', 'Không lưu được');
+    }
+  }
+
+  return (
+    <Modal title={`Phí bán thực tế — TID ${tid.tid}`} onClose={onClose} width="max-w-2xl" onSubmit={() => void save()}>
+      <p className="mb-3 text-sm text-slate-500">
+        Phí bán thỏa thuận riêng cho TID này theo <span className="font-medium text-slate-600">từng loại thẻ</span> (nhập khi giao máy). Cột{' '}
+        <span className="font-medium text-slate-600">Niêm yết</span> là phí bán chung để đối chiếu. Để trống = dùng phí niêm yết.
+      </p>
+      {rows === null && (
+        <div className="py-6 text-center text-slate-400">
+          <Loader2 className="mx-auto h-5 w-5 animate-spin" />
+        </div>
+      )}
+      {rows !== null && rows.length === 0 && (
+        <div className="rounded-lg border border-warning/40 bg-warning/5 p-3 text-sm text-slate-600">
+          TID chưa gán ngân hàng hoặc ngân hàng chưa có loại thẻ. Hãy cấu hình TID (ngân hàng) và loại thẻ trước khi đặt phí bán.
+        </div>
+      )}
+      {rows !== null && rows.length > 0 && (
+        <>
+          {!hasPartner && (
+            <div className="mb-3 rounded-lg border border-warning/40 bg-warning/5 p-2 text-xs text-slate-600">
+              TID chưa gán đối tác nên chưa có phí niêm yết để đối chiếu — vẫn có thể nhập phí bán thực tế.
+            </div>
+          )}
+          <div className="overflow-x-auto rounded-xl border border-line">
+            <table className="w-full text-sm">
+              <thead className="bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-4 py-2.5">Loại thẻ</th>
+                  <th className="px-4 py-2.5 text-right">Niêm yết</th>
+                  <th className="px-4 py-2.5 text-right">Phí bán thực tế (%)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {rows.map((row) => (
+                  <tr key={row.cardTypeId} className="hover:bg-appbg/60">
+                    <td className="px-4 py-2.5 text-slate-700">
+                      {row.cardTypeCode ? <span className="font-mono text-xs font-semibold text-brand">{row.cardTypeCode}</span> : null} {row.cardTypeName}
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-slate-500">{pctText(row.phiBanNiemYet)}</td>
+                    <td className="px-4 py-2.5 text-right">
+                      <input
+                        className={inputCls + ' w-28 text-right'}
+                        inputMode="decimal"
+                        placeholder={row.phiBanNiemYet != null ? String(row.phiBanNiemYet) : '—'}
+                        value={edited[row.cardTypeId] ?? ''}
+                        onChange={(e) => setEdited((s) => ({ ...s, [row.cardTypeId]: e.target.value }))}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-4 flex justify-end gap-2">
+            <Button variant="neutral" onClick={onClose}>
+              Hủy
+            </Button>
+            <Button variant="confirm" onClick={() => void save()} disabled={busy}>
+              {busy ? 'Đang lưu…' : 'Lưu phí bán'}
+            </Button>
+          </div>
+        </>
+      )}
+    </Modal>
+  );
+}
 
 function TidTimelineModal({ tid, onClose }: { tid: TidDto; onClose: () => void }): JSX.Element {
   const [events, setEvents] = useState<TimelineEventDto[] | null>(null);

@@ -34,7 +34,6 @@ import { SystemConfigPage } from './SystemConfigPage.js';
 import { PosPage } from './PosPage.js';
 import { TidPage } from './TidPage.js';
 import { BankConfigPage } from './BankConfigPage.js';
-import { ReceiveAccountPage } from './ReceiveAccountPage.js';
 import { DossierPage } from './DossierPage.js';
 import { RevenueDebtPage } from './RevenueDebtPage.js';
 import { ApprovalPage } from './ApprovalPage.js';
@@ -56,18 +55,19 @@ interface MenuItem {
 // Khách hàng → Máy POS → TID → Nhật ký → Cài đặt → Backup.
 const MENU: MenuItem[] = [
   { key: 'dashboard', label: 'Trang chủ', icon: <LayoutDashboard className="h-[18px] w-[18px]" />, perms: ['DASHBOARD_VIEW'] },
-  { key: 'staff', label: 'Quản Lý Nhân Sự', icon: <Users className="h-[18px] w-[18px]" />, perms: ['USER_READ', 'ROLE_READ'] },
+  { key: 'staff', label: 'Quản Lý Nhân Sự', icon: <Users className="h-[18px] w-[18px]" />, perms: ['USER_READ', 'ROLE_READ', 'CUSTOMER_VIEW', 'CONFIG_RCV_ACCT_VIEW'] },
   // PHASE K1 — gộp "Cấu hình máy POS" vào "Quản Lý Máy POS" (1 trang nhiều tab). Menu hiện với AI có
   // POS_VIEW HOẶC CONFIG_POS_SUPPLY_VIEW (hasAnyPermission) — không mất quyền của user chỉ-cấu-hình.
   { key: 'pos', label: 'Quản Lý Máy POS', icon: <HardDrive className="h-[18px] w-[18px]" />, perms: ['POS_VIEW', 'CONFIG_POS_SUPPLY_VIEW'] },
   // R3: "Cấu hình ngân hàng" nay gồm tab "Phí mua-cài máy-bán" (gộp Cấu hình % phí POS cũ) + tab "Ngành nghề" → menu hiện với CONFIG_BANK_VIEW HOẶC CONFIG_FEE_VIEW HOẶC CONFIG_INDUSTRY_VIEW.
   { key: 'bankcfg', label: 'Cấu hình ngân hàng', icon: <Landmark className="h-[18px] w-[18px]" />, perms: ['CONFIG_BANK_VIEW', 'CONFIG_FEE_VIEW', 'CONFIG_INDUSTRY_VIEW'] },
   { key: 'revdebt', label: 'Quản Lý Doanh Thu & Công Nợ', icon: <TrendingUp className="h-[18px] w-[18px]" />, perms: ['REVENUE_VIEW', 'DEBT_VIEW'] },
-  { key: 'rcvacct', label: 'Quản Lý Tài Khoản Nhận Tiền', icon: <Wallet className="h-[18px] w-[18px]" />, perms: ['CONFIG_RCV_ACCT_VIEW'] },
+  // R31: "Quản Lý Tài Khoản Nhận Tiền" đã gộp thành tab trong Quản Lý Nhân Sự (cạnh Vai trò & Quyền).
   { key: 'dossier', label: 'Quản Lý Hồ Sơ HKD', icon: <FolderKanban className="h-[18px] w-[18px]" />, perms: ['CONFIG_DOSSIER_VIEW'] },
   { key: 'finance', label: 'Quản Lý Tài Chính', icon: <Wallet className="h-[18px] w-[18px]" />, perms: ['CASHENTRY_VIEW', 'FUND_VIEW', 'CASHCAT_VIEW'] },
   { key: 'tid', label: 'Quản Lý TID', icon: <CreditCard className="h-[18px] w-[18px]" />, perms: ['TID_VIEW', 'CONFIG_TID_VIEW'], badge: 'undeliveredTid' },
-  { key: 'approval', label: 'Duyệt Hủy Bill', icon: <ClipboardCheck className="h-[18px] w-[18px]" />, perms: ['BILL_CANCEL_APPROVE'] },
+  // R34: "Duyệt Hủy" gộp yêu cầu hủy bill + hủy dữ liệu (TID/POS/Khách/Nhân sự). Hiện với ai có bất kỳ quyền duyệt.
+  { key: 'approval', label: 'Duyệt Hủy', icon: <ClipboardCheck className="h-[18px] w-[18px]" />, perms: ['BILL_CANCEL_APPROVE', 'TID_CANCEL_APPROVE', 'POS_CANCEL_APPROVE', 'CUSTOMER_CANCEL_APPROVE', 'USER_CANCEL_APPROVE'] },
   { key: 'system', label: 'Quản Lý Cấu Hình Hệ Thống', icon: <Settings className="h-[18px] w-[18px]" />, perms: ['AUDIT_LOG_VIEW', 'SYSTEM_SETTING_VIEW', 'BACKUP_CREATE', 'BACKUP_RESTORE', 'STORAGE_VIEW', 'TRASH_VIEW'] }
 ];
 
@@ -277,7 +277,6 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
           {activeItem?.key === 'tid' && <TidPage user={user} />}
           {activeItem?.key === 'staff' && <StaffManagementPage user={user} />}
           {activeItem?.key === 'bankcfg' && <BankConfigPage user={user} />}
-          {activeItem?.key === 'rcvacct' && <ReceiveAccountPage user={user} />}
           {activeItem?.key === 'dossier' && <DossierPage user={user} />}
           {activeItem?.key === 'finance' && <FinancePage user={user} />}
           {activeItem?.key === 'revdebt' && <RevenueDebtPage user={user} />}

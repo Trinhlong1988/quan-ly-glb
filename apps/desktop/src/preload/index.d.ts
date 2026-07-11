@@ -199,6 +199,27 @@ export interface TidDto {
 export interface UndeliveredTidDto extends TidDto {
   agingDays: number;
 }
+// R30 — phí bán thực tế theo TID × loại thẻ (set khi giao máy; niêm yết để đối chiếu).
+export interface TidSellFeeRowDto {
+  cardTypeId: number;
+  cardTypeCode: string | null;
+  cardTypeName: string;
+  phiBanNiemYet: number | null; // % niêm yết (FeeRate hiệu lực hôm nay)
+  phiCaiMayNiemYet: number | null; // % phí cài máy niêm yết (tham chiếu)
+  phiBanThucTe: number | null; // % override, null = dùng niêm yết
+}
+export interface TidSellFeeListDto {
+  tidId: number;
+  tid: string;
+  bankId: number | null;
+  bankCode: string | null;
+  partnerId: number | null;
+  rows: TidSellFeeRowDto[];
+}
+export interface SetTidSellFeesInput {
+  tidId: number;
+  entries: { cardTypeId: number; phiBan: number | null }[];
+}
 export interface TidRefs {
   dossiers: { id: number; hkdName: string; ownerName: string | null }[];
   partners: { id: number; code: string; name: string }[];
@@ -493,6 +514,21 @@ export interface CancelRequestDto {
   transactionId: number;
   billCode: string | null;
   amount: number;
+  reason: string;
+  status: string;
+  requestedBy: number;
+  requestedByName: string | null;
+  requestedAt: string;
+  canApprove: boolean;
+}
+
+/** R34 — 1 yêu cầu hủy (xóa) TID/POS/Khách/Nhân sự đang chờ duyệt (trung tâm Duyệt Hủy gộp). */
+export interface EntityCancelRequestDto {
+  id: number;
+  entityType: string; // 'Tid' | 'PosDevice' | 'Customer' | 'User'
+  entityTypeLabel: string; // 'TID' | 'Máy POS' | 'Khách hàng' | 'Nhân sự'
+  entityId: number;
+  entityLabel: string | null;
   reason: string;
   status: string;
   requestedBy: number;
@@ -1189,6 +1225,8 @@ export interface GlbApi {
   tidReplace(tid: string, input: ReplaceTidInput): Promise<MutationOutcome>;
   tidRecall(tid: string, input: RecallTidInput): Promise<MutationOutcome>;
   tidMarkDelivered(tid: string, input: MarkDeliveredInput): Promise<MutationOutcome>;
+  tidSellFeeList(tidId: number): Promise<{ ok: boolean; data?: TidSellFeeListDto; error?: string; message?: string }>;
+  tidSellFeeSet(input: SetTidSellFeesInput): Promise<MutationOutcome>;
 
   notifyUndeliveredSummary(): Promise<{ ok: boolean; data?: UndeliveredSummary; error?: string; message?: string }>;
   notifyPushUndelivered(): Promise<{ ok: boolean; stub: true; message?: string; error?: string }>;
@@ -1356,6 +1394,12 @@ export interface GlbApi {
   cancelReject(requestId: number, note: string): Promise<MutationOutcome>;
   cancelApproveBulk(requestIds: number[], note?: string): Promise<BulkSkipOutcome>;
   cancelRejectBulk(requestIds: number[], note: string): Promise<BulkSkipOutcome>;
+
+  // ── R34 Duyệt hủy (xóa qua duyệt) TID/POS/Khách/Nhân sự ──
+  entityCancelRequest(entityType: string, entityId: number, reason: string): Promise<MutationOutcome>;
+  entityCancelList(status?: string, entityType?: string): Promise<ListResult<EntityCancelRequestDto>>;
+  entityCancelApprove(entityType: string, requestId: number, password: string, note?: string): Promise<MutationOutcome>;
+  entityCancelReject(entityType: string, requestId: number, note: string): Promise<MutationOutcome>;
 
   // Bảo trì & Bộ nhớ (Nhóm E — Storage-Guard)
   storageStatus(): Promise<{ ok: boolean; data?: StorageStatus; error?: string; message?: string }>;

@@ -640,6 +640,28 @@ model FeeRate {
   @@map("fee_rates")
 }
 
+// R30 (Mr.Long 11/7) — Phí BÁN THỰC TẾ theo từng TID × Loại thẻ (tùy biến theo khách khi GIAO máy).
+// Biểu phí FeeRate (Đối tác × Loại thẻ) chỉ là phí NIÊM YẾT chung; phí bán thật thỏa thuận riêng cho
+// mỗi TID/khách/thẻ, nhập lúc giao máy. `phiBan` Int = %×1000 (như FeeRate). resolveFeeForTxn ưu tiên
+// override này thay cho FeeRate.phiBan khi tính CL_KH (phí cài máy vẫn lấy từ kỳ FeeRate hiệu lực).
+// KHÔNG @@unique DB (có deletedAt — bài học B05); "1 phí / 1 (tid, thẻ) còn sống" enforce ở service (upsert).
+model TidSellFee {
+  id         Int       @id @default(autoincrement())
+  tidId      Int       @map("tid_id")
+  cardTypeId Int       @map("card_type_id")
+  phiBan     Int       @map("phi_ban") // phí BÁN thực tế, ×1000
+  createdBy  Int?      @map("created_by")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedBy  Int?      @map("updated_by")
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt  DateTime? @map("deleted_at") @db.Timestamptz(3)
+  deletedBy  Int?      @map("deleted_by")
+
+  @@index([tidId])
+  @@index([cardTypeId])
+  @@map("tid_sell_fees")
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // G-CFG.4 — Tài khoản nhận tiền – ủy quyền (§8): nguồn TK (8a) + TK (8b)
 // Ảnh CCCD lưu ngoài DB (docs/FILE_UPLOAD_CONVENTION.md): DB giữ path + tên gốc + checksum.

@@ -89,6 +89,8 @@ const api = {
   tidReplace: (tid: string, input: unknown) => ipcRenderer.invoke('tid:replace', { tid, input }),
   tidRecall: (tid: string, input: unknown) => ipcRenderer.invoke('tid:recall', { tid, input }),
   tidMarkDelivered: (tid: string, input: unknown) => ipcRenderer.invoke('tid:markDelivered', { tid, input }),
+  tidSellFeeList: (tidId: number) => ipcRenderer.invoke('tid:sellFeeList', tidId),
+  tidSellFeeSet: (input: unknown) => ipcRenderer.invoke('tid:sellFeeSet', input),
 
   // Notifications (undelivered TID)
   notifyUndeliveredSummary: () => ipcRenderer.invoke('notify:undeliveredSummary'),
@@ -255,6 +257,11 @@ const api = {
   cancelReject: (requestId: number, note: string) => ipcRenderer.invoke('approval:reject', { requestId, note }),
   cancelApproveBulk: (requestIds: number[], note?: string) => ipcRenderer.invoke('approval:approveBulk', { requestIds, note }),
   cancelRejectBulk: (requestIds: number[], note: string) => ipcRenderer.invoke('approval:rejectBulk', { requestIds, note }),
+  // R34 — Duyệt hủy (xóa qua duyệt) TID/POS/Khách/Nhân sự.
+  entityCancelRequest: (entityType: string, entityId: number, reason: string) => ipcRenderer.invoke('entityCancel:request', { entityType, entityId, reason }),
+  entityCancelList: (status?: string, entityType?: string) => ipcRenderer.invoke('entityCancel:list', { status, entityType }),
+  entityCancelApprove: (entityType: string, requestId: number, password: string, note?: string) => ipcRenderer.invoke('entityCancel:approve', { entityType, requestId, password, note }),
+  entityCancelReject: (entityType: string, requestId: number, note: string) => ipcRenderer.invoke('entityCancel:reject', { entityType, requestId, note }),
 
   // Bảo trì & Bộ nhớ (Nhóm E — Storage-Guard)
   storageStatus: () => ipcRenderer.invoke('storage:status'),

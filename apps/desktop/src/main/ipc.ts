@@ -18,6 +18,7 @@ import * as feeCfgSvc from './fee-config-service.js';
 import * as rcvAcctSvc from './receive-account-service.js';
 import * as dossierSvc from './dossier-service.js';
 import * as tidCfgSvc from './tid-config-service.js';
+import * as tidSellFeeSvc from './tid-sell-fee-service.js';
 import * as industryCfgSvc from './industry-service.js';
 import * as cashCatSvc from './cash-category-service.js';
 import * as fundSvc from './fund-service.js';
@@ -29,6 +30,7 @@ import * as msgSvc from './message-service.js';
 import * as dashboardSvc from './dashboard-service.js';
 import * as txnSvc from './transaction-service.js';
 import * as approvalSvc from './approval-service.js';
+import * as entityCancelSvc from './entity-cancel-service.js';
 import * as storageSvc from './storage-service.js';
 import * as healthSvc from './health-scan.js';
 import { getRemembered, saveRemembered, clearRemembered } from './remember.js';
@@ -167,6 +169,9 @@ export function registerIpc(): void {
   ipcMain.handle('tid:replace', async (_e, args: { tid: string; input: tidSvc.ReplaceTidInput }) => tidSvc.replaceTid(args.tid, args.input));
   ipcMain.handle('tid:recall', async (_e, args: { tid: string; input: tidSvc.RecallTidInput }) => tidSvc.recallTid(args.tid, args.input));
   ipcMain.handle('tid:markDelivered', async (_e, args: { tid: string; input: tidSvc.MarkDeliveredInput }) => tidSvc.markTidDelivered(args.tid, args.input));
+  // R30 — phí bán thực tế theo TID × loại thẻ (set khi giao máy, hiện phí niêm yết để đối chiếu).
+  ipcMain.handle('tid:sellFeeList', async (_e, tidId: number) => tidSellFeeSvc.listTidSellFees(tidId));
+  ipcMain.handle('tid:sellFeeSet', async (_e, input: tidSellFeeSvc.SetTidSellFeesInput) => tidSellFeeSvc.setTidSellFees(input));
 
   // ---- Dashboard (Nhóm B — KPI realtime + tăng trưởng) ------------------
   ipcMain.handle('dashboard:stats', async () => dashboardSvc.getStats());
@@ -348,6 +353,11 @@ export function registerIpc(): void {
   ipcMain.handle('approval:reject', async (_e, args: { requestId: number; note: string }) => approvalSvc.rejectCancelBill(args.requestId, args.note));
   ipcMain.handle('approval:approveBulk', async (_e, args: { requestIds: number[]; note?: string }) => approvalSvc.approveCancelBills(args.requestIds, args.note));
   ipcMain.handle('approval:rejectBulk', async (_e, args: { requestIds: number[]; note: string }) => approvalSvc.rejectCancelBills(args.requestIds, args.note));
+  // R34 — Duyệt hủy (xóa qua duyệt) cho TID / POS / Khách hàng / Nhân sự (engine generic riêng).
+  ipcMain.handle('entityCancel:request', async (_e, a: { entityType: string; entityId: number; reason: string }) => entityCancelSvc.requestEntityCancel(a.entityType, a.entityId, a.reason));
+  ipcMain.handle('entityCancel:list', async (_e, a?: { status?: string; entityType?: string }) => entityCancelSvc.listEntityCancelRequests(a?.status, a?.entityType));
+  ipcMain.handle('entityCancel:approve', async (_e, a: { entityType: string; requestId: number; password: string; note?: string }) => entityCancelSvc.approveEntityCancel(a.entityType, a.requestId, a.password, a.note));
+  ipcMain.handle('entityCancel:reject', async (_e, a: { entityType: string; requestId: number; note: string }) => entityCancelSvc.rejectEntityCancel(a.entityType, a.requestId, a.note));
 
   // ── Nhóm E — Bảo trì & Bộ nhớ (Storage-Guard) ──
   ipcMain.handle('storage:status', async () => storageSvc.getStorageStatus());

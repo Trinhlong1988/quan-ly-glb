@@ -5,7 +5,7 @@ import { hasPermission } from '@glb/shared';
 import type { CustomerDto } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
 import { Modal } from '../components/Modal.js';
-import { ConfirmDialog } from '../components/ConfirmDialog.js';
+import { RequestCancelModal, type RequestCancelTarget } from '../components/RequestCancelModal.js';
 import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
 import { StatBar } from '../components/StatBar.js';
@@ -30,12 +30,11 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
   const [toDate, setToDate] = useState('');
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<CustomerDto | null>(null);
-  const [confirmDel, setConfirmDel] = useState<CustomerDto | null>(null);
-  const [delLinks, setDelLinks] = useState<{ label: string; count: number }[]>([]);
+  const [cancelTarget, setCancelTarget] = useState<RequestCancelTarget | null>(null);
 
   const canCreate = hasPermission(user, 'CUSTOMER_CREATE');
   const canUpdate = hasPermission(user, 'CUSTOMER_UPDATE');
-  const canDelete = hasPermission(user, 'CUSTOMER_DELETE');
+  const canCancelReq = hasPermission(user, 'CUSTOMER_CANCEL_REQUEST');
 
   async function reload(): Promise<void> {
     setLoading(true);
@@ -64,14 +63,6 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
     setFromDate('');
     setToDate('');
     setTimeout(reload, 0);
-  }
-
-  async function doDelete(c: CustomerDto, password?: string): Promise<void> {
-    const res = await window.api.customerDelete(c.id, password ?? '');
-    if (res.ok) toast.success(`Đã xóa khách hàng ${c.display}`);
-    else toast.alert(res.message ?? 'Không thể xóa khách hàng', 'Xóa thất bại');
-    setConfirmDel(null);
-    await reload();
   }
 
   return (
@@ -183,15 +174,18 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
                           <Pencil className="h-4 w-4" />
                         </IconBtn>
                       )}
-                      {canDelete && (
+                      {canCancelReq && (
                         <IconBtn
-                          title="Xóa"
+                          title="Yêu cầu hủy"
                           variant="danger"
-                          onClick={async () => {
-                            const lk = await window.api.trashLinkSummary('Customer', c.id);
-                            setDelLinks(lk.ok && lk.data ? lk.data : []);
-                            setConfirmDel(c);
-                          }}
+                          onClick={() =>
+                            setCancelTarget({
+                              entityType: 'Customer',
+                              entityId: c.id,
+                              entityLabel: `${c.code} · ${c.fullName}`,
+                              typeLabel: 'khách hàng'
+                            })
+                          }
                         >
                           <Trash2 className="h-4 w-4" />
                         </IconBtn>
@@ -219,25 +213,14 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
         />
       )}
 
-      {confirmDel && (
-        <ConfirmDialog
-          title="Xóa khách hàng"
-          message={
-            `Khách hàng "${confirmDel.display}" sẽ được chuyển vào Thùng rác (có thể phục hồi).` +
-            (delLinks.length
-              ? `\n\n⚠️ Đang có dữ liệu liên kết: ${delLinks.map((l) => `${l.label} (${l.count})`).join(', ')}. ` +
-                `Các dữ liệu này KHÔNG bị mất — vẫn giữ nguyên.`
-              : '') +
-            `\n\nNhập lại mật khẩu để xác nhận.`
-          }
-          confirmLabel="Xóa"
-          danger
-          requirePassword
-          onCancel={() => {
-            setConfirmDel(null);
-            setDelLinks([]);
+      {cancelTarget && (
+        <RequestCancelModal
+          target={cancelTarget}
+          onClose={() => setCancelTarget(null)}
+          onDone={() => {
+            setCancelTarget(null);
+            void reload();
           }}
-          onConfirm={(pwd) => doDelete(confirmDel, pwd)}
         />
       )}
     </div>

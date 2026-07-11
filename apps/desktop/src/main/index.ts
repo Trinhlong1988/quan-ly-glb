@@ -324,6 +324,18 @@ app.whenReady().then(async () => {
     app.exit(code);
     return;
   }
+  if (process.env['GLB_SELFTEST'] === '33') {
+    const { runTidSellFeeSelfTest } = await import('./selftest-tidsellfee.js');
+    const code = await runTidSellFeeSelfTest();
+    app.exit(code);
+    return;
+  }
+  if (process.env['GLB_SELFTEST'] === '34') {
+    const { runEntityCancelSelfTest } = await import('./selftest-entity-cancel.js');
+    const code = await runEntityCancelSelfTest();
+    app.exit(code);
+    return;
+  }
 
   await createWindow();
   startHousekeeping();

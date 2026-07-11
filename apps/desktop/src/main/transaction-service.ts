@@ -180,11 +180,15 @@ async function resolveFeeForTxn(
       error: 'NO_FEE_RATE',
       message: 'Chưa có biểu phí hiệu lực tại ngày giao dịch. Hãy cấu hình biểu phí có ngày hiệu lực ≤ ngày GD.'
     };
+  // R30: phí bán THỰC TẾ theo TID × thẻ (thỏa thuận khi giao) ưu tiên hơn phí bán NIÊM YẾT (FeeRate.phiBan).
+  // Phí cài máy vẫn lấy từ kỳ FeeRate hiệu lực → CL_KH = (phí bán thực tế nếu có, else niêm yết) − phí cài máy.
+  const override = await db.tidSellFee.findFirst({ where: { tidId: tidRow.id, cardTypeId, deletedAt: null } });
+  const phiBan = override ? override.phiBan : rate.phiBan;
   return {
     ok: true,
     fee: {
       partnerMarginMilli: rate.phiMua - rate.phiCaiMay, // CL_NCC
-      sellMarginMilli: rate.phiBan - rate.phiCaiMay, // CL_KH
+      sellMarginMilli: phiBan - rate.phiCaiMay, // CL_KH (ưu tiên phí bán thực tế theo TID)
       bankId: tidRow.bankId,
       partnerId: tidRow.partnerId
     }

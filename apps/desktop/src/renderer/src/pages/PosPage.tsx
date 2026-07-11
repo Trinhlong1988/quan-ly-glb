@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Loader2, HardDrive, History, Wrench, Download, List, PackagePlus, Building2, Cpu, Tag } from 'lucide-react';
+import { Loader2, HardDrive, History, Wrench, Download, List, PackagePlus, Building2, Cpu, Tag, Trash2 } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate, fmtTimeSec } from '@glb/shared';
 import type { PosDto, TimelineEventDto, CustomerDto, LiteRef } from '../../../preload/index.d';
@@ -7,6 +7,7 @@ import { useToast } from '../lib/toast.js';
 import { Modal } from '../components/Modal.js';
 import { Button } from '../components/Button.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
+import { RequestCancelModal, type RequestCancelTarget } from '../components/RequestCancelModal.js';
 import { StatusBadge, useStatusOptions, toneCls } from '../components/StatusBadge.js';
 import { StatBar } from '../components/StatBar.js';
 import { Field, inputCls } from '../components/Field.js';
@@ -78,8 +79,10 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
   const [toDate, setToDate] = useState('');
   const [timelineOf, setTimelineOf] = useState<PosDto | null>(null);
   const [actionOf, setActionOf] = useState<{ device: PosDto; event: string } | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<RequestCancelTarget | null>(null);
 
   const canManage = hasPermission(user, 'POS_MANAGE');
+  const canCancelReq = hasPermission(user, 'POS_CANCEL_REQUEST');
   // R14 — danh mục trạng thái máy POS (entity POS_DEVICE) từ catalog tùy biến.
   const { options: posOptions, byCode: posByCode } = useStatusOptions('POS_DEVICE');
   const posStatusLabel = (code: string): string => posByCode.get(code)?.label ?? code;
@@ -239,6 +242,15 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
                           ))}
                         </select>
                       )}
+                      {canCancelReq && (
+                        <button
+                          onClick={() => setCancelTarget({ entityType: 'PosDevice', entityId: d.id, entityLabel: d.serial, typeLabel: 'máy POS' })}
+                          title="Yêu cầu hủy"
+                          className="flex items-center gap-1 rounded-md border border-danger/30 bg-danger/5 px-2 py-1 text-xs font-semibold text-danger hover:brightness-110"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" /> Yêu cầu hủy
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -256,6 +268,16 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
           onDone={async () => {
             setActionOf(null);
             await reload();
+          }}
+        />
+      )}
+      {cancelTarget && (
+        <RequestCancelModal
+          target={cancelTarget}
+          onClose={() => setCancelTarget(null)}
+          onDone={() => {
+            setCancelTarget(null);
+            void reload();
           }}
         />
       )}

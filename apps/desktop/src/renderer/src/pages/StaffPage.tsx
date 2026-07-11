@@ -7,13 +7,13 @@ import type { UserDto, RoleDto } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
 import { Modal } from '../components/Modal.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
+import { RequestCancelModal, type RequestCancelTarget } from '../components/RequestCancelModal.js';
 import { StatusPill, statusLabel, statusTone } from '../components/StatusPill.js';
 import { StatBar } from '../components/StatBar.js';
 import { RoleBadge } from '../components/RoleBadge.js';
 import { Field, inputCls } from '../components/Field.js';
 import { PasswordInput } from '../components/PasswordInput.js';
 import { Button } from '../components/Button.js';
-import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../components/Selection.js';
 import { exportCsv } from '../lib/exportCsv.js';
 
 const STATUSES = ['ACTIVE', 'PENDING', 'LOCKED', 'DISABLED', 'DELETED'];
@@ -28,16 +28,15 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
   const [search, setSearch] = useState('');
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<UserDto | null>(null);
-  const [confirm, setConfirm] = useState<{ kind: 'lock' | 'unlock' | 'delete'; u: UserDto } | null>(null);
-  const [bulkDel, setBulkDel] = useState(false);
+  const [confirm, setConfirm] = useState<{ kind: 'lock' | 'unlock'; u: UserDto } | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<RequestCancelTarget | null>(null);
   const [resetTarget, setResetTarget] = useState<UserDto | null>(null);
-  const sel = useRowSelection();
 
   const canCreate = hasPermission(user, 'USER_CREATE') || hasPermission(user, 'USER_CREATE_LIMITED');
   const canUpdate = hasPermission(user, 'USER_UPDATE');
   const canLock = hasPermission(user, 'USER_LOCK');
   const canUnlock = hasPermission(user, 'USER_UNLOCK');
-  const canDelete = hasPermission(user, 'USER_DELETE');
+  const canCancelReq = hasPermission(user, 'USER_CANCEL_REQUEST');
   const canReset = hasPermission(user, 'USER_RESET_PASSWORD');
 
   async function reload(): Promise<void> {
@@ -45,7 +44,6 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
     const res = await window.api.userList({ roleCode: roleFilter || undefined, status: statusFilter || undefined, search: search || undefined });
     if (res.ok && res.data) setRows(res.data);
     else if (res.message) toast.alert(res.message);
-    sel.clear();
     setLoading(false);
   }
   useEffect(() => {
@@ -65,27 +63,6 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
     setConfirm(null);
     await reload();
   }
-  async function doDelete(u: UserDto, password?: string): Promise<void> {
-    const res = await window.api.userDelete(u.id, password ?? '');
-    if (res.ok) toast.success(`Đã xóa nhân sự ${u.fullName}`);
-    else toast.alert(res.message ?? 'Không thể xóa nhân sự', 'Xóa thất bại');
-    setConfirm(null);
-    await reload();
-  }
-  async function doBulkDelete(password?: string): Promise<void> {
-    const res = await window.api.userDeleteMany([...sel.selected], password ?? '');
-    if (!res.ok) {
-      toast.alert(res.message ?? 'Không thể xóa nhân sự', 'Xóa thất bại');
-    } else if (res.skipped && res.skipped.length > 0) {
-      const detail = res.skipped.map((s) => `#${s.id}: ${s.message ?? s.reason}`).join('\n');
-      toast.alert(`Đã xóa ${res.deleted ?? 0} nhân sự. Bỏ qua ${res.skipped.length}:\n${detail}`, 'Kết quả xóa hàng loạt');
-    } else {
-      toast.success(`Đã xóa ${res.deleted ?? 0} nhân sự`);
-    }
-    setBulkDel(false);
-    await reload();
-  }
-
   function resetFilters(): void {
     setSearch('');
     setRoleFilter('');
@@ -94,8 +71,6 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
   }
 
   const roleOptions = mergeRoles(roles);
-  // ID được phép chọn để xóa: chưa bị xóa (self / Admin-cuối sẽ bị backend bỏ qua kèm lý do).
-  const selectableIds = rows.filter((u) => u.status !== 'DELETED').map((u) => u.id);
 
   return (
     <div>
@@ -166,13 +141,10 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
         </button>
       </div>
 
-      {canDelete && <SelectionBar count={sel.count} entityLabel="nhân sự" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
-
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
-              {canDelete && <SelectAllCell ids={selectableIds} sel={sel} />}
               <th className="px-4 py-3">Mã NV</th>
               <th className="px-4 py-3">Nhân sự</th>
               <th className="px-4 py-3">Tên đăng nhập</th>
@@ -185,14 +157,14 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
           <tbody className="divide-y divide-line">
             {loading && (
               <tr>
-                <td colSpan={canDelete ? 8 : 7} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
                   <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                 </td>
               </tr>
             )}
             {!loading && rows.length === 0 && (
               <tr>
-                <td colSpan={canDelete ? 8 : 7} className="px-4 py-10 text-center text-slate-400">
+                <td colSpan={7} className="px-4 py-10 text-center text-slate-400">
                   <Users className="mx-auto mb-2 h-6 w-6" />
                   Không có nhân sự phù hợp bộ lọc.
                 </td>
@@ -200,8 +172,7 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
             )}
             {!loading &&
               rows.map((u) => (
-                <tr key={u.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(u.id) ? 'bg-brand-tint/40' : '')}>
-                  {canDelete && (u.status !== 'DELETED' ? <SelectCell id={u.id} sel={sel} /> : <td className="px-4 py-3" />)}
+                <tr key={u.id} className="hover:bg-appbg/60">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1.5">
                       <span className="font-mono text-xs font-semibold text-brand">{u.employeeCode ?? '—'}</span>
@@ -255,8 +226,12 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
                           <KeyRound className="h-4 w-4" />
                         </IconBtn>
                       )}
-                      {canDelete && u.status !== 'DELETED' && (
-                        <IconBtn title="Xóa" variant="danger" onClick={() => setConfirm({ kind: 'delete', u })}>
+                      {canCancelReq && u.status !== 'DELETED' && (
+                        <IconBtn
+                          title="Yêu cầu hủy"
+                          variant="danger"
+                          onClick={() => setCancelTarget({ entityType: 'User', entityId: u.id, entityLabel: u.username, typeLabel: 'nhân sự' })}
+                        >
                           <Trash2 className="h-4 w-4" />
                         </IconBtn>
                       )}
@@ -304,26 +279,14 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
           onConfirm={() => doLock(confirm.u, false)}
         />
       )}
-      {confirm?.kind === 'delete' && (
-        <ConfirmDialog
-          title="Xóa nhân sự"
-          message={`Hành động này sẽ xóa mềm tài khoản "${confirm.u.username}". Vui lòng nhập lại mật khẩu để xác nhận.`}
-          confirmLabel="Xóa"
-          danger
-          requirePassword
-          onCancel={() => setConfirm(null)}
-          onConfirm={(pwd) => doDelete(confirm.u, pwd)}
-        />
-      )}
-      {bulkDel && (
-        <ConfirmDialog
-          title="Xóa nhiều nhân sự"
-          message={`${sel.count} nhân sự đã chọn sẽ bị xóa mềm. Không thể tự xóa chính mình hoặc Admin cuối cùng — các trường hợp này sẽ được bỏ qua kèm lý do. Nhập lại mật khẩu để xác nhận.`}
-          confirmLabel={`Xóa ${sel.count} nhân sự`}
-          danger
-          requirePassword
-          onCancel={() => setBulkDel(false)}
-          onConfirm={(pwd) => doBulkDelete(pwd)}
+      {cancelTarget && (
+        <RequestCancelModal
+          target={cancelTarget}
+          onClose={() => setCancelTarget(null)}
+          onDone={() => {
+            setCancelTarget(null);
+            void reload();
+          }}
         />
       )}
       {resetTarget && (

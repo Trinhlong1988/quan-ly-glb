@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Check, X, Loader2, ClipboardCheck, Download, RefreshCw } from 'lucide-react';
+import { Check, X, Loader2, ClipboardCheck, Download, RefreshCw, Trash2 } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
-import { fmtDate } from '@glb/shared';
-import type { CancelRequestDto } from '../../../preload/index.d';
+import { fmtDate, hasPermission } from '@glb/shared';
+import type { CancelRequestDto, EntityCancelRequestDto } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
 import { Modal } from '../components/Modal.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
@@ -12,6 +12,8 @@ import { StatBar } from '../components/StatBar.js';
 import { statusTone } from '../components/StatusPill.js';
 import { useRowSelection, SelectAllCell, SelectCell } from '../components/Selection.js';
 import { exportCsv } from '../lib/exportCsv.js';
+
+const ENTITY_APPROVE_PERMS = ['TID_CANCEL_APPROVE', 'POS_CANCEL_APPROVE', 'CUSTOMER_CANCEL_APPROVE', 'USER_CANCEL_APPROVE'];
 
 /** VND, nhóm 3 số bằng dấu chấm (KHÔNG toLocaleString — R_UI QA gate). */
 function money(n: number): string {
@@ -25,6 +27,8 @@ type Dialog =
   | { kind: 'reject'; row: CancelRequestDto }
   | { kind: 'approveBulk' }
   | { kind: 'rejectBulk' }
+  | { kind: 'approveEntity'; row: EntityCancelRequestDto }
+  | { kind: 'rejectEntity'; row: EntityCancelRequestDto }
   | null;
 
 /**
@@ -34,8 +38,11 @@ type Dialog =
  */
 export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
   const toast = useToast();
+  const canBill = hasPermission(user, 'BILL_CANCEL_APPROVE');
+  const canEntity = ENTITY_APPROVE_PERMS.some((p) => hasPermission(user, p));
   const [rows, setRows] = useState<CancelRequestDto[]>([]);
   const [stats, setStats] = useState({ total: 0, pending: 0, approved: 0, rejected: 0 });
+  const [entityRows, setEntityRows] = useState<EntityCancelRequestDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialog, setDialog] = useState<Dialog>(null);
   const sel = useRowSelection();
@@ -44,17 +51,25 @@ export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
     setLoading(true);
     // Bảng chỉ hiển thị PENDING mà bạn được duyệt; nhưng bộ đếm là TOÀN HỆ THỐNG theo trạng thái.
     // Đếm CLIENT từ 3 danh sách đầy đủ (cancelRequestList trả full, KHÔNG phân trang) — không cần API mới.
-    const [pend, appr, rej] = await Promise.all([
-      window.api.cancelRequestList('PENDING'),
-      window.api.cancelRequestList('APPROVED'),
-      window.api.cancelRequestList('REJECTED')
-    ]);
-    if (pend.ok && pend.data) setRows(pend.data.filter((r) => r.canApprove));
-    else if (pend.message) toast.alert(pend.message);
-    const pc = pend.ok && pend.data ? pend.data.length : 0;
-    const ac = appr.ok && appr.data ? appr.data.length : 0;
-    const rc = rej.ok && rej.data ? rej.data.length : 0;
-    setStats({ total: pc + ac + rc, pending: pc, approved: ac, rejected: rc });
+    if (canBill) {
+      const [pend, appr, rej] = await Promise.all([
+        window.api.cancelRequestList('PENDING'),
+        window.api.cancelRequestList('APPROVED'),
+        window.api.cancelRequestList('REJECTED')
+      ]);
+      if (pend.ok && pend.data) setRows(pend.data.filter((r) => r.canApprove));
+      else if (pend.message) toast.alert(pend.message);
+      const pc = pend.ok && pend.data ? pend.data.length : 0;
+      const ac = appr.ok && appr.data ? appr.data.length : 0;
+      const rc = rej.ok && rej.data ? rej.data.length : 0;
+      setStats({ total: pc + ac + rc, pending: pc, approved: ac, rejected: rc });
+    }
+    // R34 — yêu cầu hủy dữ liệu (TID/POS/Khách/Nhân sự) đang chờ bạn duyệt.
+    if (canEntity) {
+      const ent = await window.api.entityCancelList('PENDING');
+      if (ent.ok && ent.data) setEntityRows(ent.data.filter((r) => r.canApprove));
+      else if (ent.message) toast.alert(ent.message);
+    }
     sel.clear();
     setLoading(false);
   }
@@ -101,33 +116,54 @@ export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
     setDialog(null);
     await reload();
   }
+  // R34 — duyệt / từ chối yêu cầu hủy dữ liệu (TID/POS/Khách/Nhân sự). Duyệt BẮT BUỘC nhập mật khẩu (Q2).
+  async function doApproveEntity(row: EntityCancelRequestDto, password: string, note?: string): Promise<void> {
+    const res = await window.api.entityCancelApprove(row.entityType, row.id, password, note);
+    if (res.ok) toast.success(`Đã duyệt hủy ${row.entityTypeLabel} ${row.entityLabel ?? ''}.`);
+    else toast.alert(res.message ?? 'Không duyệt được yêu cầu.', 'Duyệt thất bại');
+    setDialog(null);
+    await reload();
+  }
+  async function doRejectEntity(row: EntityCancelRequestDto, note: string): Promise<void> {
+    const res = await window.api.entityCancelReject(row.entityType, row.id, note);
+    if (res.ok) toast.success(`Đã từ chối yêu cầu hủy ${row.entityTypeLabel} ${row.entityLabel ?? ''}.`);
+    else toast.alert(res.message ?? 'Không từ chối được yêu cầu.', 'Từ chối thất bại');
+    setDialog(null);
+    await reload();
+  }
 
   return (
     <div>
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-slate-800">Duyệt hủy bill</h2>
-          <p className="text-sm text-slate-500">Các yêu cầu hủy bill đang chờ bạn duyệt — người tạo yêu cầu khác người duyệt (phân vai theo cấp).</p>
+          <h2 className="text-lg font-semibold text-slate-800">Duyệt Hủy</h2>
+          <p className="text-sm text-slate-500">Yêu cầu hủy (bill, TID, máy POS, khách hàng, nhân sự) đang chờ bạn duyệt — người tạo yêu cầu khác người duyệt (phân vai theo cấp).</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={reload} title="Tải lại dữ liệu mới nhất" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200">
-            <RefreshCw className="h-4 w-4" /> Làm mới
-          </button>
-          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('duyet_huy_bill', ['Mã bill', 'Số tiền', 'Lý do hủy', 'Người tạo yêu cầu', 'Thời gian'], rows.map((r) => [r.billCode ?? `#${r.transactionId}`, r.amount, r.reason, r.requestedByName ?? `#${r.requestedBy}`, fmtDate(r.requestedAt)]))}>
-            Xuất Excel
-          </Button>
+          <Button variant="soft" icon={<RefreshCw className="h-4 w-4" />} onClick={reload}>Làm mới</Button>
+          {canBill && (
+            <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('duyet_huy_bill', ['Mã bill', 'Số tiền', 'Lý do hủy', 'Người tạo yêu cầu', 'Thời gian'], rows.map((r) => [r.billCode ?? `#${r.transactionId}`, r.amount, r.reason, r.requestedByName ?? `#${r.requestedBy}`, fmtDate(r.requestedAt)]))}>
+              Xuất Excel
+            </Button>
+          )}
         </div>
       </div>
 
+      {canBill && (
       <StatBar
         items={[
-          { label: 'Tổng yêu cầu', value: stats.total, tone: 'bg-brand-tint text-brand' },
+          { label: 'Tổng yêu cầu bill', value: stats.total, tone: 'bg-brand-tint text-brand' },
           { label: 'Chờ duyệt', value: stats.pending, tone: statusTone('PENDING') },
           { label: 'Đã duyệt', value: stats.approved, tone: statusTone('ACTIVE') },
           { label: 'Từ chối', value: stats.rejected, tone: statusTone('LOCKED') }
         ]}
       />
+      )}
 
+      {canBill && <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Yêu cầu hủy bill</div>}
+
+      {canBill && (
+      <>
       {/* Thanh thao tác hàng loạt */}
       {sel.count > 0 && (
         <div className="mb-3 flex items-center gap-3 rounded-lg border border-brand/30 bg-brand-tint px-4 py-2.5">
@@ -176,6 +212,50 @@ export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
           </tbody>
         </table>
       </div>
+      </>
+      )}
+
+      {/* R34 — Yêu cầu hủy dữ liệu (TID / POS / Khách hàng / Nhân sự) */}
+      {canEntity && (
+        <div className={canBill ? 'mt-6' : ''}>
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Yêu cầu hủy dữ liệu (TID · Máy POS · Khách hàng · Nhân sự)</div>
+          <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-3 py-3">Loại</th>
+                  <th className="px-3 py-3">Đối tượng</th>
+                  <th className="px-3 py-3">Lý do hủy</th>
+                  <th className="px-3 py-3">Người tạo yêu cầu</th>
+                  <th className="px-3 py-3">Thời gian</th>
+                  <th className="px-3 py-3 text-right">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {loading && <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+                {!loading && entityRows.length === 0 && (
+                  <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400"><Trash2 className="mx-auto mb-2 h-6 w-6" /> Không có yêu cầu hủy dữ liệu nào chờ bạn duyệt.</td></tr>
+                )}
+                {!loading && entityRows.map((r) => (
+                  <tr key={`${r.entityType}-${r.id}`} className="hover:bg-appbg/60">
+                    <td className="px-3 py-3"><span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">{r.entityTypeLabel}</span></td>
+                    <td className="px-3 py-3 text-slate-700">{r.entityLabel ?? `#${r.entityId}`}</td>
+                    <td className="px-3 py-3 text-slate-600">{r.reason}</td>
+                    <td className="px-3 py-3 text-slate-600">{r.requestedByName ?? `#${r.requestedBy}`}</td>
+                    <td className="px-3 py-3 text-xs text-slate-500">{fmtDate(r.requestedAt)}</td>
+                    <td className="px-3 py-3">
+                      <div className="flex justify-end gap-1">
+                        <button title="Duyệt hủy" onClick={() => setDialog({ kind: 'approveEntity', row: r })} className="rounded-md p-1.5 text-success transition hover:bg-success/10"><Check className="h-4 w-4" /></button>
+                        <button title="Từ chối" onClick={() => setDialog({ kind: 'rejectEntity', row: r })} className="rounded-md p-1.5 text-danger transition hover:bg-danger/10"><X className="h-4 w-4" /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {dialog?.kind === 'approve' && (
         <ConfirmDialog
@@ -210,7 +290,56 @@ export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
           onSubmit={(note) => doRejectBulk(note)}
         />
       )}
+      {dialog?.kind === 'approveEntity' && (
+        <ApprovePasswordModal
+          title={`Duyệt hủy ${dialog.row.entityTypeLabel}`}
+          message={`Duyệt hủy ${dialog.row.entityTypeLabel} "${dialog.row.entityLabel ?? '#' + dialog.row.entityId}"? Dữ liệu sẽ bị XÓA khỏi hệ thống (xóa mềm, có thể phục hồi ở Thùng rác). Nhập mật khẩu của bạn để xác nhận.`}
+          onClose={() => setDialog(null)}
+          onSubmit={(password, note) => doApproveEntity(dialog.row, password, note)}
+        />
+      )}
+      {dialog?.kind === 'rejectEntity' && (
+        <NoteModal
+          title={`Từ chối yêu cầu hủy ${dialog.row.entityTypeLabel} ${dialog.row.entityLabel ?? ''}`}
+          onClose={() => setDialog(null)}
+          onSubmit={(note) => doRejectEntity(dialog.row, note)}
+        />
+      )}
     </div>
+  );
+}
+
+/** R34 — Ô duyệt hủy dữ liệu: BẮT BUỘC nhập mật khẩu người duyệt (Q2) + ghi chú tùy chọn. */
+function ApprovePasswordModal({ title, message, onClose, onSubmit }: { title: string; message: string; onClose: () => void; onSubmit: (password: string, note?: string) => Promise<void> }): JSX.Element {
+  const toast = useToast();
+  const [password, setPassword] = useState('');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  async function submit(): Promise<void> {
+    if (!password) return toast.alert('Vui lòng nhập mật khẩu để xác nhận.', 'Thiếu mật khẩu');
+    setBusy(true);
+    try {
+      await onSubmit(password, note.trim() || undefined);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Modal title={title} onClose={onClose} width="max-w-md">
+      <p className="mb-3 text-sm text-slate-600">{message}</p>
+      <Field label="Mật khẩu của bạn" required>
+        <input type="password" className={inputCls} value={password} autoFocus onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
+      </Field>
+      <div className="mt-3">
+        <Field label="Ghi chú (tùy chọn)">
+          <input className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ghi chú khi duyệt…" />
+        </Field>
+      </div>
+      <div className="mt-6 flex justify-end gap-2">
+        <Button variant="neutral" onClick={onClose}>Hủy</Button>
+        <Button variant="confirm" onClick={submit} disabled={busy} icon={busy ? <Loader2 className="h-4 w-4 animate-spin" /> : undefined}>Duyệt hủy</Button>
+      </div>
+    </Modal>
   );
 }
 

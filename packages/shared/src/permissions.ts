@@ -97,6 +97,21 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: 'BILL_CANCEL_REQUEST', name: 'Tạo yêu cầu hủy bill (kèm lý do)', group: 'Doanh thu & Công nợ' },
   { code: 'BILL_CANCEL_APPROVE', name: 'Duyệt / từ chối yêu cầu hủy bill', group: 'Doanh thu & Công nợ' },
   { code: 'BILL_CANCEL_APPROVE_ELEVATED', name: 'Duyệt yêu cầu hủy bill do Quản lý/Admin tạo (cấp Admin)', group: 'Doanh thu & Công nợ' },
+  // ── R34 (Mr.Long 11/7) — Duyệt hủy (XÓA qua duyệt) cho TID / POS / Khách hàng / Nhân sự ──
+  // "Hủy" = xóa mềm khỏi hệ thống, BẮT BUỘC qua duyệt (người yêu cầu ≠ người duyệt). APPROVE gán
+  // ADMIN + MANAGER; ELEVATED (duyệt yêu cầu do Quản lý/Admin tạo) chỉ ADMIN. Mật khẩu nhập lúc DUYỆT.
+  { code: 'TID_CANCEL_REQUEST', name: 'Tạo yêu cầu hủy (xóa) TID', group: 'TID' },
+  { code: 'TID_CANCEL_APPROVE', name: 'Duyệt / từ chối yêu cầu hủy TID', group: 'TID' },
+  { code: 'TID_CANCEL_APPROVE_ELEVATED', name: 'Duyệt yêu cầu hủy TID do Quản lý/Admin tạo (cấp Admin)', group: 'TID' },
+  { code: 'POS_CANCEL_REQUEST', name: 'Tạo yêu cầu hủy (xóa) máy POS', group: 'POS' },
+  { code: 'POS_CANCEL_APPROVE', name: 'Duyệt / từ chối yêu cầu hủy máy POS', group: 'POS' },
+  { code: 'POS_CANCEL_APPROVE_ELEVATED', name: 'Duyệt yêu cầu hủy POS do Quản lý/Admin tạo (cấp Admin)', group: 'POS' },
+  { code: 'CUSTOMER_CANCEL_REQUEST', name: 'Tạo yêu cầu hủy (xóa) khách hàng', group: 'CUSTOMER' },
+  { code: 'CUSTOMER_CANCEL_APPROVE', name: 'Duyệt / từ chối yêu cầu hủy khách hàng', group: 'CUSTOMER' },
+  { code: 'CUSTOMER_CANCEL_APPROVE_ELEVATED', name: 'Duyệt yêu cầu hủy khách hàng do Quản lý/Admin tạo (cấp Admin)', group: 'CUSTOMER' },
+  { code: 'USER_CANCEL_REQUEST', name: 'Tạo yêu cầu hủy (xóa) nhân sự', group: 'USER' },
+  { code: 'USER_CANCEL_APPROVE', name: 'Duyệt / từ chối yêu cầu hủy nhân sự', group: 'USER' },
+  { code: 'USER_CANCEL_APPROVE_ELEVATED', name: 'Duyệt yêu cầu hủy nhân sự do Quản lý/Admin tạo (cấp Admin)', group: 'USER' },
   // ── Nhóm E — Bảo trì & Bộ nhớ (chống tràn, dọn dẹp, backup định kỳ) ──
   { code: 'STORAGE_VIEW', name: 'Xem tình trạng bộ nhớ & bảo trì', group: 'Bảo trì hệ thống' },
   { code: 'STORAGE_CLEANUP', name: 'Dọn dẹp bộ nhớ (lịch sử + thùng rác) & backup thủ công', group: 'Bảo trì hệ thống' }
@@ -179,6 +194,16 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     // P1.2: managers tạo yêu cầu hủy + duyệt hủy bill (KHÔNG có ELEVATED — cấp Admin mới duyệt yêu cầu của Manager/Admin).
     'BILL_CANCEL_REQUEST',
     'BILL_CANCEL_APPROVE',
+    // R34: managers = người duyệt hủy chính (Mr.Long "admin và manager mới có quyền duyệt") + được tạo yêu cầu.
+    // KHÔNG có *_ELEVATED (chỉ Admin duyệt yêu cầu do Quản lý/Admin tạo).
+    'TID_CANCEL_REQUEST',
+    'TID_CANCEL_APPROVE',
+    'POS_CANCEL_REQUEST',
+    'POS_CANCEL_APPROVE',
+    'CUSTOMER_CANCEL_REQUEST',
+    'CUSTOMER_CANCEL_APPROVE',
+    'USER_CANCEL_REQUEST',
+    'USER_CANCEL_APPROVE',
     // Nhóm E: managers xem tình trạng bộ nhớ & dọn dẹp bảo trì.
     'STORAGE_VIEW',
     'STORAGE_CLEANUP'
@@ -189,7 +214,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'FUND_VIEW', 'FUND_CREATE', 'FUND_UPDATE', 'FUND_DELETE', 'CASHENTRY_VIEW', 'CASHENTRY_CREATE', 'CASHENTRY_CANCEL'],
   TECHNICIAN: ['DASHBOARD_VIEW', 'POS_VIEW'],
   SUPPORT: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW'],
-  WAREHOUSE: ['DASHBOARD_VIEW', 'POS_VIEW', 'TID_VIEW', 'CONFIG_POS_SUPPLY_VIEW', 'CONFIG_POS_SUPPLY_MANAGE', 'CONFIG_TID_VIEW', 'CONFIG_TID_MANAGE'],
+  WAREHOUSE: ['DASHBOARD_VIEW', 'POS_VIEW', 'TID_VIEW', 'CONFIG_POS_SUPPLY_VIEW', 'CONFIG_POS_SUPPLY_MANAGE', 'CONFIG_TID_VIEW', 'CONFIG_TID_MANAGE',
+    // R34: kho vận hành TID/POS → được TẠO yêu cầu hủy (duyệt vẫn do Admin/Manager).
+    'TID_CANCEL_REQUEST', 'POS_CANCEL_REQUEST'],
   SALES: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW', 'CUSTOMER_CREATE'],
   CUSTOMER: []
 };
