@@ -148,7 +148,7 @@ export function MaintenancePage({ user }: { user: AuthUser }): JSX.Element {
         </div>
         <div className="rounded-xl border border-line bg-white p-4 shadow-sm">
           <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-500"><Database className="h-4 w-4" /> Cơ sở dữ liệu</div>
-          <div className="text-right text-xl font-semibold tabular-nums text-slate-800">{bytes(st.dbBytes)}</div>
+          <div className="text-right text-xl font-semibold tabular-nums whitespace-nowrap text-slate-800">{bytes(st.dbBytes)}</div>
           <div className="mt-1 text-right text-xs text-slate-400">Backup gần nhất: {st.lastBackupAt ? `${fmtDate(st.lastBackupAt)} ${fmtTime(st.lastBackupAt)}` : 'chưa có'}</div>
         </div>
       </div>
@@ -184,11 +184,11 @@ export function MaintenancePage({ user }: { user: AuthUser }): JSX.Element {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className={'flex items-center justify-between rounded-lg border p-3 ' + (optHistory ? 'border-brand bg-brand-tint/30' : 'border-line')}>
             <span className="flex items-center gap-2 text-sm text-slate-700"><ScrollText className="h-4 w-4 text-slate-500" /> Nhật ký cũ hơn {st.cleanable.auditRetentionDays} ngày</span>
-            <span className="flex items-center gap-2"><span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium tabular-nums text-slate-600">{grp(st.cleanable.auditOld)} dòng</span><input type="checkbox" checked={optHistory} disabled={!canClean} onChange={(e) => setOptHistory(e.target.checked)} /></span>
+            <span className="flex items-center gap-2"><span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium tabular-nums whitespace-nowrap text-slate-600">{grp(st.cleanable.auditOld)} dòng</span><input type="checkbox" checked={optHistory} disabled={!canClean} onChange={(e) => setOptHistory(e.target.checked)} /></span>
           </label>
           <label className={'flex items-center justify-between rounded-lg border p-3 ' + (optTrash ? 'border-brand bg-brand-tint/30' : 'border-line')}>
             <span className="flex items-center gap-2 text-sm text-slate-700"><Trash2 className="h-4 w-4 text-slate-500" /> Thùng rác cũ hơn {st.cleanable.trashRetentionDays} ngày</span>
-            <span className="flex items-center gap-2"><span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium tabular-nums text-slate-600">{grp(st.cleanable.trashOld)} bản ghi</span><input type="checkbox" checked={optTrash} disabled={!canClean} onChange={(e) => setOptTrash(e.target.checked)} /></span>
+            <span className="flex items-center gap-2"><span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium tabular-nums whitespace-nowrap text-slate-600">{grp(st.cleanable.trashOld)} bản ghi</span><input type="checkbox" checked={optTrash} disabled={!canClean} onChange={(e) => setOptTrash(e.target.checked)} /></span>
           </label>
         </div>
         <div className="mt-3 flex items-center justify-between">
@@ -287,7 +287,7 @@ export function MaintenancePage({ user }: { user: AuthUser }): JSX.Element {
                   <td className="px-4 py-2.5 text-right tabular-nums text-slate-700">{r.errorCount}</td>
                   <td className="px-4 py-2.5 text-right tabular-nums text-slate-700">{r.warnCount}</td>
                   <td className="px-4 py-2.5 text-right tabular-nums text-slate-700">{r.autoFixed}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-slate-500">{r.auditDeleted + r.trashDeleted > 0 ? grp(r.auditDeleted + r.trashDeleted) : '—'}{r.vacuumed ? ' ⚙' : ''}</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums whitespace-nowrap text-slate-500">{r.auditDeleted + r.trashDeleted > 0 ? grp(r.auditDeleted + r.trashDeleted) : '—'}{r.vacuumed ? ' ⚙' : ''}</td>
                   <td className="px-4 py-2.5 text-slate-600">{r.triggeredByName ?? '—'}</td>
                 </tr>
               ))}
@@ -322,7 +322,7 @@ function FindingRow({ f }: { f: HealthFinding }): JSX.Element {
         <div className="flex-1">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-slate-800">{f.title}</span>
-            <span className={'rounded px-1.5 py-0.5 text-xs font-medium tabular-nums ' + tone.badge}>{grp(f.count)}</span>
+            <span className={'rounded px-1.5 py-0.5 text-xs font-medium tabular-nums whitespace-nowrap ' + tone.badge}>{grp(f.count)}</span>
             {f.autoFixable && <span className="rounded bg-brand-tint px-1.5 py-0.5 text-xs text-brand">tự sửa được</span>}
           </div>
           <p className="mt-0.5 text-xs text-slate-500">{f.detail}</p>

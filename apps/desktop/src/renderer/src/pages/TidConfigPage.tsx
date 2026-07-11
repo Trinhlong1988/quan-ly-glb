@@ -226,7 +226,7 @@ function TidTab({ canManage, canCancelReq }: { canManage: boolean; canCancelReq:
             {!loading && rows.length === 0 && <tr><td colSpan={(canManage || canCancelReq) ? 9 : 8} className="px-4 py-10 text-center text-slate-400"><CreditCard className="mx-auto mb-2 h-6 w-6" /> Chưa có TID cấu hình.</td></tr>}
             {!loading && rows.map((t) => (
               <tr key={t.id} className="hover:bg-appbg/60">
-                <td className="px-4 py-3 font-mono text-xs font-medium text-slate-800">{t.tid}</td>
+                <td className="px-4 py-3 font-mono text-xs font-medium text-slate-800 whitespace-nowrap">{t.tid}</td>
                 <td className="px-4 py-3 text-slate-700">{t.hkdName ?? '—'}</td>
                 <td className="px-4 py-3 text-slate-600">{t.bankCode ?? '—'}</td>
                 <td className="px-4 py-3 text-slate-600">{t.partnerName ?? '—'}</td>
@@ -270,7 +270,7 @@ export function FeePreview({ bankId, partnerId }: { bankId: number; partnerId: n
         <tbody className="divide-y divide-line">
           {rows.map((r) => (
             <tr key={r.id}>
-              <td className="px-3 py-1.5 font-medium text-slate-700">{r.cardTypeCode ?? r.cardTypeName}</td>
+              <td className="px-3 py-1.5 font-medium text-slate-700 whitespace-nowrap">{r.cardTypeCode ?? r.cardTypeName}</td>
               <td className="px-3 py-1.5 text-right font-mono">{fmtPct(r.phiMua)}</td>
               <td className="px-3 py-1.5 text-right font-mono">{fmtPct(r.phiCaiMay)}</td>
               <td className="px-3 py-1.5 text-right font-mono">{fmtPct(r.phiBan)}</td>

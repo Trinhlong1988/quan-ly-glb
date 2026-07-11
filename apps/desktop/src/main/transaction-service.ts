@@ -405,10 +405,10 @@ export async function listTransactions(filter: TransactionFilter = {}): Promise<
   });
   const summary: RevenueSummary = {
     count: agg._count,
-    totalAmount: agg._sum.amount ?? 0,
-    totalRevenuePartner: agg._sum.revenuePartner ?? 0,
-    totalRevenueSell: agg._sum.revenueSell ?? 0,
-    totalRevenue: agg._sum.revenueAmount ?? 0
+    totalAmount: Number(agg._sum.amount ?? 0),
+    totalRevenuePartner: Number(agg._sum.revenuePartner ?? 0),
+    totalRevenueSell: Number(agg._sum.revenueSell ?? 0),
+    totalRevenue: Number(agg._sum.revenueAmount ?? 0)
   };
 
   const rows = await db.transaction.findMany({
@@ -450,12 +450,12 @@ export async function listTransactions(filter: TransactionFilter = {}): Promise<
       customerName: r.customerId != null ? custMap.get(r.customerId) ?? null : null,
       cardTypeId: r.cardTypeId,
       cardTypeName: r.cardTypeId != null ? cardMap.get(r.cardTypeId) ?? null : null,
-      amount: r.amount,
+      amount: Number(r.amount),
       partnerMarginPct: milliToPct(r.partnerMarginMilli),
       sellMarginPct: milliToPct(r.sellMarginMilli),
-      revenuePartner: r.revenuePartner,
-      revenueSell: r.revenueSell,
-      revenueAmount: r.revenueAmount,
+      revenuePartner: Number(r.revenuePartner),
+      revenueSell: Number(r.revenueSell),
+      revenueAmount: Number(r.revenueAmount),
       settled: r.settled,
       settledAt: r.settledAt ? r.settledAt.toISOString() : null,
       status: r.status,
@@ -486,7 +486,7 @@ async function settledByTxnSide(db: Db, txnIds: number[]): Promise<Map<string, n
     where: { transactionId: { in: txnIds } },
     _sum: { amount: true }
   });
-  for (const r of rows) paid.set(`${r.transactionId}:${r.side}`, r._sum.amount ?? 0);
+  for (const r of rows) paid.set(`${r.transactionId}:${r.side}`, Number(r._sum.amount ?? 0));
   return paid;
 }
 
@@ -509,8 +509,8 @@ export async function debtSummary(filter: TransactionFilter = {}): Promise<{ ok:
   const paid = await settledByTxnSide(db, txns.map((t) => t.id));
   let debtPartner = 0, debtSell = 0, count = 0;
   for (const t of txns) {
-    const rp = Math.max(0, t.revenuePartner - (paid.get(`${t.id}:PARTNER`) ?? 0));
-    const rs = Math.max(0, t.revenueSell - (paid.get(`${t.id}:SELL`) ?? 0));
+    const rp = Math.max(0, Number(t.revenuePartner) - (paid.get(`${t.id}:PARTNER`) ?? 0));
+    const rs = Math.max(0, Number(t.revenueSell) - (paid.get(`${t.id}:SELL`) ?? 0));
     if (rp > 0 || rs > 0) { count++; debtPartner += rp; debtSell += rs; }
   }
   return { ok: true, data: { count, debtPartner, debtSell, debtTotal: debtPartner + debtSell } };
@@ -544,8 +544,8 @@ export async function debtOpenTransactions(filter: TransactionFilter = {}): Prom
 
   const data: DebtOpenTxnDto[] = [];
   for (const r of rows) {
-    const remainingPartner = Math.max(0, r.revenuePartner - (paid.get(`${r.id}:PARTNER`) ?? 0));
-    const remainingSell = Math.max(0, r.revenueSell - (paid.get(`${r.id}:SELL`) ?? 0));
+    const remainingPartner = Math.max(0, Number(r.revenuePartner) - (paid.get(`${r.id}:PARTNER`) ?? 0));
+    const remainingSell = Math.max(0, Number(r.revenueSell) - (paid.get(`${r.id}:SELL`) ?? 0));
     if (remainingPartner <= 0 && remainingSell <= 0) continue;
     const t = tidMap.get(r.tidId);
     data.push({
@@ -559,8 +559,8 @@ export async function debtOpenTransactions(filter: TransactionFilter = {}): Prom
       customerName: r.customerId != null ? custMap.get(r.customerId) ?? null : null,
       partnerId: t?.partnerId ?? null,
       partnerName: t?.partnerId != null ? partnerMap.get(t.partnerId) ?? null : null,
-      revenuePartner: r.revenuePartner,
-      revenueSell: r.revenueSell,
+      revenuePartner: Number(r.revenuePartner),
+      revenueSell: Number(r.revenueSell),
       remainingPartner,
       remainingSell,
       settled: r.settled,
@@ -636,7 +636,7 @@ export async function classifyDebt(transactionId: number, quality: string, reaso
   if (t.writtenOffAt) return { ok: false, error: 'ALREADY_WRITTEN_OFF', message: 'Giao dịch đã ghi giảm nợ xấu — không phân loại lại.' };
 
   const paid = await settledByTxnSide(db, [transactionId]);
-  const net = netRemaining(t, paid, transactionId);
+  const net = netRemaining({ revenuePartner: Number(t.revenuePartner), revenueSell: Number(t.revenueSell) }, paid, transactionId);
   if (net.total <= 0) return { ok: false, error: 'DEBT_FULLY_PAID', message: 'Giao dịch đã thu đủ — không còn là công nợ để phân loại.' };
 
   const from = t.debtQuality;
@@ -692,7 +692,7 @@ export async function debtByQuality(filter: TransactionFilter = {}): Promise<{ o
   const txns = await db.transaction.findMany({ where, select: { id: true, revenuePartner: true, revenueSell: true, debtQuality: true } });
   const paid = await settledByTxnSide(db, txns.map((t) => t.id));
   for (const t of txns) {
-    const net = netRemaining(t, paid, t.id);
+    const net = netRemaining({ revenuePartner: Number(t.revenuePartner), revenueSell: Number(t.revenueSell) }, paid, t.id);
     if (net.total <= 0) continue;
     const bucket = t.debtQuality && DEBT_QUALITIES.has(t.debtQuality) ? (t.debtQuality as 'GOOD' | 'HARD' | 'BAD') : 'UNCLASSIFIED';
     const s = empty[bucket];
@@ -757,8 +757,8 @@ export async function writeOffBadDebt(transactionId: number, actorPassword: stri
 
       const agg = await tx.cashDebtSettlement.groupBy({ by: ['side'], where: { transactionId }, _sum: { amount: true } });
       const paid = new Map<string, number>();
-      for (const a of agg) paid.set(`${transactionId}:${a.side}`, a._sum.amount ?? 0);
-      const net = netRemaining(t, paid, transactionId);
+      for (const a of agg) paid.set(`${transactionId}:${a.side}`, Number(a._sum.amount ?? 0));
+      const net = netRemaining({ revenuePartner: Number(t.revenuePartner), revenueSell: Number(t.revenueSell) }, paid, transactionId);
       // Kiểm net>0 TRONG khóa: nếu phiếu thu song song vừa thu đủ (commit trước) → net=0 → rollback.
       if (net.total <= 0) throw new TxGuardError('DEBT_FULLY_PAID', 'Giao dịch đã thu đủ — không còn nợ để ghi giảm.');
 

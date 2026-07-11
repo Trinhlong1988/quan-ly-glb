@@ -209,15 +209,15 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
             {!loading &&
               filteredRows.map((d) => (
                 <tr key={d.id} className="hover:bg-appbg/60">
-                  <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700">{d.serial}</td>
+                  <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700 whitespace-nowrap">{d.serial}</td>
                   <td className="px-4 py-3 text-slate-600">{d.posModelName ?? '—'}</td>
                   <td className="px-4 py-3 text-slate-600">{d.supplierName ?? '—'}</td>
-                  <td className="px-4 py-3 text-right text-slate-700">{fmtVnd(d.importPrice)}</td>
+                  <td className="px-4 py-3 text-right text-slate-700 whitespace-nowrap">{fmtVnd(d.importPrice)}</td>
                   <td className="px-4 py-3 text-xs text-slate-500">{d.importedAt ? fmtDate(d.importedAt) : '—'}</td>
                   <td className="px-4 py-3">
                     <StatusBadge entity="POS_DEVICE" code={d.status} />
                   </td>
-                  <td className="px-4 py-3 font-mono text-xs text-slate-500">{d.currentTid ?? '—'}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-slate-500 whitespace-nowrap">{d.currentTid ?? '—'}</td>
                   <td className="px-4 py-3 text-slate-600">{d.customerName ?? '—'}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">

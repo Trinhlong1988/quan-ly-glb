@@ -224,14 +224,14 @@ export function DebtPage({ user }: { user: AuthUser }): JSX.Element {
             {!loading && visibleRows.length === 0 && <tr><td colSpan={colSpan} className="px-4 py-10 text-center text-slate-400"><CheckCircle2 className="mx-auto mb-2 h-6 w-6 text-emerald-400" /> Không còn công nợ nào — đã thu hết.</td></tr>}
             {!loading && visibleRows.map((r) => (
               <tr key={r.id} className={'hover:bg-appbg/60' + (r.debtQuality === 'BAD' ? ' bg-rose-50/40' : '')}>
-                <td className="px-3 py-3 font-mono text-xs font-medium text-slate-700">{r.code ?? '—'}</td>
+                <td className="px-3 py-3 font-mono text-xs font-medium text-slate-700 whitespace-nowrap">{r.code ?? '—'}</td>
                 <td className="px-3 py-3 text-xs text-slate-500">{fmtDate(r.txnDate)}</td>
-                <td className="px-3 py-3 text-slate-700">{r.tid ?? '—'}{r.mid ? <span className="block text-xs text-slate-400">{r.mid}</span> : null}</td>
+                <td className="px-3 py-3 text-slate-700 whitespace-nowrap">{r.tid ?? '—'}{r.mid ? <span className="block text-xs text-slate-400">{r.mid}</span> : null}</td>
                 <td className="px-3 py-3 text-slate-600">{r.hkdName ?? '—'}</td>
                 <td className="px-3 py-3 text-slate-600">{r.customerName ?? <span className="text-slate-400">—</span>}</td>
-                <td className="px-3 py-3 text-right tabular-nums text-indigo-600">{money(r.remainingPartner)}</td>
-                <td className="px-3 py-3 text-right tabular-nums text-emerald-600">{money(r.remainingSell)}</td>
-                <td className="px-3 py-3 text-right font-semibold tabular-nums text-slate-800">{money(r.remainingPartner + r.remainingSell)}</td>
+                <td className="px-3 py-3 text-right tabular-nums text-indigo-600 whitespace-nowrap">{money(r.remainingPartner)}</td>
+                <td className="px-3 py-3 text-right tabular-nums text-emerald-600 whitespace-nowrap">{money(r.remainingSell)}</td>
+                <td className="px-3 py-3 text-right font-semibold tabular-nums text-slate-800 whitespace-nowrap">{money(r.remainingPartner + r.remainingSell)}</td>
                 <td className="px-3 py-3">{qualityBadge(r.debtQuality)}</td>
                 {hasActions && (
                   <td className="px-3 py-3">
@@ -255,9 +255,9 @@ export function DebtPage({ user }: { user: AuthUser }): JSX.Element {
             <tfoot>
               <tr className="border-t-2 border-line bg-[#F8FAFC] font-semibold text-slate-800">
                 <td colSpan={5} className="px-3 py-3 text-right">Tổng cộng ({debt.count} giao dịch)</td>
-                <td className="px-3 py-3 text-right tabular-nums text-indigo-700">{money(debt.debtPartner)}</td>
-                <td className="px-3 py-3 text-right tabular-nums text-emerald-700">{money(debt.debtSell)}</td>
-                <td className="px-3 py-3 text-right tabular-nums">{money(debt.debtTotal)}</td>
+                <td className="px-3 py-3 text-right tabular-nums text-indigo-700 whitespace-nowrap">{money(debt.debtPartner)}</td>
+                <td className="px-3 py-3 text-right tabular-nums text-emerald-700 whitespace-nowrap">{money(debt.debtSell)}</td>
+                <td className="px-3 py-3 text-right tabular-nums whitespace-nowrap">{money(debt.debtTotal)}</td>
                 <td />
                 {hasActions && <td />}
               </tr>

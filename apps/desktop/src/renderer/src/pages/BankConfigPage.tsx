@@ -139,8 +139,8 @@ function BankTab({ canManage }: { canManage: boolean }): JSX.Element {
             {!loading && rows.map((b) => (
               <tr key={b.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(b.id) ? 'bg-brand-tint/40' : '')}>
                 {canManage && <SelectCell id={b.id} sel={sel} />}
-                <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-500">{b.seqCode ?? '—'}</td>
-                <td className="px-4 py-3 font-mono text-xs font-semibold text-brand">{b.code}</td>
+                <td className="px-4 py-3 font-mono text-xs font-semibold whitespace-nowrap text-slate-500">{b.seqCode ?? '—'}</td>
+                <td className="px-4 py-3 font-mono text-xs font-semibold whitespace-nowrap text-brand">{b.code}</td>
                 <td className="px-4 py-3 font-medium text-slate-800">{b.name}</td>
                 <td className="px-4 py-3"><StatusBadge entity="BANK" code={b.status} /></td>
                 <AuditTrailCells row={b} dateOnly />
@@ -264,7 +264,7 @@ function CardTypeTab({ canManage }: { canManage: boolean }): JSX.Element {
             {!loading && rows.map((c) => (
               <tr key={c.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(c.id) ? 'bg-brand-tint/40' : '')}>
                 {canManage && <SelectCell id={c.id} sel={sel} />}
-                <td className="px-4 py-3 font-mono text-xs font-semibold text-brand">{c.code}</td>
+                <td className="px-4 py-3 font-mono text-xs font-semibold whitespace-nowrap text-brand">{c.code}</td>
                 <td className="px-4 py-3 font-medium text-slate-800">{c.name}</td>
                 <td className="px-4 py-3 text-slate-600">{c.bankCode ? `${c.bankCode} · ${c.bankName}` : (c.bankName ?? '—')}</td>
                 <AuditTrailCells row={c} dateOnly />
@@ -408,11 +408,11 @@ function PartnerTab({ canManage }: { canManage: boolean }): JSX.Element {
             {!loading && rows.map((p) => (
               <tr key={p.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(p.id) ? 'bg-brand-tint/40' : '')}>
                 {canManage && <SelectCell id={p.id} sel={sel} />}
-                <td className="px-4 py-3 font-mono text-xs font-semibold text-brand">{p.code}</td>
+                <td className="px-4 py-3 font-mono text-xs font-semibold whitespace-nowrap text-brand">{p.code}</td>
                 <td className="px-4 py-3 font-medium text-slate-800">{p.name}</td>
                 <td className="px-4 py-3"><StatusBadge entity="PARTNER" code={p.status} /></td>
                 <td className="px-4 py-3 text-slate-600">{p.contactPerson ?? '—'}</td>
-                <td className="px-4 py-3 text-slate-600">{p.phone ?? '—'}</td>
+                <td className="px-4 py-3 whitespace-nowrap text-slate-600">{p.phone ?? '—'}</td>
                 <td className="px-4 py-3 text-slate-500">{p.address ?? '—'}</td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-1">

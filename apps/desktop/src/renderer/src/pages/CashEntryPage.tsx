@@ -140,11 +140,11 @@ export function CashEntryPage({ user, kind }: { user: AuthUser; kind: 'THU' | 'C
             {!loading && rows.length === 0 && <tr><td colSpan={9} className="px-4 py-10 text-center text-slate-400"><Receipt className="mx-auto mb-2 h-6 w-6" /> Chưa có phiếu {isThu ? 'thu' : 'chi'}.</td></tr>}
             {!loading && rows.map((r) => (
               <tr key={r.id} className={'hover:bg-appbg/60 ' + (r.status === 'CANCELLED' ? 'opacity-60' : '')}>
-                <td className="px-4 py-3 font-mono text-xs text-slate-500">{r.code}</td>
+                <td className="px-4 py-3 font-mono text-xs text-slate-500 whitespace-nowrap">{r.code}</td>
                 <td className="px-4 py-3 text-slate-600">{fmtDate(r.entryDate)}</td>
                 <td className="px-4 py-3 text-slate-700">{r.categoryName ?? '—'}</td>
                 <td className="px-4 py-3 text-slate-600">{r.fundName ?? '—'}</td>
-                <td className={'px-4 py-3 text-right font-semibold tabular-nums ' + (isThu ? 'text-success' : 'text-warning')}>{money(r.amount)}</td>
+                <td className={'px-4 py-3 text-right font-semibold tabular-nums whitespace-nowrap ' + (isThu ? 'text-success' : 'text-warning')}>{money(r.amount)}</td>
                 <td className="px-4 py-3 text-slate-600">{r.method === 'CK' ? 'Chuyển khoản' : 'Tiền mặt'}</td>
                 <td className="px-4 py-3 text-slate-600">{(isThu ? r.receiverUserName : r.payerUserName) ?? '—'}</td>
                 <td className="px-4 py-3"><StatusBadge status={r.status} /></td>

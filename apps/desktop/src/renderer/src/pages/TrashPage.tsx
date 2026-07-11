@@ -119,7 +119,7 @@ export function TrashPage({ user }: { user: AuthUser }): JSX.Element {
                   <td className="px-4 py-3">
                     <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">{r.entityLabel}</span>
                   </td>
-                  <td className="px-4 py-3 font-mono text-xs font-semibold text-brand">{r.code ?? '—'}</td>
+                  <td className="px-4 py-3 font-mono text-xs font-semibold text-brand whitespace-nowrap">{r.code ?? '—'}</td>
                   <td className="px-4 py-3 text-slate-700">{r.label}</td>
                   {canViewAll && <td className="px-4 py-3 text-slate-600">{r.deletedByName ?? '—'}</td>}
                   <td className="px-4 py-3 text-xs text-slate-500">{fmtDate(r.deletedAt)}</td>

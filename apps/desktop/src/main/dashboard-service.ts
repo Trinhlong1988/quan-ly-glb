@@ -111,8 +111,8 @@ async function computeMonthProfit(db: import('@glb/database').Db, month: string,
     db.cashEntry.aggregate({ _sum: { amount: true }, where: { status: 'POSTED', deletedAt: null, kind: 'THU', categoryId: { in: affectsIds }, entryDate: { gte: start, lt: nextStart } } }),
     db.cashEntry.aggregate({ _sum: { amount: true }, where: { status: 'POSTED', deletedAt: null, kind: 'CHI', categoryId: { in: affectsIds }, entryDate: { gte: start, lt: nextStart } } })
   ]);
-  const revenueAccrual = (txAgg._sum.revenueAmount ?? 0) + (thuAgg._sum.amount ?? 0);
-  const expense = chiAgg._sum.amount ?? 0;
+  const revenueAccrual = Number(txAgg._sum.revenueAmount ?? 0) + Number(thuAgg._sum.amount ?? 0);
+  const expense = Number(chiAgg._sum.amount ?? 0);
   return { month, revenueAccrual, expense, profit: revenueAccrual - expense };
 }
 

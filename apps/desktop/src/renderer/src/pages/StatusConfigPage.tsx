@@ -122,7 +122,7 @@ export function StatusConfigPage({ user }: { user: AuthUser }): JSX.Element {
                   <td className="px-4 py-3">
                     <span className={'inline-flex rounded-full px-2 py-0.5 text-xs font-medium ' + toneCls(o.tone)}>{o.label}</span>
                   </td>
-                  <td className="px-4 py-3 font-mono text-xs text-slate-500">{o.code}</td>
+                  <td className="px-4 py-3 font-mono text-xs whitespace-nowrap text-slate-500">{o.code}</td>
                   <td className="px-4 py-3">
                     {o.isBuiltin ? (
                       <span className="inline-flex items-center gap-1 text-xs text-slate-500">

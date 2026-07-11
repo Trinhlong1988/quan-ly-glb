@@ -291,7 +291,7 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
               )}
               {!loading && (tab === 'all' ? rows : undelivered).map((t) => (
                 <tr key={t.id} className={tab === 'undelivered' && (t as UndeliveredTidDto).agingDays >= 30 ? 'bg-danger/5' : 'hover:bg-appbg/60'}>
-                  <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700">{t.tid}</td>
+                  <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700 whitespace-nowrap">{t.tid}</td>
                   <td className="px-4 py-3 text-slate-600">{t.hkdName ?? '—'}</td>
                   <td className="px-4 py-3 text-slate-600">{t.industryName ?? '—'}</td>
                   <td className="px-4 py-3 text-slate-600">{t.bankCode ?? t.bank ?? '—'}</td>
@@ -528,11 +528,11 @@ function RevenueRankingTab(): JSX.Element {
               rows.map((r) => (
                 <tr key={r.tidId} className="hover:bg-appbg/60">
                   <td className="px-4 py-3 font-semibold text-slate-700">{r.rank}</td>
-                  <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700">{r.tid}</td>
+                  <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700 whitespace-nowrap">{r.tid}</td>
                   <td className="px-4 py-3 text-slate-600">{r.hkdName ?? '—'}</td>
                   <td className="px-4 py-3 text-slate-600">{r.customerName ?? '—'}</td>
                   <td className="px-4 py-3 text-slate-600">{r.industryName ?? '—'}</td>
-                  <td className="px-4 py-3 text-right font-semibold text-slate-800">{money(r.revenue)}</td>
+                  <td className="px-4 py-3 text-right font-semibold text-slate-800 whitespace-nowrap">{money(r.revenue)}</td>
                   <td className="px-4 py-3">
                     {r.active ? (
                       <span className="rounded bg-success/15 px-1.5 py-0.5 text-xs font-medium text-success">Đang hoạt động</span>
@@ -554,7 +554,7 @@ function AssignCell({ t }: { t: TidDto }): JSX.Element {
     return (
       <div className="flex items-center gap-1.5">
         <span className="rounded bg-brand-tint px-1.5 py-0.5 text-xs font-medium text-brand">Đã gán máy</span>
-        {t.posSerial && <span className="font-mono text-xs text-slate-500">{t.posSerial}</span>}
+        {t.posSerial && <span className="font-mono text-xs text-slate-500 whitespace-nowrap">{t.posSerial}</span>}
       </div>
     );
   }
@@ -562,7 +562,7 @@ function AssignCell({ t }: { t: TidDto }): JSX.Element {
     return (
       <div className="flex items-center gap-1.5">
         <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600">Máy khách</span>
-        <span className="font-mono text-xs text-slate-500">{t.customerDeviceSerial}</span>
+        <span className="font-mono text-xs text-slate-500 whitespace-nowrap">{t.customerDeviceSerial}</span>
       </div>
     );
   }
@@ -1052,7 +1052,7 @@ function TidSellFeeModal({ tid, onClose, onSaved }: { tid: TidDto; onClose: () =
                 {rows.map((row) => (
                   <tr key={row.cardTypeId} className="hover:bg-appbg/60">
                     <td className="px-4 py-2.5 text-slate-700">
-                      {row.cardTypeCode ? <span className="font-mono text-xs font-semibold text-brand">{row.cardTypeCode}</span> : null} {row.cardTypeName}
+                      {row.cardTypeCode ? <span className="font-mono text-xs font-semibold text-brand whitespace-nowrap">{row.cardTypeCode}</span> : null} {row.cardTypeName}
                     </td>
                     <td className="px-4 py-2.5 text-right text-slate-500">{pctText(row.phiBanNiemYet)}</td>
                     <td className="px-4 py-2.5 text-right">

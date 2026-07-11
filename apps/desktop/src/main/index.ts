@@ -1,5 +1,6 @@
 // Electron main entry (Quản Lý GLB). Security: contextIsolation on, nodeIntegration off, sandbox off
 // (sandbox must be off so the preload can use ipcRenderer via require in electron-vite CJS preload).
+import './bigint-json.js'; // R48 — PHẢI import ĐẦU TIÊN: dạy JSON.stringify serialize BigInt (cột tiền int8).
 import { join } from 'node:path';
 import { app, BrowserWindow, shell } from 'electron';
 import { initDb } from './db.js';

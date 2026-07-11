@@ -48,7 +48,7 @@ export async function runApprovalSelfTest(): Promise<number> {
   const imm = await updateTransaction(b1, { amount: 5_000_000 });
   ok('I-A1: updateTransaction → BILL_IMMUTABLE (không sửa được)', imm.ok === false && imm.error === 'BILL_IMMUTABLE', imm);
   const b1row = await db.transaction.findUnique({ where: { id: b1 } });
-  ok('I-A1: số tiền bill KHÔNG đổi sau khi thử sửa', b1row?.amount === 10_000_000, { amount: b1row?.amount });
+  ok('I-A1: số tiền bill KHÔNG đổi sau khi thử sửa', Number(b1row?.amount) === 10_000_000, { amount: b1row?.amount });
 
   // ═══ 2) TẠO YÊU CẦU HỦY (acc = nhân viên) ═══
   await logout();

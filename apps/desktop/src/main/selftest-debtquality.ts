@@ -129,7 +129,7 @@ export async function runDebtQualitySelfTest(): Promise<number> {
   ok('write-off BAD + còn nợ → ok', wr.ok === true, wr);
   const entry = await db.cashEntry.findUnique({ where: { id: wr.id! }, select: { kind: true, categoryId: true, amount: true, fundId: true, sourceType: true, sourceId: true, status: true } });
   ok('sinh CashEntry CHI "Chi phí nợ xấu" đúng danh mục', entry!.kind === 'CHI' && entry!.categoryId === badCat!.id, entry);
-  ok('amount = nợ còn lại net (Pa+Sa)', entry!.amount === netA, { amount: entry!.amount, netA });
+  ok('amount = nợ còn lại net (Pa+Sa)', Number(entry!.amount) === netA, { amount: entry!.amount, netA });
   ok('fundId = null (bút toán phi tiền mặt)', entry!.fundId === null);
   ok('sourceType=BAD_DEBT + sourceId=GD A', entry!.sourceType === 'BAD_DEBT' && entry!.sourceId === gdA.id);
   ok('Transaction.writtenOffAt/By set', await (async () => { const t = await db.transaction.findUnique({ where: { id: gdA.id }, select: { writtenOffAt: true, writtenOffBy: true } }); return t!.writtenOffAt != null && t!.writtenOffBy != null; })());
@@ -169,7 +169,7 @@ export async function runDebtQualitySelfTest(): Promise<number> {
   const wrD = await txn.writeOffBadDebt(gdD.id, PW);
   ok('write-off GD BAD đã thu 1 phần → ok', wrD.ok === true, wrD);
   const entryD = await db.cashEntry.findUnique({ where: { id: wrD.id! }, select: { amount: true } });
-  ok('amount write-off = nợ NET còn lại (Pd − payPartial), KHÔNG phải toàn revenue', entryD!.amount === Pd - payPartial, { amount: entryD!.amount, expected: Pd - payPartial });
+  ok('amount write-off = nợ NET còn lại (Pd − payPartial), KHÔNG phải toàn revenue', Number(entryD!.amount) === Pd - payPartial, { amount: entryD!.amount, expected: Pd - payPartial });
   ok('lợi nhuận GIẢM đúng net còn lại (Pd − payPartial)', profBeforeD - (await getMonthlyProfit()).data!.current.profit === Pd - payPartial);
 
   // ═══════════ FIX 1 — write-off khi net=0 (BAD nhưng đã thu đủ) → DEBT_FULLY_PAID ═══════════

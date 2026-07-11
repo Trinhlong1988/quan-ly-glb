@@ -394,7 +394,7 @@ function Home({ user }: { user: AuthUser; visibleCount: number }): JSX.Element {
         {kpis.map((k) => (
           <div key={k.label} className="rounded-xl border border-line bg-white p-4 shadow-sm transition hover:shadow-md">
             <div className={'mb-3 flex h-10 w-10 items-center justify-center rounded-lg ' + k.tint}>{k.icon}</div>
-            <div className="text-2xl font-bold tabular-nums text-slate-800">
+            <div className="text-2xl font-bold tabular-nums whitespace-nowrap text-slate-800">
               {loading ? <span className="text-slate-300">—</span> : fmtNum(k.value)}
             </div>
             <div className="mt-0.5 text-xs font-medium text-slate-500">{k.label}</div>
@@ -471,7 +471,7 @@ function ProfitPanel(): JSX.Element | null {
         <PiggyBank className="h-5 w-5 text-brand" />
         <h3 className="text-base font-semibold text-slate-800">Lợi nhuận tháng {cur?.month ?? ''}</h3>
         {!loading && (
-          <span className={'ml-auto text-xs font-medium ' + (delta >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
+          <span className={'ml-auto whitespace-nowrap text-xs font-medium ' + (delta >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
             {delta >= 0 ? '▲' : '▼'} {moneyVnd(Math.abs(delta))} so tháng trước ({moneyVnd(prevProfit)})
           </span>
         )}
@@ -480,7 +480,7 @@ function ProfitPanel(): JSX.Element | null {
         {cards.map((k) => (
           <div key={k.label} className="rounded-xl border border-line bg-white p-4 shadow-sm">
             <div className={'mb-3 flex h-10 w-10 items-center justify-center rounded-lg ' + k.tint}>{k.icon}</div>
-            <div className={'text-2xl font-bold tabular-nums ' + (k.valueCls ?? 'text-slate-800')}>
+            <div className={'text-2xl font-bold tabular-nums whitespace-nowrap ' + (k.valueCls ?? 'text-slate-800')}>
               {loading ? <span className="text-slate-300">—</span> : moneyVnd(k.value)}
             </div>
             <div className="mt-0.5 text-xs font-medium text-slate-500">{k.label}</div>
@@ -562,7 +562,7 @@ function BreakdownCard({
             <div key={r.label}>
               <div className="mb-1 flex items-center justify-between text-sm">
                 <span className="font-medium text-slate-600">{r.label}</span>
-                <span className="tabular-nums font-semibold text-slate-800">{fmtNum(r.count)} {unit}</span>
+                <span className="tabular-nums whitespace-nowrap font-semibold text-slate-800">{fmtNum(r.count)} {unit}</span>
               </div>
               <div className="h-1.5 overflow-hidden rounded-full bg-appbg">
                 <div className="h-full rounded-full bg-brand" style={{ width: `${(r.count / max) * 100}%` }} />

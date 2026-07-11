@@ -113,7 +113,7 @@ export function IndustryConfigPage({ user }: { user: AuthUser }): JSX.Element {
             {!loading && rows.map((r) => (
               <tr key={r.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(r.id) ? 'bg-brand-tint/40' : '')}>
                 {canDelete && <SelectCell id={r.id} sel={sel} />}
-                <td className="px-4 py-3 font-mono text-xs font-medium text-slate-800">{r.code}</td>
+                <td className="px-4 py-3 font-mono text-xs font-medium whitespace-nowrap text-slate-800">{r.code}</td>
                 <td className="px-4 py-3 font-medium text-slate-800">{r.name}</td>
                 <td className="px-4 py-3"><ActivePill active={r.active} /></td>
                 <td className="px-4 py-3 text-slate-600">{r.note ?? '—'}</td>

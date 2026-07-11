@@ -38,7 +38,7 @@ async function auditCount(db: ReturnType<typeof getDb>, action: string): Promise
 /** Σ settlement của 1 GD theo side (đọc trực tiếp DB). */
 async function settledSum(db: ReturnType<typeof getDb>, txnId: number, side: string): Promise<number> {
   const agg = await db.cashDebtSettlement.aggregate({ where: { transactionId: txnId, side }, _sum: { amount: true } });
-  return agg._sum.amount ?? 0;
+  return Number(agg._sum.amount ?? 0);
 }
 
 export async function runDebtReceiptSelfTest(): Promise<number> {

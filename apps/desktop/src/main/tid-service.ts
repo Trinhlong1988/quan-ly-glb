@@ -940,7 +940,7 @@ export async function tidRevenueRanking(filter: TidRevenueRankFilter = {}): Prom
   });
   // Chỉ TID có ≥1 giao dịch trong kỳ (revenue>0) + sắp doanh số GIẢM DẦN.
   const withRev = grouped
-    .map((row) => ({ tidId: row.tidId, revenue: row._sum.revenueAmount ?? 0 }))
+    .map((row) => ({ tidId: row.tidId, revenue: Number(row._sum.revenueAmount ?? 0) }))
     .filter((r) => r.revenue > 0)
     .sort((a, b) => b.revenue - a.revenue);
 

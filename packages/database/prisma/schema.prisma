@@ -298,12 +298,12 @@ model Transaction {
   tidId              Int       @map("tid_id")
   customerId         Int?      @map("customer_id")
   cardTypeId         Int?      @map("card_type_id")
-  amount             Int // số tiền giao dịch (VND)
+  amount             BigInt // số tiền giao dịch (VND) — BigInt (R48): GD KHÔNG giới hạn giá trị, tránh tràn int4 (~2,15 tỷ)
   partnerMarginMilli Int       @default(0) @map("partner_margin_milli") // CL_NCC = phiMua−phiCaiMay (×1000)
   sellMarginMilli    Int       @default(0) @map("sell_margin_milli") // CL_KH = phiBan−phiCaiMay (×1000)
-  revenuePartner     Int       @default(0) @map("revenue_partner") // đối soát đối tác (VND)
-  revenueSell        Int       @default(0) @map("revenue_sell") // thu khách (VND)
-  revenueAmount      Int       @default(0) @map("revenue_amount") // tổng doanh thu = partner + sell (VND)
+  revenuePartner     BigInt    @default(0) @map("revenue_partner") // đối soát đối tác (VND) — BigInt
+  revenueSell        BigInt    @default(0) @map("revenue_sell") // thu khách (VND) — BigInt
+  revenueAmount      BigInt    @default(0) @map("revenue_amount") // tổng doanh thu = partner + sell (VND) — BigInt
   settled            Boolean   @default(false) // đã thu/đối soát chưa (cho công nợ)
   settledAt          DateTime? @map("settled_at") @db.Timestamptz(3)
   txnDate            DateTime  @map("txn_date")
@@ -872,7 +872,7 @@ model Fund {
   name           String // "Quỹ tiền mặt VP", "TK VCB 199…"
   type           String // CASH | BANK | EWALLET
   keeperUserId   Int?      @map("keeper_user_id") // ai giữ quỹ (mục J)
-  openingBalance Int       @default(0) @map("opening_balance") // VND — số dư đầu kỳ (KHÔNG lưu số dư hiện tại)
+  openingBalance BigInt    @default(0) @map("opening_balance") // VND — số dư đầu kỳ (BigInt R48, KHÔNG lưu số dư hiện tại)
   active         Boolean   @default(true)
   note           String?
   createdBy      Int?      @map("created_by")
@@ -895,7 +895,7 @@ model CashEntry {
   // (ghi giảm nợ xấu, sourceType=BAD_DEBT) là bút toán KHÔNG-tiền-mặt (tiền chưa từng vào quỹ) → fundId=null,
   // KHÔNG trừ số dư quỹ nào (số dư = Σ CashEntry theo fundId), nhưng VẪN vào chi phí lợi nhuận theo categoryId.
   fundId         Int?      @map("fund_id") // quỹ tiền vào/ra (mục J liên thông) — null cho bút toán phi tiền mặt
-  amount         Int // VND nguyên, > 0
+  amount         BigInt // VND nguyên, > 0 (BigInt R48)
   method         String // CK | CASH
   entryDate      DateTime  @map("entry_date") @db.Timestamptz(3) // ngày thu/chi (local) — M6
   customerId     Int?      @map("customer_id") // KH (mục D)
@@ -936,7 +936,7 @@ model CashDebtSettlement {
   cashEntryId   Int      @map("cash_entry_id") // phiếu thu (kind=THU, category DEBT_*)
   transactionId Int      @map("transaction_id") // GD được tất toán
   side          String // PARTNER | SELL (CL_NCC — chênh đối tác / CL_KH — chênh bán)
-  amount        Int // VND áp vào GD này (> 0)
+  amount        BigInt // VND áp vào GD này (> 0, BigInt R48)
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   @@index([cashEntryId])

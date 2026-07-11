@@ -249,10 +249,10 @@ function AccountTab({ canManage }: { canManage: boolean }): JSX.Element {
                 {canManage && <SelectCell id={a.id} sel={sel} />}
                 <td className="px-4 py-3"><span className="rounded bg-brand-tint px-1.5 py-0.5 text-xs font-medium text-brand">{a.sourceName ?? '—'}</span></td>
                 <td className="px-4 py-3 font-medium text-slate-800">{a.accountName}</td>
-                <td className="px-4 py-3 font-mono text-xs text-slate-700">{a.accountNumber}</td>
+                <td className="px-4 py-3 font-mono text-xs text-slate-700 whitespace-nowrap">{a.accountNumber}</td>
                 <td className="px-4 py-3 text-slate-600">{a.bankCode ?? '—'}{a.branch ? ` · ${a.branch}` : ''}</td>
                 <td className="px-4 py-3 text-slate-600">{a.customerName ?? <span className="text-slate-400">Nội bộ</span>}</td>
-                <td className="px-4 py-3 font-mono text-xs text-slate-500">{a.cccdNumber ?? '—'}</td>
+                <td className="px-4 py-3 font-mono text-xs text-slate-500 whitespace-nowrap">{a.cccdNumber ?? '—'}</td>
                 <td className="px-4 py-3">
                   <div className="flex gap-1">
                     {a.cccdFrontPath ? <Thumb relPath={a.cccdFrontPath} label="CCCD mặt trước" /> : <span className="text-xs text-slate-400">—</span>}

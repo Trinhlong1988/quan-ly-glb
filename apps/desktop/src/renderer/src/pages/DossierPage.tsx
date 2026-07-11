@@ -111,7 +111,7 @@ function SourceTab({ canManage }: { canManage: boolean }): JSX.Element {
             {!loading && rows.map((s) => (
               <tr key={s.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(s.id) ? 'bg-brand-tint/40' : '')}>
                 {canManage && <SelectCell id={s.id} sel={sel} />}
-                <td className="px-4 py-3 font-medium text-slate-800">{s.code}</td>
+                <td className="px-4 py-3 font-medium text-slate-800 whitespace-nowrap">{s.code}</td>
                 <td className="px-4 py-3 text-right font-mono text-brand">{fmtPct(s.discountRate)}</td>
                 <AuditTrailCells row={s} />
                 {canManage && (
@@ -258,12 +258,12 @@ function DossierTab({ canManage }: { canManage: boolean }): JSX.Element {
             {!loading && rows.map((d) => (
               <tr key={d.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(d.id) ? 'bg-brand-tint/40' : '')}>
                 {canManage && <SelectCell id={d.id} sel={sel} />}
-                <td className="px-4 py-3"><span className="rounded bg-brand-tint px-1.5 py-0.5 text-xs font-medium text-brand">{d.sourceCode ?? '—'}</span></td>
+                <td className="px-4 py-3"><span className="rounded bg-brand-tint px-1.5 py-0.5 text-xs font-medium text-brand whitespace-nowrap">{d.sourceCode ?? '—'}</span></td>
                 <td className="px-4 py-3 font-medium text-slate-800">{d.hkdName}</td>
-                <td className="px-4 py-3 font-mono text-xs text-slate-600">{d.taxCode ?? '—'}</td>
+                <td className="px-4 py-3 font-mono text-xs text-slate-600 whitespace-nowrap">{d.taxCode ?? '—'}</td>
                 <td className="px-4 py-3"><StatusBadge entity="HKD_MST" code={d.mstStatus} /></td>
                 <td className="px-4 py-3 text-slate-600">{d.ownerName}</td>
-                <td className="px-4 py-3 font-mono text-xs text-slate-500">{d.cccdNumber ?? '—'}</td>
+                <td className="px-4 py-3 font-mono text-xs text-slate-500 whitespace-nowrap">{d.cccdNumber ?? '—'}</td>
                 <td className="px-4 py-3"><div className="flex gap-1">
                   {d.dkkdFrontPath ? <Thumb relPath={d.dkkdFrontPath} label="ĐKKD mặt trước" /> : <span className="text-xs text-slate-400">—</span>}
                   {d.dkkdBackPath && <Thumb relPath={d.dkkdBackPath} label="ĐKKD mặt sau" />}

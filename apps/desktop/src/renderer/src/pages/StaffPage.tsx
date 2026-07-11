@@ -175,7 +175,7 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
                 <tr key={u.id} className="hover:bg-appbg/60">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1.5">
-                      <span className="font-mono text-xs font-semibold text-brand">{u.employeeCode ?? '—'}</span>
+                      <span className="font-mono text-xs font-semibold text-brand whitespace-nowrap">{u.employeeCode ?? '—'}</span>
                       <RoleBadge roles={u.roles} />
                     </div>
                   </td>
@@ -191,7 +191,7 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
                     </div>
                   </td>
                   <td className="px-4 py-3 font-mono text-xs text-slate-500">{u.username}</td>
-                  <td className="px-4 py-3 text-slate-600">{u.phone ?? '—'}</td>
+                  <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{u.phone ?? '—'}</td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1">
                       {u.roles.map((c) => (

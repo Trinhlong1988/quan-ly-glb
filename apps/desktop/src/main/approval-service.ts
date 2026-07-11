@@ -371,7 +371,7 @@ export async function listCancelRequests(status = 'PENDING'): Promise<{ ok: bool
       id: r.id,
       transactionId: r.entityId,
       billCode: t?.code ?? null,
-      amount: t?.amount ?? 0,
+      amount: Number(t?.amount ?? 0),
       reason: r.reason,
       status: r.status,
       requestedBy: r.requestedBy,

@@ -67,7 +67,7 @@ export async function runHealthScanSelfTest(): Promise<number> {
   ok('autoFix ĐÃ backup TRƯỚC khi ghi đè doanh thu (backup_logs +1)', (await db.backupLog.count()) >= bkBefore + 1, { before: bkBefore });
   ok('sau tự sửa: REVENUE_MISMATCH KHÔNG còn', !has(scanFix.data!.findings, 'REVENUE_MISMATCH'), scanFix.data!.findings.map((x) => x.code));
   const fixed = await db.transaction.findUnique({ where: { id: txMismatch.id } });
-  ok('doanh thu giao dịch được tính lại đúng (20000+15000=35000)', fixed?.revenuePartner === 20000 && fixed?.revenueSell === 15000 && fixed?.revenueAmount === 35000, { p: fixed?.revenuePartner, s: fixed?.revenueSell, t: fixed?.revenueAmount });
+  ok('doanh thu giao dịch được tính lại đúng (20000+15000=35000)', Number(fixed?.revenuePartner) === 20000 && Number(fixed?.revenueSell) === 15000 && Number(fixed?.revenueAmount) === 35000, { p: fixed?.revenuePartner, s: fixed?.revenueSell, t: fixed?.revenueAmount });
 
   // ═══════════ LỊCH SỬ BẢO TRÌ ═══════════
   const runs = await listRuns(10);

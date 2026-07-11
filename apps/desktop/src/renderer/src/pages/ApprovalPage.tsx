@@ -196,8 +196,8 @@ export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
             {!loading && rows.map((r) => (
               <tr key={r.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(r.id) ? 'bg-brand-tint/40' : '')}>
                 <SelectCell id={r.id} sel={sel} />
-                <td className="px-3 py-3 font-mono text-xs font-medium text-slate-700">{r.billCode ?? `#${r.transactionId}`}</td>
-                <td className="px-3 py-3 text-right tabular-nums text-slate-800">{money(r.amount)}</td>
+                <td className="px-3 py-3 font-mono text-xs font-medium text-slate-700 whitespace-nowrap">{r.billCode ?? `#${r.transactionId}`}</td>
+                <td className="px-3 py-3 text-right tabular-nums text-slate-800 whitespace-nowrap">{money(r.amount)}</td>
                 <td className="px-3 py-3 text-slate-600">{r.reason}</td>
                 <td className="px-3 py-3 text-slate-600">{r.requestedByName ?? `#${r.requestedBy}`}</td>
                 <td className="px-3 py-3 text-xs text-slate-500">{fmtDate(r.requestedAt)}</td>

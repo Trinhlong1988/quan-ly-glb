@@ -243,15 +243,15 @@ function RateTab({ canManage }: { canManage: boolean }): JSX.Element {
             {!loading && rows.map((r) => (
               <tr key={r.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(r.id) ? 'bg-brand-tint/40' : '')}>
                 {canManage && <SelectCell id={r.id} sel={sel} />}
-                <td className="px-4 py-3"><span className="font-mono text-xs font-semibold text-brand">{r.partnerCode}</span> <span className="text-slate-700">{r.partnerName}</span></td>
-                <td className="px-4 py-3 text-slate-600">{r.bankCode ?? '—'}</td>
-                <td className="px-4 py-3"><span className="font-mono text-xs font-semibold text-brand">{r.cardTypeCode}</span> <span className="text-slate-700">{r.cardTypeName}</span></td>
+                <td className="px-4 py-3"><span className="font-mono text-xs font-semibold whitespace-nowrap text-brand">{r.partnerCode}</span> <span className="text-slate-700">{r.partnerName}</span></td>
+                <td className="px-4 py-3 whitespace-nowrap text-slate-600">{r.bankCode ?? '—'}</td>
+                <td className="px-4 py-3"><span className="font-mono text-xs font-semibold whitespace-nowrap text-brand">{r.cardTypeCode}</span> <span className="text-slate-700">{r.cardTypeName}</span></td>
                 <td className="px-4 py-3 text-xs text-slate-600">{fmtDate(r.effectiveFrom)}{r.isCurrent && <span className="ml-2 rounded-full bg-brand-tint px-2 py-0.5 text-[10px] font-semibold text-brand">Đang hiệu lực</span>}</td>
-                <td className="px-4 py-3 text-right text-slate-800">{fmtPct(r.phiMua)}</td>
-                <td className="px-4 py-3 text-right text-slate-800">{fmtPct(r.phiCaiMay)}</td>
-                <td className="px-4 py-3 text-right text-slate-800">{fmtPct(r.phiBan)}</td>
-                <td className="px-4 py-3 text-right"><CL v={r.clNcc} /></td>
-                <td className="px-4 py-3 text-right"><CL v={r.clKh} /></td>
+                <td className="px-4 py-3 text-right whitespace-nowrap text-slate-800">{fmtPct(r.phiMua)}</td>
+                <td className="px-4 py-3 text-right whitespace-nowrap text-slate-800">{fmtPct(r.phiCaiMay)}</td>
+                <td className="px-4 py-3 text-right whitespace-nowrap text-slate-800">{fmtPct(r.phiBan)}</td>
+                <td className="px-4 py-3 text-right whitespace-nowrap"><CL v={r.clNcc} /></td>
+                <td className="px-4 py-3 text-right whitespace-nowrap"><CL v={r.clKh} /></td>
                 {canManage && (
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">

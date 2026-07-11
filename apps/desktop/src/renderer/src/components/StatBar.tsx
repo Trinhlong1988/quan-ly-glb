@@ -34,7 +34,7 @@ export function StatBar({ items }: { items: StatItem[] }): JSX.Element {
             {it.icon ?? <span className="h-2.5 w-2.5 rounded-full bg-current" />}
           </span>
           <div className="min-w-0">
-            <div className="text-xl font-semibold tabular-nums text-slate-800">{fmt(it.value)}</div>
+            <div className="text-xl font-semibold tabular-nums whitespace-nowrap text-slate-800">{fmt(it.value)}</div>
             <div className="truncate text-xs font-medium text-slate-500">{it.label}</div>
             {it.sub && <div className="truncate text-xs text-slate-400">{it.sub}</div>}
           </div>

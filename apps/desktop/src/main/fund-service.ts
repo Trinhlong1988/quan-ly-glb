@@ -120,7 +120,7 @@ async function postedNetByFund(db: Db): Promise<Map<number, number>> {
   const net = new Map<number, number>();
   for (const r of rows) {
     if (r.fundId == null) continue; // H2b: bút toán phi tiền mặt (write-off) không gắn quỹ
-    const sum = r._sum.amount ?? 0;
+    const sum = Number(r._sum.amount ?? 0);
     const delta = r.kind === 'THU' ? sum : -sum;
     net.set(r.fundId, (net.get(r.fundId) ?? 0) + delta);
   }
@@ -137,8 +137,8 @@ export async function fundCurrentBalance(db: Db, fundId: number): Promise<number
     _sum: { amount: true }
   });
   let net = 0;
-  for (const r of agg) net += (r.kind === 'THU' ? 1 : -1) * (r._sum.amount ?? 0);
-  return fund.openingBalance + net;
+  for (const r of agg) net += (r.kind === 'THU' ? 1 : -1) * Number(r._sum.amount ?? 0);
+  return Number(fund.openingBalance) + net;
 }
 
 /** FUND_VIEW — danh sách quỹ + số dư running + tên người giữ. Lọc theo tìm/loại/trạng thái. */
@@ -168,8 +168,8 @@ export async function listFunds(
       type: r.type,
       keeperUserId: r.keeperUserId,
       keeperUserName: r.keeperUserId != null ? names.get(r.keeperUserId) ?? null : null,
-      openingBalance: r.openingBalance,
-      currentBalance: r.openingBalance + (net.get(r.id) ?? 0),
+      openingBalance: Number(r.openingBalance),
+      currentBalance: Number(r.openingBalance) + (net.get(r.id) ?? 0),
       active: r.active,
       note: r.note,
       ...trail(r, names)
@@ -269,7 +269,7 @@ export async function updateFund(id: number, input: UpdateFundInput): Promise<Mu
     type = next;
   }
 
-  let openingBalance = row.openingBalance;
+  let openingBalance = Number(row.openingBalance);
   if (input.openingBalance !== undefined) {
     const next = parseOpening(input.openingBalance);
     if (next === null) return { ok: false, error: 'VALIDATION', message: 'Số dư đầu kỳ phải là số nguyên ≥ 0 (VND).' };

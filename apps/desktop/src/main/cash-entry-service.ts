@@ -208,7 +208,7 @@ async function toDtos(db: Db, rows: Awaited<ReturnType<Db['cashEntry']['findMany
       fundId: r.fundId,
       fundCode: fund?.code ?? null,
       fundName: fund?.name ?? null,
-      amount: r.amount,
+      amount: Number(r.amount),
       method: r.method,
       entryDate: r.entryDate.toISOString(),
       customerId: r.customerId,
@@ -479,7 +479,7 @@ export async function createDebtReceipt(input: CreateDebtReceiptInput): Promise<
       // Σ settlement ĐÃ CÓ theo (GD, side) — batch 1 groupBy (đọc SAU khi đã khóa hàng cha).
       const prevAgg = await tx.cashDebtSettlement.groupBy({ by: ['transactionId', 'side'], where: { transactionId: { in: txnIds } }, _sum: { amount: true } });
       const paidBySide = new Map<string, number>();
-      for (const p of prevAgg) paidBySide.set(`${p.transactionId}:${p.side}`, p._sum.amount ?? 0);
+      for (const p of prevAgg) paidBySide.set(`${p.transactionId}:${p.side}`, Number(p._sum.amount ?? 0));
 
       // Kiểm + tính net cho TỪNG GD (đọc trong tx + đã khóa → chống race I#2).
       for (const txnId of txnIds) {
@@ -496,7 +496,7 @@ export async function createDebtReceipt(input: CreateDebtReceiptInput): Promise<
           const tp = tidPartnerMap.get(t.tidId);
           if (tp == null || tp !== input.partnerId) throw new TxGuardError('TXN_OBJECT_MISMATCH', `Giao dịch #${txnId} không thuộc đối tác đã chọn.`);
         }
-        const revBySide: Record<string, number> = { PARTNER: t.revenuePartner, SELL: t.revenueSell };
+        const revBySide: Record<string, number> = { PARTNER: Number(t.revenuePartner), SELL: Number(t.revenueSell) };
         for (const side of ['PARTNER', 'SELL']) {
           const adding = addBySide.get(`${txnId}:${side}`) ?? 0;
           if (adding <= 0) continue;
@@ -525,12 +525,12 @@ export async function createDebtReceipt(input: CreateDebtReceiptInput): Promise<
       // HỆ QUẢ: GD nào cả 2 side net=0 → settled=true; chưa đủ → settled=false. Batch 1 groupBy sau insert.
       const postAgg = await tx.cashDebtSettlement.groupBy({ by: ['transactionId', 'side'], where: { transactionId: { in: txnIds } }, _sum: { amount: true } });
       const paidPost = new Map<string, number>();
-      for (const a of postAgg) paidPost.set(`${a.transactionId}:${a.side}`, a._sum.amount ?? 0);
+      for (const a of postAgg) paidPost.set(`${a.transactionId}:${a.side}`, Number(a._sum.amount ?? 0));
       for (const txnId of txnIds) {
         const t = txnMap.get(txnId);
         if (!t) continue;
-        const remainingPartner = t.revenuePartner - (paidPost.get(`${txnId}:PARTNER`) ?? 0);
-        const remainingSell = t.revenueSell - (paidPost.get(`${txnId}:SELL`) ?? 0);
+        const remainingPartner = Number(t.revenuePartner) - (paidPost.get(`${txnId}:PARTNER`) ?? 0);
+        const remainingSell = Number(t.revenueSell) - (paidPost.get(`${txnId}:SELL`) ?? 0);
         const fullySettled = remainingPartner <= 0 && remainingSell <= 0;
         if (fullySettled !== t.settled) {
           await tx.transaction.update({ where: { id: txnId }, data: { settled: fullySettled, settledAt: fullySettled ? new Date() : null, updatedBy: user.id } });
@@ -605,8 +605,8 @@ export async function cancelCashEntry(id: number, reason: string, password: stri
           if (!t) continue;
           const agg = await txc.cashDebtSettlement.groupBy({ by: ['side'], where: { transactionId: txnId }, _sum: { amount: true } });
           const paid = new Map<string, number>();
-          for (const a of agg) paid.set(a.side, a._sum.amount ?? 0);
-          const fullySettled = t.revenuePartner - (paid.get('PARTNER') ?? 0) <= 0 && t.revenueSell - (paid.get('SELL') ?? 0) <= 0;
+          for (const a of agg) paid.set(a.side, Number(a._sum.amount ?? 0));
+          const fullySettled = Number(t.revenuePartner) - (paid.get('PARTNER') ?? 0) <= 0 && Number(t.revenueSell) - (paid.get('SELL') ?? 0) <= 0;
           if (fullySettled !== t.settled) {
             await txc.transaction.update({ where: { id: txnId }, data: { settled: fullySettled, settledAt: fullySettled ? new Date() : null, updatedBy: user.id } });
           }

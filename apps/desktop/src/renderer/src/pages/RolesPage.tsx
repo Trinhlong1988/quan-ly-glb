@@ -123,7 +123,7 @@ export function RolesPage({ user }: { user: AuthUser }): JSX.Element {
                     </div>
                     {r.description && <div className="text-xs text-slate-400">{r.description}</div>}
                   </td>
-                  <td className="px-4 py-3 font-mono text-xs text-slate-500">{r.code}</td>
+                  <td className="px-4 py-3 font-mono text-xs whitespace-nowrap text-slate-500">{r.code}</td>
                   <td className="px-4 py-3 text-slate-600">{r.permissions.length} quyền</td>
                   <td className="px-4 py-3 text-slate-600">{r.userCount}</td>
                   <td className="px-4 py-3">

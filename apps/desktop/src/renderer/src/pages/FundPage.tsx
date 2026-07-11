@@ -138,12 +138,12 @@ export function FundPage({ user }: { user: AuthUser }): JSX.Element {
             {!loading && rows.map((r) => (
               <tr key={r.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(r.id) ? 'bg-brand-tint/40' : '')}>
                 {canDelete && <SelectCell id={r.id} sel={sel} />}
-                <td className="px-4 py-3 font-mono text-xs text-slate-500">{r.code}</td>
+                <td className="px-4 py-3 font-mono text-xs text-slate-500 whitespace-nowrap">{r.code}</td>
                 <td className="px-4 py-3 font-medium text-slate-800">{r.name}</td>
                 <td className="px-4 py-3 text-slate-600">{typeLabel(r.type)}</td>
                 <td className="px-4 py-3 text-slate-600">{r.keeperUserName ?? '—'}</td>
-                <td className="px-4 py-3 text-right tabular-nums text-slate-500">{money(r.openingBalance)}</td>
-                <td className="px-4 py-3 text-right font-semibold tabular-nums text-slate-800">{money(r.currentBalance)}</td>
+                <td className="px-4 py-3 text-right tabular-nums text-slate-500 whitespace-nowrap">{money(r.openingBalance)}</td>
+                <td className="px-4 py-3 text-right font-semibold tabular-nums text-slate-800 whitespace-nowrap">{money(r.currentBalance)}</td>
                 <td className="px-4 py-3"><ActivePill active={r.active} /></td>
                 {(canUpdate || canDelete) && (
                   <td className="px-4 py-3"><div className="flex justify-end gap-1">

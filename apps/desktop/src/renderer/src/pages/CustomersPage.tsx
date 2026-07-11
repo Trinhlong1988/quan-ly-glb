@@ -159,13 +159,13 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
             {!loading &&
               rows.map((c) => (
                 <tr key={c.id} className="hover:bg-appbg/60">
-                  <td className="px-4 py-3 font-mono text-xs font-semibold text-brand">{c.code}</td>
+                  <td className="px-4 py-3 font-mono text-xs font-semibold text-brand whitespace-nowrap">{c.code}</td>
                   <td className="px-4 py-3">
                     <div className="font-medium text-slate-800">{c.nickname}</div>
                     <div className="text-xs text-slate-400">{c.fullName}</div>
                   </td>
                   <td className="px-4 py-3"><StatusBadge entity="CUSTOMER" code={c.status} /></td>
-                  <td className="px-4 py-3 text-slate-600">{c.phone ?? '—'}</td>
+                  <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{c.phone ?? '—'}</td>
                   <td className="px-4 py-3 text-slate-500">{c.address ?? '—'}</td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">

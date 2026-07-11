@@ -59,16 +59,16 @@ export async function runRevenueSelfTest(): Promise<number> {
   const t1 = await db.transaction.findUnique({ where: { id: c1.id! } });
   ok('snapshot chênh đối tác milli = 2000 (phiMua−phiCaiMay)', t1?.partnerMarginMilli === 2000, { got: t1?.partnerMarginMilli });
   ok('snapshot chênh bán milli = 1500 (phiBan−phiCaiMay)', t1?.sellMarginMilli === 1500, { got: t1?.sellMarginMilli });
-  ok('doanh thu đối tác = 10.000.000 × 2% = 200.000', t1?.revenuePartner === 200_000, { got: t1?.revenuePartner });
-  ok('doanh thu bán = 10.000.000 × 1.5% = 150.000', t1?.revenueSell === 150_000, { got: t1?.revenueSell });
-  ok('doanh thu TỔNG = 200.000 + 150.000 = 350.000 (cộng gộp)', t1?.revenueAmount === 350_000, { got: t1?.revenueAmount });
+  ok('doanh thu đối tác = 10.000.000 × 2% = 200.000', Number(t1?.revenuePartner) === 200_000, { got: t1?.revenuePartner });
+  ok('doanh thu bán = 10.000.000 × 1.5% = 150.000', Number(t1?.revenueSell) === 150_000, { got: t1?.revenueSell });
+  ok('doanh thu TỔNG = 200.000 + 150.000 = 350.000 (cộng gộp)', Number(t1?.revenueAmount) === 350_000, { got: t1?.revenueAmount });
   ok('sinh mã GD tự động', t1?.code === 'GD' + String(c1.id).padStart(5, '0'), { code: t1?.code });
   ok('khách mặc định lấy theo TID', t1?.customerId === cust.id, { got: t1?.customerId });
 
   // ═══════════ B) SNAPSHOT — đổi biểu phí sau KHÔNG làm sai doanh thu đã ghi ═══════════
   await db.feeRate.update({ where: { id: rate.id }, data: { phiMua: 9000, phiCaiMay: 0, phiBan: 9000 } });
   const t1b = await db.transaction.findUnique({ where: { id: c1.id! } });
-  ok('đổi biểu phí → doanh thu GD cũ GIỮ NGUYÊN 350.000 (snapshot)', t1b?.revenueAmount === 350_000, { got: t1b?.revenueAmount });
+  ok('đổi biểu phí → doanh thu GD cũ GIỮ NGUYÊN 350.000 (snapshot)', Number(t1b?.revenueAmount) === 350_000, { got: t1b?.revenueAmount });
   // khôi phục biểu phí về mức chuẩn cho các bước sau
   await db.feeRate.update({ where: { id: rate.id }, data: { phiMua: 3000, phiCaiMay: 1000, phiBan: 2500 } });
 
@@ -77,7 +77,7 @@ export async function runRevenueSelfTest(): Promise<number> {
   ok('tạo giao dịch 2 → ok', c2.ok === true, c2);
   // GD2: chênh đối tác 4tr×2% = 80.000 ; chênh bán 4tr×1.5% = 60.000 ; tổng 140.000
   const t2 = await db.transaction.findUnique({ where: { id: c2.id! } });
-  ok('GD2 doanh thu tổng = 140.000', t2?.revenueAmount === 140_000, { got: t2?.revenueAmount });
+  ok('GD2 doanh thu tổng = 140.000', Number(t2?.revenueAmount) === 140_000, { got: t2?.revenueAmount });
 
   const all = await listTransactions({ tidId: tid.id });
   ok('list trả 2 giao dịch', all.data?.length === 2, { len: all.data?.length });
@@ -154,7 +154,7 @@ export async function runRevenueSelfTest(): Promise<number> {
   const upNote = await updateTransaction(c1.id!, { note: 'ghi chú mới' });
   ok('sửa ghi chú GD1 (đã đối soát) → BILL_IMMUTABLE', upNote.ok === false && upNote.error === 'BILL_IMMUTABLE', upNote);
   const c1After = await db.transaction.findUnique({ where: { id: c1.id! } });
-  ok('SNAPSHOT: bill bất biến giữ nguyên doanh thu (350.000 dù biểu phí đã đổi)', c1After?.revenueAmount === rC1?.revenueAmount && c1After?.revenueAmount === 350_000, { before: rC1?.revenueAmount, after: c1After?.revenueAmount });
+  ok('SNAPSHOT: bill bất biến giữ nguyên doanh thu (350.000 dù biểu phí đã đổi)', c1After?.revenueAmount === rC1?.revenueAmount && Number(c1After?.revenueAmount) === 350_000, { before: rC1?.revenueAmount, after: c1After?.revenueAmount });
   ok('SNAPSHOT: margin đã lưu giữ nguyên (bill bất biến)', c1After?.partnerMarginMilli === 2000 && c1After?.sellMarginMilli === 1500, { p: c1After?.partnerMarginMilli, s: c1After?.sellMarginMilli });
   await db.feeRate.update({ where: { id: rate.id }, data: { phiMua: 3000, phiCaiMay: 1000, phiBan: 2500 } });
 
@@ -200,14 +200,14 @@ export async function runRevenueSelfTest(): Promise<number> {
   ok('GD 2026-06-15 → ok', gK1.ok === true, gK1);
   const tK1 = await db.transaction.findUnique({ where: { id: gK1.id! } });
   ok('GD 2026-06-15 ăn giá K1: margin 2000/1500', tK1?.partnerMarginMilli === 2000 && tK1?.sellMarginMilli === 1500, { p: tK1?.partnerMarginMilli, s: tK1?.sellMarginMilli });
-  ok('GD 2026-06-15 doanh thu = 200.000 + 150.000 = 350.000', tK1?.revenueAmount === 350_000, { got: tK1?.revenueAmount });
+  ok('GD 2026-06-15 doanh thu = 200.000 + 150.000 = 350.000', Number(tK1?.revenueAmount) === 350_000, { got: tK1?.revenueAmount });
 
   // (4) GD txnDate 2026-07-10 (trong K2) → PHẢI ăn giá K2 (margin 4% & 3%), tổng 700.000.
   const gK2 = await createTransaction({ tidId: kyTid.id, cardTypeId: kyCard.id, amount: 10_000_000, txnDate: '2026-07-10T00:00:00.000Z' });
   ok('GD 2026-07-10 → ok', gK2.ok === true, gK2);
   const tK2 = await db.transaction.findUnique({ where: { id: gK2.id! } });
   ok('GD 2026-07-10 ăn giá K2: margin 4000/3000', tK2?.partnerMarginMilli === 4000 && tK2?.sellMarginMilli === 3000, { p: tK2?.partnerMarginMilli, s: tK2?.sellMarginMilli });
-  ok('GD 2026-07-10 doanh thu = 400.000 + 300.000 = 700.000', tK2?.revenueAmount === 700_000, { got: tK2?.revenueAmount });
+  ok('GD 2026-07-10 doanh thu = 400.000 + 300.000 = 700.000', Number(tK2?.revenueAmount) === 700_000, { got: tK2?.revenueAmount });
 
   // (5) GD BACKDATE txnDate 2026-03-01 (lập SAU khi K2 đã tồn tại) → vẫn ăn K1 (I-P2).
   const gBack = await createTransaction({ tidId: kyTid.id, cardTypeId: kyCard.id, amount: 10_000_000, txnDate: '2026-03-01T00:00:00.000Z' });
@@ -227,9 +227,9 @@ export async function runRevenueSelfTest(): Promise<number> {
   const tK1After = await db.transaction.findUnique({ where: { id: gK1.id! } });
   const tBackAfter = await db.transaction.findUnique({ where: { id: gBack.id! } });
   const tK2After = await db.transaction.findUnique({ where: { id: gK2.id! } });
-  ok('I-P1: bill K1 (2026-06-15) GIỮ doanh thu 350.000 sau khi đổi giá K1', tK1After?.revenueAmount === revK1Before && tK1After?.revenueAmount === 350_000, { before: revK1Before, after: tK1After?.revenueAmount });
-  ok('I-P1: bill backdate (2026-03-01) GIỮ doanh thu 350.000 sau khi đổi giá K1', tBackAfter?.revenueAmount === revBackBefore && tBackAfter?.revenueAmount === 350_000, { before: revBackBefore, after: tBackAfter?.revenueAmount });
-  ok('I-P1: bill K2 (2026-07-10) GIỮ doanh thu 700.000 (không đụng)', tK2After?.revenueAmount === revK2Before && tK2After?.revenueAmount === 700_000, { before: revK2Before, after: tK2After?.revenueAmount });
+  ok('I-P1: bill K1 (2026-06-15) GIỮ doanh thu 350.000 sau khi đổi giá K1', tK1After?.revenueAmount === revK1Before && Number(tK1After?.revenueAmount) === 350_000, { before: revK1Before, after: tK1After?.revenueAmount });
+  ok('I-P1: bill backdate (2026-03-01) GIỮ doanh thu 350.000 sau khi đổi giá K1', tBackAfter?.revenueAmount === revBackBefore && Number(tBackAfter?.revenueAmount) === 350_000, { before: revBackBefore, after: tBackAfter?.revenueAmount });
+  ok('I-P1: bill K2 (2026-07-10) GIỮ doanh thu 700.000 (không đụng)', tK2After?.revenueAmount === revK2Before && Number(tK2After?.revenueAmount) === 700_000, { before: revK2Before, after: tK2After?.revenueAmount });
 
   // ═══════════ L) GIÁ THEO KỲ — ĐƯỜNG UI (B16/F1) — parse-LOCAL, KHÔNG 'Z' ═══════════
   // Điểm mù cũ (thất bại quy trình test): mọi ca GIÁ THEO KỲ ở trên dùng ISO có 'Z' (UTC thuần) → KHÔNG
@@ -280,6 +280,15 @@ export async function runRevenueSelfTest(): Promise<number> {
   const forbDebt = await debtSummary({});
   ok('CUSTOMER không DEBT_VIEW → FORBIDDEN (công nợ)', forbDebt.ok === false && forbDebt.error === 'FORBIDDEN', forbDebt.error);
 
+  // ═══════════ G) BIGINT (R48) — GD VƯỢT trần int4 (2.147.483.647) phải lưu ĐÚNG, KHÔNG tràn/cắt ═══════════
+  await login('adminroot', ADMIN_PW);
+  const bigAmt = 50_000_000_000; // 50 tỷ >> int4 max ~2,15 tỷ
+  const cBig = await createTransaction({ tidId: tid.id, cardTypeId: card.id, amount: bigAmt, txnDate: '2026-07-06T00:00:00.000Z' });
+  ok('tạo GD 50 tỷ (>> trần int4) → ok (không crash tràn số)', cBig.ok === true, cBig);
+  const tBig = await db.transaction.findUnique({ where: { id: cBig.id! } });
+  ok('lưu ĐÚNG 50.000.000.000 (không bị cắt xuống int4)', Number(tBig?.amount) === bigAmt, { got: String(tBig?.amount) });
+  // 50 tỷ × (2% + 1.5%) = 50 tỷ × 3.5% = 1.750.000.000 (cũng > int4 → chứng minh revenue* BigInt)
+  ok('doanh thu 50 tỷ = 1.750.000.000 (revenue* BigInt, không tràn)', Number(tBig?.revenueAmount) === 1_750_000_000, { got: String(tBig?.revenueAmount) });
   await logout();
   // eslint-disable-next-line no-console
   console.log(`REV15 SUMMARY | pass=${pass} fail=${fail}`);

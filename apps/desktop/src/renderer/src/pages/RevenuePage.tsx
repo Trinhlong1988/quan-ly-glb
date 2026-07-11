@@ -246,16 +246,16 @@ export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
               return (
               <tr key={r.id} className={'hover:bg-appbg/60 ' + (cancelled ? 'opacity-50 ' : '') + (sel.isSelected(r.id) ? 'bg-brand-tint/40' : '')}>
                 {canManage && <SelectCell id={r.id} sel={sel} />}
-                <td className="px-3 py-3 font-mono text-xs font-medium text-slate-700">{r.code ?? '—'}</td>
+                <td className="px-3 py-3 font-mono text-xs font-medium text-slate-700 whitespace-nowrap">{r.code ?? '—'}</td>
                 <td className="px-3 py-3 text-xs text-slate-500">{fmtDate(r.txnDate)}</td>
-                <td className="px-3 py-3 text-slate-700">{r.tid ?? '—'}{r.mid ? <span className="block text-xs text-slate-400">{r.mid}</span> : null}</td>
+                <td className="px-3 py-3 text-slate-700 whitespace-nowrap">{r.tid ?? '—'}{r.mid ? <span className="block text-xs text-slate-400">{r.mid}</span> : null}</td>
                 <td className="px-3 py-3 text-slate-600">{r.hkdName ?? '—'}</td>
                 <td className="px-3 py-3 text-slate-600">{r.customerName ?? <span className="text-slate-400">—</span>}</td>
                 <td className="px-3 py-3 text-slate-600">{r.cardTypeName ?? '—'}</td>
-                <td className="px-3 py-3 text-right tabular-nums text-slate-700">{money(r.amount)}</td>
-                <td className="px-3 py-3 text-right tabular-nums text-indigo-600">{money(r.revenuePartner)}</td>
-                <td className="px-3 py-3 text-right tabular-nums text-emerald-600">{money(r.revenueSell)}</td>
-                <td className="px-3 py-3 text-right font-semibold tabular-nums text-slate-800">{money(r.revenueAmount)}</td>
+                <td className="px-3 py-3 text-right tabular-nums text-slate-700 whitespace-nowrap">{money(r.amount)}</td>
+                <td className="px-3 py-3 text-right tabular-nums text-indigo-600 whitespace-nowrap">{money(r.revenuePartner)}</td>
+                <td className="px-3 py-3 text-right tabular-nums text-emerald-600 whitespace-nowrap">{money(r.revenueSell)}</td>
+                <td className="px-3 py-3 text-right font-semibold tabular-nums text-slate-800 whitespace-nowrap">{money(r.revenueAmount)}</td>
                 <td className="px-3 py-3 text-center"><BillStatusBadge status={r.status} /></td>
                 <td className="px-3 py-3 text-center">{r.settled ? <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-xs font-medium text-emerald-600">Đã thu</span> : <span className="rounded bg-amber-50 px-1.5 py-0.5 text-xs font-medium text-amber-600">Chưa</span>}</td>
                 {showActions && (

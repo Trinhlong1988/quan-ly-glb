@@ -136,10 +136,10 @@ export function SupplierTab({ canManage }: { canManage: boolean }): JSX.Element 
             {!loading && rows.map((s) => (
               <tr key={s.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(s.id) ? 'bg-brand-tint/40' : '')}>
                 {canManage && <SelectCell id={s.id} sel={sel} />}
-                <td className="px-4 py-3 font-mono text-xs font-semibold text-brand">{s.code}</td>
+                <td className="px-4 py-3 font-mono text-xs font-semibold text-brand whitespace-nowrap">{s.code}</td>
                 <td className="px-4 py-3 font-medium text-slate-800">{s.name}</td>
                 <td className="px-4 py-3 text-slate-600">{s.contactPerson ?? '—'}</td>
-                <td className="px-4 py-3 text-slate-600">{s.phone ?? '—'}</td>
+                <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{s.phone ?? '—'}</td>
                 <AuditTrailCells row={s} />
                 {canManage && (
                   <td className="px-4 py-3">
@@ -262,7 +262,7 @@ export function ModelTab({ canManage }: { canManage: boolean }): JSX.Element {
             {!loading && rows.map((m) => (
               <tr key={m.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(m.id) ? 'bg-brand-tint/40' : '')}>
                 {canManage && <SelectCell id={m.id} sel={sel} />}
-                <td className="px-4 py-3 font-mono text-xs font-semibold text-brand">{m.code}</td>
+                <td className="px-4 py-3 font-mono text-xs font-semibold text-brand whitespace-nowrap">{m.code}</td>
                 <td className="px-4 py-3 font-medium text-slate-800">{m.name}</td>
                 <AuditTrailCells row={m} />
                 {canManage && (
@@ -531,10 +531,10 @@ export function IntakeTab({ canManage }: { canManage: boolean }): JSX.Element {
               <tr key={pi.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(pi.id) ? 'bg-brand-tint/40' : '')}>
                 {canManage && <SelectCell id={pi.id} sel={sel} />}
                 <td className="px-4 py-3 text-slate-500">{i + 1}</td>
-                <td className="px-4 py-3"><span className="font-mono text-xs font-semibold text-brand">{pi.posModelCode}</span> <span className="text-slate-700">{pi.posModelName}</span></td>
-                <td className="px-4 py-3 font-mono text-xs font-medium text-slate-800">{pi.serial}</td>
+                <td className="px-4 py-3"><span className="font-mono text-xs font-semibold text-brand whitespace-nowrap">{pi.posModelCode}</span> <span className="text-slate-700">{pi.posModelName}</span></td>
+                <td className="px-4 py-3 font-mono text-xs font-medium text-slate-800 whitespace-nowrap">{pi.serial}</td>
                 <td className="px-4 py-3 text-slate-600">{pi.supplierCode ? `${pi.supplierCode} · ${pi.supplierName}` : (pi.supplierName ?? '—')}</td>
-                <td className="px-4 py-3 text-right font-medium text-slate-800">{fmtVnd(pi.importPrice)}</td>
+                <td className="px-4 py-3 text-right font-medium text-slate-800 whitespace-nowrap">{fmtVnd(pi.importPrice)}</td>
                 <td className="px-4 py-3 text-xs text-slate-500">{fmtDate(pi.importedAt)}</td>
                 <td className="px-4 py-3"><span className="rounded bg-brand-tint px-1.5 py-0.5 text-xs font-medium text-brand">{pi.intakeStatusName ?? '—'}</span></td>
                 {canManage && (

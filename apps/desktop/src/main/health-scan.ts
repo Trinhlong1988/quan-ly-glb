@@ -49,8 +49,8 @@ export async function collectFindings(db: Db): Promise<Finding[]> {
   await safe(async () => {
     const bad: number[] = [];
     for (const t of txns) {
-      const exp = computeRevenue(t.amount, t.partnerMarginMilli, t.sellMarginMilli);
-      if (exp.revenuePartner !== t.revenuePartner || exp.revenueSell !== t.revenueSell || exp.revenueAmount !== t.revenueAmount || t.revenueAmount !== t.revenuePartner + t.revenueSell) bad.push(t.id);
+      const exp = computeRevenue(Number(t.amount), t.partnerMarginMilli, t.sellMarginMilli);
+      if (exp.revenuePartner !== Number(t.revenuePartner) || exp.revenueSell !== Number(t.revenueSell) || exp.revenueAmount !== Number(t.revenueAmount) || Number(t.revenueAmount) !== Number(t.revenuePartner) + Number(t.revenueSell)) bad.push(t.id);
     }
     if (bad.length) f.push({ code: 'REVENUE_MISMATCH', severity: 'ERROR', title: 'Doanh thu giao dịch không khớp công thức 2 khoản chênh', count: bad.length, detail: 'revenueAmount ≠ (chênh đối tác + chênh bán) hoặc lệch so với biểu phí snapshot đã lưu.', suggestion: 'Bấm "Tự sửa" để tính lại doanh thu từ 2 khoản chênh đã lưu trên từng giao dịch.', autoFixable: true, sampleIds: bad.slice(0, 10) });
   });
@@ -147,8 +147,8 @@ export async function applyAutoFixes(db: Db, findings: Finding[]): Promise<numbe
   if (revMismatch) {
     const txns = await db.transaction.findMany({ where: { deletedAt: null }, select: { id: true, amount: true, partnerMarginMilli: true, sellMarginMilli: true, revenuePartner: true, revenueSell: true, revenueAmount: true } });
     for (const t of txns) {
-      const exp = computeRevenue(t.amount, t.partnerMarginMilli, t.sellMarginMilli);
-      if (exp.revenuePartner !== t.revenuePartner || exp.revenueSell !== t.revenueSell || exp.revenueAmount !== t.revenueAmount) {
+      const exp = computeRevenue(Number(t.amount), t.partnerMarginMilli, t.sellMarginMilli);
+      if (exp.revenuePartner !== Number(t.revenuePartner) || exp.revenueSell !== Number(t.revenueSell) || exp.revenueAmount !== Number(t.revenueAmount)) {
         await db.transaction.update({ where: { id: t.id }, data: { revenuePartner: exp.revenuePartner, revenueSell: exp.revenueSell, revenueAmount: exp.revenueAmount } });
         fixed++;
       }
