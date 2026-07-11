@@ -519,10 +519,49 @@ export async function createPosIntake(input: CreatePosIntakeInput): Promise<Muta
   if (refErr) return refErr;
   const dup = dupResult(await db.posIntake.findFirst({ where: { serial } }), 'Seri number', serial);
   if (dup) return dup;
+  // PHASE K1 (Q-P1, desync #22): tạo phiếu nhập + UPSERT PosDevice IN_STOCK + ghi AssetEvent(STOCK_IN)
+  // trong CÙNG $transaction. PosDevice = nguồn sự thật DUY NHẤT → máy vừa nhập kho hiện ngay ở
+  // "Danh sách máy" + gán TID được. Nếu serial đã là PosDevice đang chạy (DEPLOYED/…): chỉ cập nhật
+  // cột nhập gần nhất, KHÔNG hạ status về IN_STOCK.
   let created;
   try {
-    created = await db.posIntake.create({
-      data: { posModelId: input.posModelId, serial, intakeStatusId: input.intakeStatusId, supplierId: input.supplierId, importPrice: price, importedAt, note: input.note?.trim() || null, createdBy: user.id }
+    created = await db.$transaction(async (tx) => {
+      const intake = await tx.posIntake.create({
+        data: { posModelId: input.posModelId, serial, intakeStatusId: input.intakeStatusId, supplierId: input.supplierId, importPrice: price, importedAt, note: input.note?.trim() || null, createdBy: user.id }
+      });
+      // Khóa hàng máy (nếu có) FOR UPDATE trước khi đọc/cập nhật (chống tương tranh với transition).
+      await tx.$queryRaw`SELECT id FROM pos_devices WHERE serial = ${serial} FOR UPDATE`;
+      const existing = await tx.posDevice.findUnique({ where: { serial } });
+      const intakeCols = { posModelId: input.posModelId, supplierId: input.supplierId, intakeStatusId: input.intakeStatusId, importPrice: price, importedAt };
+      // FIX 3 (K1): chỉ ghi STOCK_IN khi máy MỚI tạo HOẶC đang IN_STOCK (đúng ngữ nghĩa "nhập kho").
+      // Máy đã tồn tại ở trạng thái sống khác (DEPLOYED/DAMAGED/IN_REPAIR/RETIRED) → chỉ cập nhật cột
+      // nhập (NCC/giá) → ghi event 'INTAKE_UPDATE', KHÔNG hạ status, KHÔNG nhiễu timeline bằng STOCK_IN giả.
+      let fromState: string | null;
+      let eventType: string;
+      if (!existing) {
+        await tx.posDevice.create({ data: { serial, status: 'IN_STOCK', ...intakeCols, createdBy: user.id } });
+        fromState = null;
+        eventType = 'STOCK_IN';
+      } else {
+        // GIỮ status/currentTid/currentCustomerId/currentAgentId — chỉ cập nhật cột nhập gần nhất.
+        await tx.posDevice.update({ where: { id: existing.id }, data: { ...intakeCols, updatedBy: user.id } });
+        fromState = existing.status;
+        eventType = existing.status === 'IN_STOCK' ? 'STOCK_IN' : 'INTAKE_UPDATE';
+      }
+      const toState = existing ? existing.status : 'IN_STOCK';
+      await tx.assetEvent.create({
+        data: {
+          deviceSerial: serial,
+          eventType,
+          fromState,
+          toState,
+          actorUserId: user.id,
+          occurredAt: importedAt,
+          note: input.note?.trim() || null,
+          afterJson: JSON.stringify(auditSnapshot({ serial, posModelId: input.posModelId, supplierId: input.supplierId, importPrice: price, status: toState }))
+        }
+      });
+      return intake;
     });
   } catch (e) {
     if (isUniqueViolation(e)) return { ok: false, error: 'DUPLICATE', message: `Seri number "${serial}" đã tồn tại.` };

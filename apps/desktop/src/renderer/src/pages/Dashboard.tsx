@@ -12,7 +12,6 @@ import {
   HardDrive,
   CreditCard,
   Landmark,
-  PackagePlus,
   Percent,
   Wallet,
   FolderKanban,
@@ -44,7 +43,6 @@ import { PosPage } from './PosPage.js';
 import { TidPage } from './TidPage.js';
 import { TrashPage } from './TrashPage.js';
 import { BankConfigPage } from './BankConfigPage.js';
-import { PosSupplyPage } from './PosSupplyPage.js';
 import { FeeConfigPage } from './FeeConfigPage.js';
 import { ReceiveAccountPage } from './ReceiveAccountPage.js';
 import { DossierPage } from './DossierPage.js';
@@ -78,9 +76,10 @@ const MENU: MenuItem[] = [
   { key: 'dashboard', label: 'Trang chủ', icon: <LayoutDashboard className="h-[18px] w-[18px]" />, perms: ['DASHBOARD_VIEW'] },
   { key: 'staff', label: 'Quản Lý Nhân Sự', icon: <Users className="h-[18px] w-[18px]" />, perms: ['USER_READ', 'ROLE_READ'] },
   { key: 'customers', label: 'Quản Lý Khách Hàng', icon: <UserRound className="h-[18px] w-[18px]" />, perms: ['CUSTOMER_VIEW'] },
-  { key: 'pos', label: 'Quản Lý Máy POS', icon: <HardDrive className="h-[18px] w-[18px]" />, perms: ['POS_VIEW'] },
+  // PHASE K1 — gộp "Cấu hình máy POS" vào "Quản Lý Máy POS" (1 trang nhiều tab). Menu hiện với AI có
+  // POS_VIEW HOẶC CONFIG_POS_SUPPLY_VIEW (hasAnyPermission) — không mất quyền của user chỉ-cấu-hình.
+  { key: 'pos', label: 'Quản Lý Máy POS', icon: <HardDrive className="h-[18px] w-[18px]" />, perms: ['POS_VIEW', 'CONFIG_POS_SUPPLY_VIEW'] },
   { key: 'bankcfg', label: 'Cấu hình ngân hàng', icon: <Landmark className="h-[18px] w-[18px]" />, perms: ['CONFIG_BANK_VIEW'] },
-  { key: 'possupply', label: 'Cấu hình máy POS', icon: <PackagePlus className="h-[18px] w-[18px]" />, perms: ['CONFIG_POS_SUPPLY_VIEW'] },
   { key: 'revenue', label: 'Quản Lý Doanh Thu', icon: <TrendingUp className="h-[18px] w-[18px]" />, perms: ['REVENUE_VIEW'] },
   { key: 'debt', label: 'Quản Lý Công Nợ', icon: <Coins className="h-[18px] w-[18px]" />, perms: ['DEBT_VIEW'] },
   { key: 'feecfg', label: 'Cấu hình % phí POS', icon: <Percent className="h-[18px] w-[18px]" />, perms: ['CONFIG_FEE_VIEW'] },
@@ -310,7 +309,6 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
           {activeItem?.key === 'staff' && <StaffManagementPage user={user} />}
           {activeItem?.key === 'audit' && <AuditPage />}
           {activeItem?.key === 'bankcfg' && <BankConfigPage user={user} />}
-          {activeItem?.key === 'possupply' && <PosSupplyPage user={user} />}
           {activeItem?.key === 'feecfg' && <FeeConfigPage user={user} />}
           {activeItem?.key === 'rcvacct' && <ReceiveAccountPage user={user} />}
           {activeItem?.key === 'dossier' && <DossierPage user={user} />}

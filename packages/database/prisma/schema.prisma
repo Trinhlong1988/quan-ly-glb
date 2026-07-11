@@ -203,6 +203,10 @@ model Customer {
 }
 
 // Máy POS vật lý — danh tính = serial number bất biến (§A2).
+// PHASE K1 (Q-P1/Q-P4): PosDevice = NGUỒN SỰ THẬT DUY NHẤT của 1 máy. Di trú các cột nhập từ
+// PosIntake sang đây (nullable — không phá dữ liệu cũ). GIỮ cột model/bank text (Q-P4, không xóa ở
+// pha K) + thêm FK posModelId/bankId/supplierId/intakeStatusId. Bổ sung audit + soft-delete như các
+// bảng khác. Link scalar (no hard FK) — nhất quán triết lý event-log ở đầu file.
 model PosDevice {
   id                Int      @id @default(autoincrement())
   serial            String   @unique
@@ -214,9 +218,23 @@ model PosDevice {
   currentTid        String?  @map("current_tid")
   warehouseLoc      String?  @map("warehouse_loc")
   note              String?
+  // ── PHASE K1 §2.1 — cột nhập di trú từ PosIntake (nullable) ──
+  posModelId        Int?      @map("pos_model_id") // FK PosModel (§C7) — thay model text (Q-P4)
+  supplierId        Int?      @map("supplier_id") // NCC nhập gần nhất (§C6)
+  intakeStatusId    Int?      @map("intake_status_id") // trạng thái nhập (§C8a)
+  importPrice       Int?      @map("import_price") // giá nhập gần nhất (VND)
+  importedAt        DateTime? @map("imported_at") @db.Timestamptz(3) // ngày nhập gần nhất
+  bankId            Int?      @map("bank_id") // FK Bank (§C1) — thay bank text (Q-P4)
+  // ── audit + soft-delete (BỔ SUNG — trước đây thiếu) ──
+  createdBy         Int?      @map("created_by")
+  updatedBy         Int?      @map("updated_by")
+  deletedBy         Int?      @map("deleted_by")
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(3)
   createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
+  @@index([posModelId])
+  @@index([supplierId])
   @@map("pos_devices")
 }
 

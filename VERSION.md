@@ -1,12 +1,12 @@
 ---
 project: Quản Lý GLB (IMS)
 phase: G-REV.B / G-MAINT.E
-current_version: 0.21.1-h2b
-status: Thu-Chi H1→H2b HOÀN CHỈNH + COMMITTED (H1 9ead981; H2-core 1b333e4; H2-debt 1d33f10; H2b+hardening b09b289). B21 fix seed hoa/thường f1be7aa. DB thật `glb` đã migrate+seed+dedup — .env trỏ `glb` — SẴN SÀNG REOPEN lượt 1 (Mr.Long check menu lần lượt). PHASE_K = reopen lượt 2 (chờ duyệt 13 câu hỏi).
+current_version: 0.22.0-k1
+status: PHASE_K K1 (Hợp nhất POS + timeline gốc) COMMITTED+TAGGED. PosDevice=nguồn sự thật (nhập kho upsert PosDevice IN_STOCK+STOCK_IN, sửa desync #22), backfill idempotent từ PosIntake, xử lý TID khi thu hồi/hỏng/bảo hành/thanh lý, PosPage 5 tab, bỏ menu possupply. QA-pair đối kháng bắt 3 lỗi pre-commit (HIGH reassign / MEDIUM ABBA deadlock / LOW STOCK_IN) → hardening PASS. K2 (TID unify) tiếp theo. (Thu-Chi H1→H2b: b09b289; B21: f1be7aa.)
 last_update_ts: 2026-07-11
-last_update_by: LEAD (AUDIT rerun sạch: typecheck 0 · build 0 · vitest 237 · selftest 2/5/25/26/27/28 xanh · selftest 5=112)
+last_update_by: LEAD (AUDIT rerun sạch: typecheck 0 · build 0 · vitest 238 · selftest 29 hardened failures=0 (4 ca FIX1) · 3/5/14/27/28/2 xanh)
 rule_break_count: 0
-schema_version: 17
+schema_version: 18
 repo_path: D:\TT HKD AI\tools\quan-ly-glb (chuyển C→D 10/7; bản C giữ làm sao lưu, cấm sửa)
 ---
 

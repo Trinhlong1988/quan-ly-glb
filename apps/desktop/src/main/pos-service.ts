@@ -1,7 +1,8 @@
 // POS device service (main). IMS_SPEC §A. Event-sourced lifecycle: every transition writes an
 // immutable asset_event (with occurredAt = real operation time) + updates the projected status,
 // and also writes a governance audit row. Permission-guarded (POS_VIEW / POS_MANAGE), R_UX_WARN.
-import { decidePosTransition, auditSnapshot, type PosEvent, type PosStatus } from '@glb/business-rules';
+import { decidePosTransition, decideTidTransition, auditSnapshot, type PosEvent, type PosStatus, type TidStatus } from '@glb/business-rules';
+import { Prisma } from '@glb/database';
 import { requirePermission, verifyActorPassword } from './guard.js';
 import { writeAudit } from './audit.js';
 import { dateRange } from './customer-service.js';
@@ -18,6 +19,15 @@ export interface PosDto {
   warehouseLoc: string | null;
   note: string | null;
   createdAt: string;
+  // ── PHASE K1 — cột nhập di trú (§2.3) để hiển thị cạnh trạng thái vận hành ──
+  posModelId: number | null;
+  posModelName: string | null; // "MÃ · Tên" chủng loại
+  supplierId: number | null;
+  supplierName: string | null;
+  importPrice: number | null;
+  importedAt: string | null;
+  customerName: string | null; // tên khách đang giữ máy (currentCustomerId)
+  agentName: string | null; // tên đại lý (currentAgentId)
 }
 
 export interface TimelineEventDto {
@@ -49,7 +59,7 @@ export interface PosFilter {
   toDate?: string;
 }
 
-function toDto(d: {
+interface PosDeviceRow {
   id: number;
   serial: string;
   model: string | null;
@@ -61,7 +71,20 @@ function toDto(d: {
   warehouseLoc: string | null;
   note: string | null;
   createdAt: Date;
-}): PosDto {
+  posModelId: number | null;
+  supplierId: number | null;
+  importPrice: number | null;
+  importedAt: Date | null;
+}
+interface PosNameMaps {
+  models: Map<number, { code: string; name: string }>;
+  suppliers: Map<number, { code: string; name: string }>;
+  customers: Map<number, string>;
+  agents: Map<number, string>;
+}
+function toDto(d: PosDeviceRow, maps: PosNameMaps): PosDto {
+  const m = d.posModelId != null ? maps.models.get(d.posModelId) : undefined;
+  const s = d.supplierId != null ? maps.suppliers.get(d.supplierId) : undefined;
   return {
     id: d.id,
     serial: d.serial,
@@ -73,7 +96,15 @@ function toDto(d: {
     currentTid: d.currentTid,
     warehouseLoc: d.warehouseLoc,
     note: d.note,
-    createdAt: d.createdAt.toISOString()
+    createdAt: d.createdAt.toISOString(),
+    posModelId: d.posModelId,
+    posModelName: m ? `${m.code} · ${m.name}` : d.model,
+    supplierId: d.supplierId,
+    supplierName: s ? `${s.code} · ${s.name}` : null,
+    importPrice: d.importPrice,
+    importedAt: d.importedAt ? d.importedAt.toISOString() : null,
+    customerName: d.currentCustomerId != null ? maps.customers.get(d.currentCustomerId) ?? null : null,
+    agentName: d.currentAgentId != null ? maps.agents.get(d.currentAgentId) ?? null : null
   };
 }
 
@@ -85,6 +116,7 @@ export async function listPosDevices(
   if (!g.ok) return g;
   const rows = await g.db.posDevice.findMany({
     where: {
+      deletedAt: null,
       bank: filter.bank || undefined,
       status: filter.status || undefined,
       currentAgentId: filter.agentId ?? undefined,
@@ -95,7 +127,18 @@ export async function listPosDevices(
     },
     orderBy: { id: 'asc' }
   });
-  return { ok: true, data: rows.map(toDto) };
+  // Resolve FK names (chủng loại / NCC / khách / đại lý) — join ở service layer (resilient soft-delete).
+  const modelIds = [...new Set(rows.map((r) => r.posModelId).filter((x): x is number => x != null))];
+  const supplierIds = [...new Set(rows.map((r) => r.supplierId).filter((x): x is number => x != null))];
+  const customerIds = [...new Set(rows.map((r) => r.currentCustomerId).filter((x): x is number => x != null))];
+  const agentIds = [...new Set(rows.map((r) => r.currentAgentId).filter((x): x is number => x != null))];
+  const maps: PosNameMaps = {
+    models: new Map((await g.db.posModel.findMany({ where: { id: { in: modelIds } }, select: { id: true, code: true, name: true } })).map((x) => [x.id, { code: x.code, name: x.name }])),
+    suppliers: new Map((await g.db.supplier.findMany({ where: { id: { in: supplierIds } }, select: { id: true, code: true, name: true } })).map((x) => [x.id, { code: x.code, name: x.name }])),
+    customers: new Map((await g.db.customer.findMany({ where: { id: { in: customerIds } }, select: { id: true, nickname: true, fullName: true } })).map((x) => [x.id, x.nickname || x.fullName])),
+    agents: new Map((await g.db.agent.findMany({ where: { id: { in: agentIds } }, select: { id: true, name: true } })).map((x) => [x.id, x.name]))
+  };
+  return { ok: true, data: rows.map((r) => toDto(r, maps)) };
 }
 
 /** POS_VIEW — the immutable timeline for one device, oldest → newest (§A4). */
@@ -208,81 +251,210 @@ const POS_EVENT_LABELS: Record<PosEvent, string> = {
   retire: 'Thanh lý'
 };
 
-/** Core: validate + write asset_event + project new status + audit. Shared by all transitions. */
+/** Interactive-transaction client type (Prisma 7). */
+type PrismaTx = Prisma.TransactionClient;
+
+/** Sentinel thrown inside a $transaction to abort with a caller-facing MutationResult. */
+class TransitionAbort extends Error {
+  constructor(public readonly result: MutationResult) {
+    super(result.message ?? result.error ?? 'ABORT');
+  }
+}
+
+/** Sentinel: state raced between dirty-read và khóa (currentTid đổi) → chạy lại transaction sạch. */
+class RetrySignal extends Error {}
+
+/** True nếu lỗi Postgres là deadlock (40P01) hoặc serialization failure (40001) → nên retry. */
+function isRetryablePgError(e: unknown): boolean {
+  if (e instanceof RetrySignal) return true;
+  const code = (e as { code?: string })?.code;
+  return code === '40P01' || code === '40001';
+}
+
+/**
+ * Chạy 1 transaction, retry tối đa `attempts` lần khi gặp deadlock/serialization/RetrySignal.
+ * TransitionAbort (lỗi nghiệp vụ) KHÔNG retry — ném thẳng để trả message cho caller.
+ */
+async function runWithRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<T> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (e instanceof TransitionAbort) throw e;
+      if (isRetryablePgError(e)) {
+        lastErr = e;
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastErr;
+}
+
+/**
+ * PHASE K1 (Q-P6, §2.5) — gỡ gán TID khỏi 1 máy trong CÙNG transaction (chống mồ côi):
+ *  - mode 'recall'  (Thu hồi máy): máy về kho, TID về "Chưa gán máy" (clear posSerial/agentId,
+ *                   GIỮ customerId/deliveredAt/status) — TID có thể lắp máy khác. Event TID_UNBIND.
+ *  - mode 'retire'  (Thanh lý máy): máy biến mất → ĐÓNG/THU HỒI TID (status → RECALLED nếu đang
+ *                   sống), clear posSerial. Event TID_RECALL.
+ * Khóa hàng tids FOR UPDATE trước khi đổi (TOCTOU). Không làm gì nếu máy không còn currentTid.
+ */
+async function unbindTidFromDevice(
+  tx: PrismaTx,
+  args: { serial: string; tid: string; mode: 'recall' | 'retire'; actorUserId: number; occurredAt: Date; note: string | null }
+): Promise<void> {
+  const { serial, tid, mode, actorUserId, occurredAt, note } = args;
+  // Lock the TID row (chống tương tranh với assign/recall TID song song).
+  await tx.$queryRaw`SELECT id FROM tids WHERE tid = ${tid} FOR UPDATE`;
+  const row = await tx.tid.findUnique({ where: { tid } });
+  if (!row) return; // TID đã biến mất → không có gì để gỡ.
+  const fromState = row.status;
+  let toState = fromState;
+  const data: Record<string, unknown> = { posSerial: null, agentId: null };
+  let eventType = 'TID_UNBIND';
+  if (mode === 'retire') {
+    // Đóng/thu hồi TID: đưa về RECALLED khi còn sống (ACTIVE/DEAD/CLOSED); UNASSIGNED/RECALLED giữ nguyên.
+    const decision = decideTidTransition(fromState as TidStatus, 'recall');
+    if (decision.allowed) {
+      toState = decision.to!;
+      data.status = toState;
+      data.closedAt = occurredAt;
+      eventType = decision.eventType!; // TID_RECALL
+    }
+  }
+  await tx.tid.update({ where: { id: row.id }, data });
+  await tx.posTidBinding.updateMany({
+    where: { posSerial: serial, tid, unboundAt: null },
+    data: { unboundAt: occurredAt, unbindReason: mode === 'retire' ? 'POS_RETIRE' : 'POS_RECALL' }
+  });
+  await tx.assetEvent.create({
+    data: {
+      deviceSerial: serial,
+      tid,
+      eventType,
+      fromState,
+      toState,
+      customerId: row.customerId,
+      actorUserId,
+      occurredAt,
+      note,
+      afterJson: JSON.stringify(auditSnapshot({ tid, unboundFrom: serial, mode, status: toState }))
+    }
+  });
+}
+
+/** Core: validate + write asset_event + project new status + audit. Shared by all transitions.
+ * PHASE K1 (FIX 2 — chống ABBA deadlock): THỨ TỰ KHÓA TOÀN CỤC = tids TRƯỚC pos_devices (khớp
+ * assignTid). recall/retire dirty-read `currentTid` (không khóa) → khóa hàng tids đó TRƯỚC → khóa
+ * pos_devices → re-đọc + re-validate dưới khóa. Nếu currentTid đổi giữa dirty-read và khóa → RetrySignal
+ * (chạy lại sạch). Bọc retry deadlock/serialization (40P01/40001) tối đa 3 lần rồi trả lỗi thân thiện. */
 async function applyTransition(serial: string, event: PosEvent, input: TransitionInput): Promise<MutationResult> {
   const g = await requirePermission('POS_MANAGE', { action: 'POS_TRANSITION', targetType: 'PosDevice' });
   if (!g.ok) return g;
   const { db, user } = g;
 
-  const dev = await db.posDevice.findUnique({ where: { serial } });
-  if (!dev) return { ok: false, error: 'NOT_FOUND', message: `Không tìm thấy máy POS serial "${serial}".` };
-
-  const decision = decidePosTransition(dev.status as PosStatus, event);
-  if (!decision.allowed) {
-    return { ok: false, error: decision.reason, message: transitionDenyMessage(decision.reason, dev.status, event) };
-  }
-  if (event === 'deploy' && (input.customerId == null)) {
+  const pre = await db.posDevice.findUnique({ where: { serial } });
+  if (!pre) return { ok: false, error: 'NOT_FOUND', message: `Không tìm thấy máy POS serial "${serial}".` };
+  if (event === 'deploy' && input.customerId == null) {
     return { ok: false, error: 'VALIDATION', message: 'Triển khai máy phải chọn khách hàng nhận máy.' };
   }
   if (event === 'transferAgent' && input.agentId == null) {
     return { ok: false, error: 'VALIDATION', message: 'Chuyển đại lý phải chọn đại lý đích.' };
   }
+  const unbinds = event === 'recall' || event === 'retire';
 
   const occurredAt = parseWhen(input.occurredAt);
-  const fromState = dev.status;
-  const toState = decision.to!;
-  const before = auditSnapshot({ status: fromState, currentAgentId: dev.currentAgentId, currentCustomerId: dev.currentCustomerId });
+  let result: MutationResult;
+  try {
+    result = await runWithRetry(async () => {
+      // Dirty-read currentTid (KHÔNG khóa) mỗi lần thử → biết hàng tids cần khóa TRƯỚC.
+      const dirty = unbinds ? await db.posDevice.findUnique({ where: { serial }, select: { currentTid: true } }) : null;
+      const dirtyTid = dirty?.currentTid ?? null;
+      return await db.$transaction(async (tx) => {
+        // THỨ TỰ KHÓA: tids TRƯỚC (nếu máy còn TID) rồi mới pos_devices — khớp assignTid, chống ABBA.
+        if (dirtyTid) await tx.$queryRaw`SELECT id FROM tids WHERE tid = ${dirtyTid} FOR UPDATE`;
+        await tx.$queryRaw`SELECT id FROM pos_devices WHERE serial = ${serial} FOR UPDATE`;
+        const dev = await tx.posDevice.findUnique({ where: { serial } });
+        if (!dev) throw new TransitionAbort({ ok: false, error: 'NOT_FOUND', message: `Không tìm thấy máy POS serial "${serial}".` });
 
-  // Project the device fields per event.
-  const patch: Record<string, unknown> = { status: toState };
-  let toAgentId: number | null = null;
-  let customerId: number | null = null;
-  if (event === 'deploy') {
-    patch.currentCustomerId = input.customerId ?? null;
-    patch.currentAgentId = input.agentId ?? dev.currentAgentId;
-    customerId = input.customerId ?? null;
-    toAgentId = (input.agentId ?? dev.currentAgentId) ?? null;
-  } else if (event === 'transferAgent') {
-    patch.currentAgentId = input.agentId ?? null;
-    toAgentId = input.agentId ?? null;
-  } else if (event === 'recall') {
-    patch.currentCustomerId = null;
-    patch.currentAgentId = null;
-    patch.warehouseLoc = dev.warehouseLoc;
-  } else if (event === 'retire') {
-    patch.currentCustomerId = null;
-    patch.currentAgentId = null;
+        // currentTid đổi giữa dirty-read và khóa → tids đã khóa không khớp → retry sạch (dirty-read lại).
+        if (unbinds && (dev.currentTid ?? null) !== dirtyTid) throw new RetrySignal();
+
+        const decision = decidePosTransition(dev.status as PosStatus, event);
+        if (!decision.allowed) {
+          throw new TransitionAbort({ ok: false, error: decision.reason, message: transitionDenyMessage(decision.reason, dev.status, event) });
+        }
+
+        const fromState = dev.status;
+      const toState = decision.to!;
+      const before = auditSnapshot({ status: fromState, currentAgentId: dev.currentAgentId, currentCustomerId: dev.currentCustomerId, currentTid: dev.currentTid });
+
+      const patch: Record<string, unknown> = { status: toState, updatedBy: user.id };
+      let toAgentId: number | null = null;
+      let customerId: number | null = null;
+      if (event === 'deploy') {
+        patch.currentCustomerId = input.customerId ?? null;
+        patch.currentAgentId = input.agentId ?? dev.currentAgentId;
+        customerId = input.customerId ?? null;
+        toAgentId = (input.agentId ?? dev.currentAgentId) ?? null;
+      } else if (event === 'transferAgent') {
+        patch.currentAgentId = input.agentId ?? null;
+        toAgentId = input.agentId ?? null;
+      } else if (event === 'recall') {
+        patch.currentCustomerId = null;
+        patch.currentAgentId = null;
+        // Q-P6: Thu hồi máy = GỠ gán TID (nếu còn) — máy về kho, TID về "Chưa gán máy".
+        if (dev.currentTid) {
+          patch.currentTid = null;
+          await unbindTidFromDevice(tx, { serial, tid: dev.currentTid, mode: 'recall', actorUserId: user.id, occurredAt, note: input.note ?? null });
+        }
+      } else if (event === 'retire') {
+        patch.currentCustomerId = null;
+        patch.currentAgentId = null;
+        // Q-P6: Thanh lý = BẮT BUỘC gỡ + đóng/thu hồi TID.
+        if (dev.currentTid) {
+          patch.currentTid = null;
+          await unbindTidFromDevice(tx, { serial, tid: dev.currentTid, mode: 'retire', actorUserId: user.id, occurredAt, note: input.note ?? null });
+        }
+      }
+      // Q-P6: reportDamage / sendRepair / receiveRepaired / transferAgent → GIỮ currentTid (không đụng).
+
+      await tx.posDevice.update({ where: { id: dev.id }, data: patch });
+      await tx.assetEvent.create({
+        data: {
+          deviceSerial: serial,
+          eventType: decision.eventType!,
+          fromState,
+          toState,
+          fromAgentId: dev.currentAgentId,
+          toAgentId,
+          customerId,
+          actorUserId: user.id,
+          occurredAt,
+          note: input.note ?? null,
+          beforeJson: JSON.stringify(before),
+          afterJson: JSON.stringify(auditSnapshot({ status: toState, currentAgentId: patch.currentAgentId ?? dev.currentAgentId, currentCustomerId: patch.currentCustomerId ?? dev.currentCustomerId }))
+        }
+      });
+        return { ok: true, id: dev.id, _before: before, _eventType: decision.eventType, _toState: toState } as MutationResult & { _before: unknown; _eventType: string; _toState: string };
+      });
+    });
+  } catch (e) {
+    if (e instanceof TransitionAbort) return e.result;
+    throw e;
   }
 
-  await db.$transaction(async (tx) => {
-    await tx.posDevice.update({ where: { id: dev.id }, data: patch });
-    await tx.assetEvent.create({
-      data: {
-        deviceSerial: serial,
-        eventType: decision.eventType!,
-        fromState,
-        toState,
-        fromAgentId: dev.currentAgentId,
-        toAgentId,
-        customerId,
-        actorUserId: user.id,
-        occurredAt,
-        note: input.note ?? null,
-        beforeJson: JSON.stringify(before),
-        afterJson: JSON.stringify(auditSnapshot({ status: toState, currentAgentId: patch.currentAgentId ?? dev.currentAgentId, currentCustomerId: patch.currentCustomerId ?? dev.currentCustomerId }))
-      }
-    });
-  });
-
+  const meta = result as MutationResult & { _before?: unknown; _eventType?: string; _toState?: string };
   await writeAudit(db, {
     actorUserId: user.id,
     action: 'POS_TRANSITION',
     targetType: 'PosDevice',
-    targetId: String(dev.id),
-    before,
-    after: auditSnapshot({ event: decision.eventType, status: toState })
+    targetId: String(pre.id),
+    before: meta._before as Record<string, unknown> | undefined,
+    after: auditSnapshot({ event: meta._eventType, status: meta._toState })
   });
-  return { ok: true, id: dev.id };
+  return { ok: true, id: pre.id };
 }
 
 export const deployPos = (serial: string, input: TransitionInput): Promise<MutationResult> => applyTransition(serial, 'deploy', input);

@@ -48,6 +48,10 @@ describe('TID state machine (§A3)', () => {
     expect(decideTidTransition('UNASSIGNED', 'assign')).toMatchObject({ allowed: true, to: 'ACTIVE', eventType: 'TID_ASSIGN' });
   });
 
+  it('assign also allowed from ACTIVE (K1: TID thu hồi khỏi máy lắp máy khác); posSerial guard ở service', () => {
+    expect(decideTidTransition('ACTIVE', 'assign')).toMatchObject({ allowed: true, to: 'ACTIVE', eventType: 'TID_ASSIGN' });
+  });
+
   it('replace: old ACTIVE → DEAD, new UNASSIGNED → ACTIVE', () => {
     expect(decideTidTransition('ACTIVE', 'markDead')).toMatchObject({ allowed: true, to: 'DEAD', eventType: 'TID_DEAD' });
     expect(decideTidTransition('UNASSIGNED', 'activateReplacement')).toMatchObject({ allowed: true, to: 'ACTIVE', eventType: 'TID_REPLACE' });
@@ -60,9 +64,10 @@ describe('TID state machine (§A3)', () => {
     expect(decideTidTransition('UNASSIGNED', 'close')).toMatchObject({ allowed: false });
   });
 
-  it('rejects assigning an already-active TID', () => {
-    expect(decideTidTransition('ACTIVE', 'assign')).toMatchObject({ allowed: false, reason: 'INVALID_STATE' });
-    expect(decideTidTransition('DEAD', 'assign')).toMatchObject({ allowed: false });
+  it('rejects assigning a dead/closed/recalled TID', () => {
+    expect(decideTidTransition('DEAD', 'assign')).toMatchObject({ allowed: false, reason: 'INVALID_STATE' });
+    expect(decideTidTransition('CLOSED', 'assign')).toMatchObject({ allowed: false, reason: 'INVALID_STATE' });
+    expect(decideTidTransition('RECALLED', 'assign')).toMatchObject({ allowed: false, reason: 'INVALID_STATE' });
   });
 
   it('every TID event maps to a valid resulting status', () => {

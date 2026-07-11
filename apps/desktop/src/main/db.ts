@@ -224,6 +224,83 @@ export async function seedDefaultIntakeStatusesIfMissing(db: Db): Promise<number
   return created;
 }
 
+// ── PHASE K1 — Hợp nhất POS: backfill PosDevice từ PosIntake (§2.2, desync #22) ───────────────
+// PosDevice = nguồn sự thật DUY NHẤT. DB cũ có phiếu nhập (pos_intakes) nhưng CHƯA có bản ghi máy
+// (pos_devices) → máy "tàng hình" ở "Danh sách máy" + không gán TID được. Backfill idempotent:
+//   • serial CHƯA có ở pos_devices  → tạo PosDevice IN_STOCK (điền cột nhập) + AssetEvent(STOCK_IN).
+//   • serial ĐÃ có ở cả 2 bảng       → chỉ ĐIỀN cột nhập còn TRỐNG; TUYỆT ĐỐI KHÔNG đụng
+//     status/currentTid/currentCustomerId/currentAgentId đang chạy.
+//   • posModelId ← model(text) nếu match tên/mã PosModel; bankId ← bank(text) nếu match Bank; else null.
+//   • Đảm bảo MỌI máy có ≥1 AssetEvent STOCK_IN (timeline gốc).
+// Chạy 2 lần KHÔNG nhân đôi PosDevice/AssetEvent. Guard cờ nằm ở seedIfEmpty (1 lần/DB), giống grant*.
+const POS_UNIFY_BACKFILL_FLAG = 'seed.posUnifyBackfilledV1';
+
+export interface PosBackfillReport {
+  created: number; // số PosDevice mới tạo từ phiếu nhập
+  filled: number; // số PosDevice đã có được điền thêm cột nhập
+  stockInAdded: number; // số AssetEvent(STOCK_IN) bổ sung
+  intakeSerials: number; // distinct serial alive ở pos_intakes
+  deviceSerials: number; // số pos_devices tương ứng các serial đó (đối soát)
+}
+
+export async function backfillPosDevicesFromIntakes(db: Db): Promise<PosBackfillReport> {
+  const norm = (s: string): string => s.trim().toLowerCase();
+  const models = await db.posModel.findMany({ where: { deletedAt: null }, select: { id: true, code: true, name: true } });
+  const banks = await db.bank.findMany({ where: { deletedAt: null }, select: { id: true, code: true, name: true } });
+  const modelByKey = new Map<string, number>();
+  for (const m of models) { modelByKey.set(norm(m.code), m.id); modelByKey.set(norm(m.name), m.id); }
+  const bankByKey = new Map<string, number>();
+  for (const b of banks) { bankByKey.set(norm(b.code), b.id); bankByKey.set(norm(b.name), b.id); }
+
+  const intakes = await db.posIntake.findMany({ where: { deletedAt: null }, orderBy: { id: 'asc' } });
+  let created = 0, filled = 0, stockInAdded = 0;
+  for (const it of intakes) {
+    const dev = await db.posDevice.findUnique({ where: { serial: it.serial } });
+    if (!dev) {
+      await db.$transaction(async (tx) => {
+        await tx.posDevice.create({
+          data: { serial: it.serial, status: 'IN_STOCK', posModelId: it.posModelId, supplierId: it.supplierId, intakeStatusId: it.intakeStatusId, importPrice: it.importPrice, importedAt: it.importedAt, createdBy: it.createdBy }
+        });
+        await tx.assetEvent.create({
+          data: { deviceSerial: it.serial, eventType: 'STOCK_IN', toState: 'IN_STOCK', actorUserId: it.createdBy, occurredAt: it.importedAt, afterJson: JSON.stringify({ serial: it.serial, backfill: true }) }
+        });
+      });
+      created++;
+      stockInAdded++;
+    } else {
+      // Chỉ ĐIỀN cột nhập còn TRỐNG — KHÔNG đụng trạng thái vận hành đang chạy.
+      const patch: Record<string, unknown> = {};
+      if (dev.posModelId == null && it.posModelId != null) patch.posModelId = it.posModelId;
+      if (dev.supplierId == null && it.supplierId != null) patch.supplierId = it.supplierId;
+      if (dev.intakeStatusId == null && it.intakeStatusId != null) patch.intakeStatusId = it.intakeStatusId;
+      if (dev.importPrice == null && it.importPrice != null) patch.importPrice = it.importPrice;
+      if (dev.importedAt == null && it.importedAt != null) patch.importedAt = it.importedAt;
+      if (Object.keys(patch).length > 0) { await db.posDevice.update({ where: { id: dev.id }, data: patch }); filled++; }
+      const hasStockIn = await db.assetEvent.findFirst({ where: { deviceSerial: dev.serial, eventType: 'STOCK_IN' }, select: { id: true } });
+      if (!hasStockIn) {
+        await db.assetEvent.create({
+          data: { deviceSerial: dev.serial, eventType: 'STOCK_IN', toState: dev.status, actorUserId: it.createdBy, occurredAt: it.importedAt ?? dev.createdAt, afterJson: JSON.stringify({ serial: dev.serial, backfill: true }) }
+        });
+        stockInAdded++;
+      }
+    }
+  }
+  // Pass 2: map text model/bank → FK cho MỌI máy còn trống (kể cả máy tạo tay không qua phiếu nhập).
+  const devsToMap = await db.posDevice.findMany({
+    where: { deletedAt: null, OR: [{ posModelId: null, model: { not: null } }, { bankId: null, bank: { not: null } }] },
+    select: { id: true, model: true, bank: true, posModelId: true, bankId: true }
+  });
+  for (const d of devsToMap) {
+    const patch: Record<string, unknown> = {};
+    if (d.posModelId == null && d.model) { const id = modelByKey.get(norm(d.model)); if (id) patch.posModelId = id; }
+    if (d.bankId == null && d.bank) { const id = bankByKey.get(norm(d.bank)); if (id) patch.bankId = id; }
+    if (Object.keys(patch).length > 0) { await db.posDevice.update({ where: { id: d.id }, data: patch }); filled++; }
+  }
+  const distinctSerials = [...new Set(intakes.map((i) => i.serial))];
+  const deviceSerials = await db.posDevice.count({ where: { serial: { in: distinctSerials } } });
+  return { created, filled, stockInAdded, intakeSerials: distinctSerials.length, deviceSerials };
+}
+
 let prisma: Db | undefined;
 
 /** Cấu hình kết nối máy chủ PostgreSQL (client nhập ở màn "Cấu hình máy chủ", G10 model A). */
@@ -442,6 +519,28 @@ export async function seedIfEmpty(db: Db): Promise<void> {
   // VIỆC 1: seed 4 trạng thái nhập máy POS mặc định (idempotent theo name). Fix màn/nút "Nhập kho
   // máy POS" bị chặn vĩnh viễn khi PosIntakeStatus rỗng — áp cho cả DB mới lẫn DB đã tồn tại.
   await seedDefaultIntakeStatusesIfMissing(db);
+
+  // PHASE K1 (§2.2, desync #22): backfill PosDevice từ pos_intakes 1 LẦN/DB (cờ AppSetting). DB mới
+  // (chưa có phiếu nhập) → no-op an toàn. Idempotent nên kể cả không guard cũng không nhân đôi; cờ
+  // chỉ để tránh quét lại toàn bảng mỗi boot.
+  {
+    const flag = await db.appSetting.findUnique({ where: { key: POS_UNIFY_BACKFILL_FLAG } });
+    if (!flag) {
+      const report = await backfillPosDevicesFromIntakes(db);
+      await db.appSetting.upsert({
+        where: { key: POS_UNIFY_BACKFILL_FLAG },
+        update: {},
+        create: { key: POS_UNIFY_BACKFILL_FLAG, value: new Date().toISOString() }
+      });
+      if (report.created > 0 || report.filled > 0 || report.stockInAdded > 0) {
+        await writeAudit(db, { actorUserId: null, action: 'POS_UNIFY_BACKFILL', targetType: 'System', after: report });
+      }
+      if (report.intakeSerials !== report.deviceSerials) {
+        // eslint-disable-next-line no-console
+        console.warn(`[pos-unify] đối soát lệch: ${report.intakeSerials} serial phiếu nhập vs ${report.deviceSerials} máy tương ứng`);
+      }
+    }
+  }
 
   const adminRole = await db.role.findUniqueOrThrow({ where: { code: 'ADMIN' } });
   const existingAdmin = await db.user.findFirst({

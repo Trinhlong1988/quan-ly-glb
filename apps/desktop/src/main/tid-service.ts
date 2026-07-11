@@ -164,34 +164,53 @@ export async function assignTid(tid: string, input: AssignTidInput): Promise<Mut
   if (!row) return { ok: false, error: 'NOT_FOUND', message: `Không tìm thấy TID "${tid}".` };
   const decision = decideTidTransition(row.status as TidStatus, 'assign');
   if (!decision.allowed) {
-    return { ok: false, error: decision.reason, message: `Không thể gán TID đang ở trạng thái ${row.status}. Chỉ TID chưa gán mới gán được.` };
+    // Còn lại DEAD/CLOSED/RECALLED (UNASSIGNED + ACTIVE đã cho phép ở state machine K1).
+    return { ok: false, error: decision.reason, message: `Không thể gán TID đang ở trạng thái ${row.status} (đã chết/đóng/thu hồi).` };
+  }
+  // FIX 1 (K1): TID đang gắn trên 1 máy (posSerial!=null) PHẢI thu hồi khỏi máy đó trước khi lắp máy
+  // khác — chống 1 TID trên 2 máy. TID mới (UNASSIGNED) và TID đã tháo khỏi máy (ACTIVE, posSerial=null)
+  // đều có posSerial=null → gán được.
+  if (row.posSerial != null) {
+    return { ok: false, error: 'TID_ON_DEVICE', message: `TID "${tid}" đang gắn trên máy ${row.posSerial}. Thu hồi khỏi máy đó trước khi lắp máy khác.` };
   }
   if (!input.posSerial?.trim()) return { ok: false, error: 'VALIDATION', message: 'Phải chọn máy POS để gán TID.' };
   if (input.customerId == null) return { ok: false, error: 'VALIDATION', message: 'Phải chọn khách hàng nhận TID.' };
 
-  const dev = await db.posDevice.findUnique({ where: { serial: input.posSerial.trim() } });
-  if (!dev) return { ok: false, error: 'NOT_FOUND', message: `Không tìm thấy máy POS serial "${input.posSerial}".` };
+  const serial = input.posSerial.trim();
+  const devPre = await db.posDevice.findUnique({ where: { serial } });
+  if (!devPre) return { ok: false, error: 'NOT_FOUND', message: `Không tìm thấy máy POS serial "${input.posSerial}".` };
+  if (devPre.status === 'RETIRED') return { ok: false, error: 'INVALID_STATE', message: `Máy POS "${serial}" đã thanh lý, không thể gán TID.` };
 
   const occurredAt = parseWhen(input.occurredAt);
+  let devAgentId: number | null = null;
   await db.$transaction(async (tx) => {
+    // PHASE K1: khóa hàng tid + máy FOR UPDATE (TOCTOU) rồi re-đọc trong transaction.
+    await tx.$queryRaw`SELECT id FROM tids WHERE tid = ${tid} FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM pos_devices WHERE serial = ${serial} FOR UPDATE`;
+    const dev = await tx.posDevice.findUnique({ where: { serial } });
+    devAgentId = dev?.currentAgentId ?? null;
     await tx.tid.update({
       where: { id: row.id },
-      data: { status: 'ACTIVE', posSerial: dev.serial, customerId: input.customerId, agentId: dev.currentAgentId }
+      data: { status: 'ACTIVE', posSerial: serial, customerId: input.customerId, agentId: devAgentId }
     });
-    await tx.posDevice.update({ where: { id: dev.id }, data: { currentTid: tid, currentCustomerId: input.customerId } });
-    await tx.posTidBinding.create({ data: { posSerial: dev.serial, tid, boundAt: occurredAt } });
+    // Q-P/§2.4: máy vừa nhập kho (IN_STOCK) → DEPLOYED khi gán TID + giao khách; giữ nếu đã DEPLOYED.
+    const posPatch: Record<string, unknown> = { currentTid: tid, currentCustomerId: input.customerId, updatedBy: user.id };
+    if (dev && dev.status === 'IN_STOCK') posPatch.status = 'DEPLOYED';
+    await tx.posDevice.update({ where: { id: dev!.id }, data: posPatch });
+    await tx.posTidBinding.create({ data: { posSerial: serial, tid, boundAt: occurredAt } });
     await tx.assetEvent.create({
       data: {
-        deviceSerial: dev.serial,
+        deviceSerial: serial,
         tid,
         eventType: decision.eventType!,
         fromState: row.status,
         toState: 'ACTIVE',
         customerId: input.customerId,
+        toAgentId: devAgentId,
         actorUserId: user.id,
         occurredAt,
         note: input.note ?? null,
-        afterJson: JSON.stringify(auditSnapshot({ tid, posSerial: dev.serial, status: 'ACTIVE' }))
+        afterJson: JSON.stringify(auditSnapshot({ tid, posSerial: serial, status: 'ACTIVE' }))
       }
     });
   });
@@ -202,7 +221,7 @@ export async function assignTid(tid: string, input: AssignTidInput): Promise<Mut
     targetType: 'Tid',
     targetId: String(row.id),
     before: { status: row.status },
-    after: auditSnapshot({ status: 'ACTIVE', posSerial: dev.serial, customerId: input.customerId })
+    after: auditSnapshot({ status: 'ACTIVE', posSerial: serial, customerId: input.customerId })
   });
   return { ok: true, id: row.id };
 }

@@ -55,7 +55,11 @@ interface TidRule {
 }
 
 export const TID_TRANSITIONS: Record<TidEvent, TidRule> = {
-  assign: { from: ['UNASSIGNED'], to: 'ACTIVE', eventType: 'TID_ASSIGN' },
+  // PHASE K1 (spec §2.5): cho gán từ UNASSIGNED (TID mới) HOẶC ACTIVE (TID đã thu hồi khỏi máy,
+  // posSerial=null — lắp sang máy khác). Chặn TID trên máy (posSerial!=null) + DEAD/CLOSED/RECALLED
+  // ở service layer (assignTid guard TID_ON_DEVICE). Query "chưa giao" KHÔNG bị ô nhiễm vì status
+  // GIỮ ACTIVE + deliveredAt không đổi.
+  assign: { from: ['UNASSIGNED', 'ACTIVE'], to: 'ACTIVE', eventType: 'TID_ASSIGN' },
   markDead: { from: ['ACTIVE'], to: 'DEAD', eventType: 'TID_DEAD' },
   close: { from: ['ACTIVE'], to: 'CLOSED', eventType: 'TID_CLOSE' },
   recall: { from: ['ACTIVE', 'DEAD', 'CLOSED'], to: 'RECALLED', eventType: 'TID_RECALL' },

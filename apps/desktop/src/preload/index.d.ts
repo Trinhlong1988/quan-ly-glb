@@ -134,6 +134,14 @@ export interface PosDto {
   warehouseLoc: string | null;
   note: string | null;
   createdAt: string;
+  posModelId: number | null;
+  posModelName: string | null;
+  supplierId: number | null;
+  supplierName: string | null;
+  importPrice: number | null;
+  importedAt: string | null;
+  customerName: string | null;
+  agentName: string | null;
 }
 export interface TimelineEventDto {
   id: number;

@@ -288,6 +288,16 @@ app.whenReady().then(async () => {
     return;
   }
 
+  // PHASE K1 Hợp nhất POS self-test (=29): createPosIntake upsert PosDevice IN_STOCK + STOCK_IN
+  // (desync #22), gán TID lên máy vừa nhập kho, backfill idempotent, recallPos/retirePos gỡ TID +
+  // reportDamage/sendRepair giữ TID (Q-P6), concurrency 2 intake cùng serial, mọi máy có STOCK_IN.
+  if (process.env['GLB_SELFTEST'] === '29') {
+    const { runPosUnifySelfTest } = await import('./selftest-posunify.js');
+    const code = await runPosUnifySelfTest();
+    app.exit(code);
+    return;
+  }
+
   await createWindow();
   startHousekeeping();
 

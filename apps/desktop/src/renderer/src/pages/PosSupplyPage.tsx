@@ -73,7 +73,7 @@ function TabBtn({ active, onClick, icon, children }: { active: boolean; onClick:
 }
 
 // ── §C6 NHÀ CUNG CẤP ─────────────────────────────────────────────────────────
-function SupplierTab({ canManage }: { canManage: boolean }): JSX.Element {
+export function SupplierTab({ canManage }: { canManage: boolean }): JSX.Element {
   const toast = useToast();
   const [rows, setRows] = useState<SupplierDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -202,7 +202,7 @@ function SupplierForm({ mode, row, onClose, onSaved }: { mode: 'create' | 'edit'
 }
 
 // ── §C7 CHỦNG LOẠI POS ───────────────────────────────────────────────────────
-function ModelTab({ canManage }: { canManage: boolean }): JSX.Element {
+export function ModelTab({ canManage }: { canManage: boolean }): JSX.Element {
   const toast = useToast();
   const [rows, setRows] = useState<PosModelDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -320,7 +320,7 @@ function ModelForm({ mode, row, onClose, onSaved }: { mode: 'create' | 'edit'; r
 }
 
 // ── §C8a TRẠNG THÁI NHẬP MÁY ─────────────────────────────────────────────────
-function StatusTab({ canManage }: { canManage: boolean }): JSX.Element {
+export function StatusTab({ canManage }: { canManage: boolean }): JSX.Element {
   const toast = useToast();
   const [rows, setRows] = useState<IntakeStatusDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -429,7 +429,7 @@ function StatusForm({ mode, row, onClose, onSaved }: { mode: 'create' | 'edit'; 
 }
 
 // ── §C8b NHẬP KHO MÁY POS ────────────────────────────────────────────────────
-function IntakeTab({ canManage }: { canManage: boolean }): JSX.Element {
+export function IntakeTab({ canManage }: { canManage: boolean }): JSX.Element {
   const toast = useToast();
   const [rows, setRows] = useState<PosIntakeDto[]>([]);
   const [models, setModels] = useState<LiteRef[]>([]);

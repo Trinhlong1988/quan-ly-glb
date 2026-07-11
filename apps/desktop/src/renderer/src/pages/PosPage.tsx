@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Loader2, HardDrive, History, Wrench, Download } from 'lucide-react';
+import { Plus, Loader2, HardDrive, History, Wrench, Download, List, PackagePlus, Building2, Cpu, Tag } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate, fmtTimeSec } from '@glb/shared';
 import type { PosDto, TimelineEventDto, CustomerDto, AgentDto } from '../../../preload/index.d';
@@ -12,34 +12,65 @@ import { StatBar } from '../components/StatBar.js';
 import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
 import { exportCsv } from '../lib/exportCsv.js';
+// PHASE K1 — hợp nhất: các tab cấu hình cung ứng POS dùng lại nguyên các panel của PosSupplyPage.
+import { SupplierTab, ModelTab, StatusTab, IntakeTab } from './PosSupplyPage.js';
 
 const POS_STATUSES = ['IN_STOCK', 'DEPLOYED', 'IN_REPAIR', 'DAMAGED', 'RETIRED'];
 
-/** Transitions available from each status (mirrors the main-process state machine §A3). */
-const NEXT: Record<string, { key: string; label: string }[]> = {
-  IN_STOCK: [
-    { key: 'deploy', label: 'Triển khai (giao khách)' },
-    { key: 'reportDamage', label: 'Báo hỏng' },
-    { key: 'retire', label: 'Thanh lý' }
-  ],
-  DEPLOYED: [
-    { key: 'recall', label: 'Thu hồi về kho' },
-    { key: 'transferAgent', label: 'Chuyển đại lý' },
-    { key: 'reportDamage', label: 'Báo hỏng' },
-    { key: 'retire', label: 'Thanh lý' }
-  ],
-  DAMAGED: [
-    { key: 'sendRepair', label: 'Gửi bảo trì' },
-    { key: 'retire', label: 'Thanh lý' }
-  ],
-  IN_REPAIR: [
-    { key: 'receiveRepaired', label: 'Nhận sửa xong' },
-    { key: 'retire', label: 'Thanh lý' }
-  ],
-  RETIRED: []
-};
+/** Định dạng tiền VND (nhóm 3 chữ số kiểu Việt Nam) — không dùng toLocaleString. */
+function fmtVnd(n: number | null): string {
+  if (n == null) return '—';
+  return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ' ₫';
+}
 
+type PosTab = 'devices' | 'intake' | 'supplier' | 'model' | 'status';
+
+/** PHASE K1 (§2.3) — 1 trang "Quản Lý Máy POS" nhiều tab. Danh sách máy (POS_*) + cấu hình cung ứng
+ * (CONFIG_POS_SUPPLY_*). Ẩn/hiện từng tab theo quyền (rủi ro #4: quyền lệch sau gộp menu). */
 export function PosPage({ user }: { user: AuthUser }): JSX.Element {
+  const canView = hasPermission(user, 'POS_VIEW');
+  const canConfigView = hasPermission(user, 'CONFIG_POS_SUPPLY_VIEW');
+  const canConfigManage = hasPermission(user, 'CONFIG_POS_SUPPLY_MANAGE');
+
+  const allTabs: { key: PosTab; label: string; icon: JSX.Element; show: boolean }[] = [
+    { key: 'devices', label: 'Danh sách máy', icon: <List className="h-4 w-4" />, show: canView },
+    { key: 'intake', label: 'Nhập kho', icon: <PackagePlus className="h-4 w-4" />, show: canConfigView },
+    { key: 'supplier', label: 'Nhà cung cấp', icon: <Building2 className="h-4 w-4" />, show: canConfigView },
+    { key: 'model', label: 'Chủng loại POS', icon: <Cpu className="h-4 w-4" />, show: canConfigView },
+    { key: 'status', label: 'Trạng thái nhập', icon: <Tag className="h-4 w-4" />, show: canConfigView }
+  ];
+  const tabs = allTabs.filter((t) => t.show);
+
+  const [tab, setTab] = useState<PosTab>(tabs[0]?.key ?? 'devices');
+
+  return (
+    <div>
+      <div className="mb-4">
+        <h2 className="text-lg font-semibold text-slate-800">Quản Lý Máy POS</h2>
+        <p className="text-sm text-slate-500">Danh sách máy (nguồn sự thật) · nhập kho · nhà cung cấp · chủng loại · trạng thái nhập.</p>
+      </div>
+      <div className="mb-3 flex items-center gap-1 border-b border-line">
+        {tabs.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={'flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition ' + (tab === t.key ? 'border-brand text-brand' : 'border-transparent text-slate-500 hover:text-slate-700')}
+          >
+            {t.icon} {t.label}
+          </button>
+        ))}
+      </div>
+      {tab === 'devices' && <DeviceListTab user={user} />}
+      {tab === 'intake' && <IntakeTab canManage={canConfigManage} />}
+      {tab === 'supplier' && <SupplierTab canManage={canConfigManage} />}
+      {tab === 'model' && <ModelTab canManage={canConfigManage} />}
+      {tab === 'status' && <StatusTab canManage={canConfigManage} />}
+    </div>
+  );
+}
+
+/** Tab [Danh sách máy] — nguồn PosDevice. StatBar theo status + hành động vòng đời máy. */
+function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
   const toast = useToast();
   const [rows, setRows] = useState<PosDto[]>([]);
   const [agents, setAgents] = useState<AgentDto[]>([]);
@@ -85,13 +116,20 @@ export function PosPage({ user }: { user: AuthUser }): JSX.Element {
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-800">Quản Lý Máy POS</h2>
-          <p className="text-sm text-slate-500">Danh tính = serial bất biến · vòng đời có nhật ký sự kiện.</p>
-        </div>
+      <div className="mb-3 flex items-center justify-between">
+        <div className="text-sm text-slate-500">{rows.length} máy POS</div>
         <div className="flex items-center gap-2">
-          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('may_pos', ['Serial', 'Ngân hàng', 'TID hiện tại', 'Trạng thái'], rows.map((d) => [d.serial, d.bank ?? '', d.currentTid ?? '', statusLabel(d.status)]))}>
+          <Button
+            variant="confirm"
+            icon={<Download className="h-4 w-4" />}
+            onClick={() =>
+              exportCsv(
+                'may_pos',
+                ['Serial', 'Chủng loại', 'Nhà cung cấp', 'Giá nhập', 'Ngày nhập', 'Trạng thái', 'TID hiện tại', 'Khách', 'Đại lý'],
+                rows.map((d) => [d.serial, d.posModelName ?? '', d.supplierName ?? '', d.importPrice ?? '', d.importedAt ? fmtDate(d.importedAt) : '', statusLabel(d.status), d.currentTid ?? '', d.customerName ?? '', d.agentName ?? ''])
+              )
+            }
+          >
             Xuất Excel
           </Button>
           {canManage && (
@@ -135,23 +173,28 @@ export function PosPage({ user }: { user: AuthUser }): JSX.Element {
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-3">Serial</th>
-              <th className="px-4 py-3">Ngân hàng</th>
-              <th className="px-4 py-3">TID hiện tại</th>
+              <th className="px-4 py-3">Chủng loại</th>
+              <th className="px-4 py-3">Nhà cung cấp</th>
+              <th className="px-4 py-3 text-right">Giá nhập</th>
+              <th className="px-4 py-3">Ngày nhập</th>
               <th className="px-4 py-3">Trạng thái</th>
+              <th className="px-4 py-3">TID hiện tại</th>
+              <th className="px-4 py-3">Khách</th>
+              <th className="px-4 py-3">Đại lý</th>
               <th className="px-4 py-3 text-right">Thao tác</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
             {loading && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={10} className="px-4 py-8 text-center text-slate-400">
                   <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                 </td>
               </tr>
             )}
             {!loading && rows.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-slate-400">
+                <td colSpan={10} className="px-4 py-10 text-center text-slate-400">
                   <HardDrive className="mx-auto mb-2 h-6 w-6" />
                   Chưa có máy POS.
                 </td>
@@ -161,11 +204,16 @@ export function PosPage({ user }: { user: AuthUser }): JSX.Element {
               rows.map((d) => (
                 <tr key={d.id} className="hover:bg-appbg/60">
                   <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700">{d.serial}</td>
-                  <td className="px-4 py-3 text-slate-600">{d.bank ?? '—'}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-slate-500">{d.currentTid ?? '—'}</td>
+                  <td className="px-4 py-3 text-slate-600">{d.posModelName ?? '—'}</td>
+                  <td className="px-4 py-3 text-slate-600">{d.supplierName ?? '—'}</td>
+                  <td className="px-4 py-3 text-right text-slate-700">{fmtVnd(d.importPrice)}</td>
+                  <td className="px-4 py-3 text-xs text-slate-500">{d.importedAt ? fmtDate(d.importedAt) : '—'}</td>
                   <td className="px-4 py-3">
                     <StatusPill status={d.status} />
                   </td>
+                  <td className="px-4 py-3 font-mono text-xs text-slate-500">{d.currentTid ?? '—'}</td>
+                  <td className="px-4 py-3 text-slate-600">{d.customerName ?? '—'}</td>
+                  <td className="px-4 py-3 text-slate-600">{d.agentName ?? '—'}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
                       <button
@@ -222,6 +270,30 @@ export function PosPage({ user }: { user: AuthUser }): JSX.Element {
   );
 }
 
+/** Transitions available from each status (mirrors the main-process state machine §A3). */
+const NEXT: Record<string, { key: string; label: string }[]> = {
+  IN_STOCK: [
+    { key: 'deploy', label: 'Triển khai (giao khách)' },
+    { key: 'reportDamage', label: 'Báo hỏng' },
+    { key: 'retire', label: 'Thanh lý' }
+  ],
+  DEPLOYED: [
+    { key: 'recall', label: 'Thu hồi về kho' },
+    { key: 'transferAgent', label: 'Chuyển đại lý' },
+    { key: 'reportDamage', label: 'Báo hỏng' },
+    { key: 'retire', label: 'Thanh lý' }
+  ],
+  DAMAGED: [
+    { key: 'sendRepair', label: 'Gửi bảo trì' },
+    { key: 'retire', label: 'Thanh lý' }
+  ],
+  IN_REPAIR: [
+    { key: 'receiveRepaired', label: 'Nhận sửa xong' },
+    { key: 'retire', label: 'Thanh lý' }
+  ],
+  RETIRED: []
+};
+
 function PosForm({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }): JSX.Element {
   const toast = useToast();
   const [serial, setSerial] = useState('');
@@ -245,7 +317,7 @@ function PosForm({ onClose, onSaved }: { onClose: () => void; onSaved: () => voi
   }
 
   return (
-    <Modal title="Thêm máy POS mới" onClose={onClose} width="max-w-xl">
+    <Modal title="Thêm máy POS mới" onClose={onClose} width="max-w-xl" onSubmit={() => void save()}>
       <div className="grid grid-cols-2 gap-4">
         <Field label="Serial" required hint="Danh tính bất biến của máy">
           <input className={inputCls} value={serial} onChange={(e) => setSerial(e.target.value)} autoFocus />
@@ -264,13 +336,8 @@ function PosForm({ onClose, onSaved }: { onClose: () => void; onSaved: () => voi
         </Field>
       </div>
       <div className="mt-6 flex justify-end gap-2">
-        <button onClick={onClose} className="rounded-md border border-line px-4 py-2 text-sm font-medium text-slate-600 hover:bg-appbg">
-          Hủy
-        </button>
-        <button onClick={save} disabled={busy} className="flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-60">
-          {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-          Thêm máy
-        </button>
+        <Button variant="neutral" onClick={onClose}>Hủy</Button>
+        <Button variant="confirm" onClick={save} disabled={busy} icon={busy ? <Loader2 className="h-4 w-4 animate-spin" /> : undefined}>Thêm máy</Button>
       </div>
     </Modal>
   );
@@ -373,7 +440,7 @@ function TransitionModal({ device, event, onClose, onDone }: { device: PosDto; e
     return (
       <ConfirmDialog
         title="Thanh lý máy POS"
-        message={`Thanh lý (RETIRED) máy "${device.serial}" là thao tác không hoàn tác. Nhập lại mật khẩu để xác nhận.`}
+        message={`Thanh lý (RETIRED) máy "${device.serial}" là thao tác không hoàn tác. Nếu máy còn gắn TID, TID sẽ được gỡ và thu hồi. Nhập lại mật khẩu để xác nhận.`}
         confirmLabel="Thanh lý"
         danger
         requirePassword
@@ -388,6 +455,9 @@ function TransitionModal({ device, event, onClose, onDone }: { device: PosDto; e
       <div className="mb-2 flex items-center gap-2 rounded-md bg-appbg px-3 py-2 text-sm text-slate-600">
         <Wrench className="h-4 w-4 text-brand" /> Trạng thái hiện tại: <StatusPill status={device.status} />
       </div>
+      {event === 'recall' && device.currentTid && (
+        <div className="mb-2 rounded-md bg-warning/10 px-3 py-2 text-xs text-warning">Thu hồi máy sẽ GỠ gán TID {device.currentTid} (TID về "chưa gán máy").</div>
+      )}
       <div className="grid grid-cols-1 gap-4">
         {needCustomer && (
           <Field label="Khách hàng nhận máy" required>
