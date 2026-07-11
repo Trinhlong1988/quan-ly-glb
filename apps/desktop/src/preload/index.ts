@@ -203,6 +203,11 @@ const api = {
   cashEntryCreateDebtReceipt: (input: unknown) => ipcRenderer.invoke('cashEntry:createDebtReceipt', input),
   cashEntryCancel: (id: number, reason: string, password: string) => ipcRenderer.invoke('cashEntry:cancel', { id, reason, password }),
 
+  // Nhập liệu hàng loạt từ Excel (#9)
+  importTemplate: (entityKey: string) => ipcRenderer.invoke('import:template', entityKey),
+  importDryRun: (entityKey: string, rows: Record<string, unknown>[]) => ipcRenderer.invoke('import:dryRun', { entityKey, rows }),
+  importRun: (entityKey: string, rows: Record<string, unknown>[]) => ipcRenderer.invoke('import:run', { entityKey, rows }),
+
   // Thùng rác (E4)
   trashList: () => ipcRenderer.invoke('trash:list'),
   trashRestore: (entityType: string, id: number) => ipcRenderer.invoke('trash:restore', { entityType, id }),

@@ -15,6 +15,7 @@ import { Button } from '../components/Button.js';
 import { StatBar } from '../components/StatBar.js';
 import { statusTone } from '../components/StatusPill.js';
 import { PasswordInput } from '../components/PasswordInput.js';
+import { ImportButton } from '../components/ImportModal.js';
 import { exportCsv } from '../lib/exportCsv.js';
 
 function money(n: number): string {
@@ -113,7 +114,10 @@ export function CashEntryPage({ user, kind }: { user: AuthUser; kind: 'THU' | 'C
 
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} phiếu</div>
+        <div className="flex items-center gap-2">
+        {canCreate && <ImportButton entityKey={isThu ? 'cashThu' : 'cashChi'} label={isThu ? 'Phiếu thu' : 'Phiếu chi'} onImported={reload} />}
         <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv(isThu ? 'phieu_thu' : 'phieu_chi', ['Mã', 'Ngày', 'Danh mục', 'Quỹ', 'Số tiền', 'Hình thức', isThu ? 'Người nhận' : 'Người chi', 'Trạng thái', 'Ghi chú'], rows.map((r) => [r.code ?? '', fmtDate(r.entryDate), r.categoryName ?? '', r.fundName ?? '', String(r.amount), r.method === 'CK' ? 'Chuyển khoản' : 'Tiền mặt', (isThu ? r.receiverUserName : r.payerUserName) ?? '', r.status === 'POSTED' ? 'Đã ghi' : r.status === 'CANCELLED' ? 'Đã hủy' : r.status, r.note ?? '']))}>Xuất Excel</Button>
+        </div>
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">

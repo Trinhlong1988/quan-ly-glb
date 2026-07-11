@@ -9,6 +9,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
 import { Button } from '../components/Button.js';
+import { ImportButton } from '../components/ImportModal.js';
 import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../components/Selection.js';
 import { Thumb, AttachField } from '../components/Attach.js';
 import { exportCsv } from '../lib/exportCsv.js';
@@ -218,6 +219,7 @@ function DossierTab({ canManage }: { canManage: boolean }): JSX.Element {
         <div className="text-sm text-slate-500">{rows.length} hồ sơ</div>
         <div className="flex gap-2">
           <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('ho_so_hkd', ['Nguồn', 'Tên HKD', 'MST/ĐKKD', 'Trạng thái MST', 'Chủ hộ', 'CCCD', 'Địa chỉ HKD'], rows.map((r) => [r.sourceCode, r.hkdName, r.taxCode, mstStatusLabel(r.mstStatus), r.ownerName, r.cccdNumber, r.hkdAddress]))}>Xuất Excel</Button>
+          {canManage && <ImportButton entityKey="dossier" label="Hộ kinh doanh" onImported={reload} />}
           {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => sources.length ? setForm({ mode: 'create' }) : toast.alert('Cần có ít nhất 1 nguồn hồ sơ trước.', 'Thiếu dữ liệu nền')}>Thêm hồ sơ</Button>}
         </div>
       </div>

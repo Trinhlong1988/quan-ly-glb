@@ -10,6 +10,7 @@ import { StatusPill, statusLabel, statusTone } from '../components/StatusPill.js
 import { StatBar } from '../components/StatBar.js';
 import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
+import { ImportButton } from '../components/ImportModal.js';
 import { exportCsv } from '../lib/exportCsv.js';
 import { StatusTab, FeePreview } from './TidConfigPage.js';
 
@@ -118,6 +119,7 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
               Xuất Excel
             </Button>
           )}
+          {tab === 'all' && canConfig && <ImportButton entityKey="tid" label="TID" onImported={reload} />}
           {tab === 'all' && canConfig && (
             <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)}>
               Thêm TID

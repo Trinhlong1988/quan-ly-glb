@@ -310,6 +310,15 @@ app.whenReady().then(async () => {
     return;
   }
 
+  // PHASE IMPORT (#9) Nhập liệu hàng loạt từ Excel self-test (=31): 6 entity × (3 hợp lệ / thiếu bắt
+  // buộc / FK không tồn tại / FK mơ hồ / partial 2+1 / sai vai FORBIDDEN) qua runImport → create THẬT.
+  if (process.env['GLB_SELFTEST'] === '31') {
+    const { runImportSelfTest } = await import('./selftest-import.js');
+    const code = await runImportSelfTest();
+    app.exit(code);
+    return;
+  }
+
   await createWindow();
   startHousekeeping();
 

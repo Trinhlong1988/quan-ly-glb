@@ -21,6 +21,7 @@ import * as industryCfgSvc from './industry-service.js';
 import * as cashCatSvc from './cash-category-service.js';
 import * as fundSvc from './fund-service.js';
 import * as cashEntrySvc from './cash-entry-service.js';
+import * as importSvc from './import-service.js';
 import { readAttachmentDataUrl } from './file-store.js';
 import * as trashSvc from './trash-service.js';
 import * as msgSvc from './message-service.js';
@@ -293,6 +294,11 @@ export function registerIpc(): void {
   ipcMain.handle('cashEntry:create', async (_e, input: cashEntrySvc.CreateCashEntryInput) => cashEntrySvc.createCashEntry(input));
   ipcMain.handle('cashEntry:createDebtReceipt', async (_e, input: cashEntrySvc.CreateDebtReceiptInput) => cashEntrySvc.createDebtReceipt(input));
   ipcMain.handle('cashEntry:cancel', async (_e, args: { id: number; reason: string; password: string }) => cashEntrySvc.cancelCashEntry(args.id, args.reason, args.password));
+
+  // ── PHASE IMPORT (#9) — Nhập liệu hàng loạt từ Excel ──
+  ipcMain.handle('import:template', async (_e, entityKey: string) => importSvc.importTemplateColumns(entityKey));
+  ipcMain.handle('import:dryRun', async (_e, args: { entityKey: string; rows: Record<string, unknown>[] }) => importSvc.dryRunImport(args?.entityKey, args?.rows ?? []));
+  ipcMain.handle('import:run', async (_e, args: { entityKey: string; rows: Record<string, unknown>[] }) => importSvc.runImport(args?.entityKey, args?.rows ?? []));
 
   // ── E4 Thùng rác ──
   ipcMain.handle('trash:list', async () => trashSvc.listTrash());

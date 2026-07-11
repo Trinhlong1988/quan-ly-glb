@@ -10,6 +10,7 @@ import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
 import { StatBar } from '../components/StatBar.js';
 import { Button } from '../components/Button.js';
+import { ImportButton } from '../components/ImportModal.js';
 import { exportCsv } from '../lib/exportCsv.js';
 
 // Tông màu luân phiên (palette design system) cho bộ đếm theo đại lý — không phải trạng thái.
@@ -79,6 +80,7 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
           <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('khach_hang', ['Mã khách hàng', 'Biệt danh', 'Tên thật', 'Số điện thoại', 'Địa chỉ'], rows.map((c) => [c.code, c.nickname, c.fullName, c.phone ?? '', c.address ?? '']))}>
             Xuất Excel
           </Button>
+          {canCreate && <ImportButton entityKey="customer" label="Khách hàng" onImported={reload} />}
           {canCreate && (
             <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)}>
               Thêm khách hàng

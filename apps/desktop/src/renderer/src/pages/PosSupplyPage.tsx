@@ -11,6 +11,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
 import { Button } from '../components/Button.js';
+import { ImportButton } from '../components/ImportModal.js';
 import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../components/Selection.js';
 import { exportCsv } from '../lib/exportCsv.js';
 
@@ -493,6 +494,7 @@ export function IntakeTab({ canManage }: { canManage: boolean }): JSX.Element {
         <div className="text-sm text-slate-500">{visibleRows.length} máy POS trong kho</div>
         <div className="flex gap-2">
           <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('nhap_kho_pos', ['Số thứ tự', 'Chủng loại', 'Số seri', 'Nhà cung cấp', 'Giá nhập', 'Ngày nhập', 'Trạng thái'], visibleRows.map((r, i) => [i + 1, `${r.posModelCode} · ${r.posModelName}`, r.serial, r.supplierName, r.importPrice, fmtDate(r.importedAt), r.intakeStatusName]))}>Xuất Excel</Button>
+          {canManage && <ImportButton entityKey="posIntake" label="POS nhập kho" onImported={reload} />}
           {canManage && <Button variant="confirm" icon={<PackagePlus className="h-4 w-4" />} onClick={() => canAdd ? setForm({ mode: 'create' }) : toast.alert(prereqMessage(prereqDefs) ?? 'Thiếu dữ liệu nền để nhập kho.', 'Thiếu dữ liệu nền')}>Nhập kho máy POS</Button>}
         </div>
       </div>

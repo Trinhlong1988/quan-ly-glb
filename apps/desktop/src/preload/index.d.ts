@@ -1237,6 +1237,11 @@ export interface GlbApi {
   cashEntryCreateDebtReceipt(input: CreateDebtReceiptInput): Promise<MutationOutcome>;
   cashEntryCancel(id: number, reason: string, password: string): Promise<MutationOutcome>;
 
+  // ── PHASE IMPORT (#9) — Nhập liệu hàng loạt từ Excel ──
+  importTemplate(entityKey: string): Promise<{ ok: boolean; data?: ImportTemplateColumn[]; error?: string; message?: string }>;
+  importDryRun(entityKey: string, rows: Record<string, unknown>[]): Promise<ImportDryRunResult>;
+  importRun(entityKey: string, rows: Record<string, unknown>[]): Promise<ImportRunResult>;
+
   // Thùng rác (E4)
   trashList(): Promise<{ ok: boolean; data?: TrashRow[]; error?: string; message?: string }>;
   trashRestore(entityType: string, id: number): Promise<MutationOutcome>;
@@ -1528,6 +1533,36 @@ export interface TrashRow {
 export interface TrashLinkRef {
   label: string;
   count: number;
+}
+
+// ── PHASE IMPORT (#9) — Nhập liệu hàng loạt từ Excel ──
+export type ImportColumnKind = 'text' | 'int' | 'money' | 'date' | 'ref' | 'enum';
+export interface ImportTemplateColumn {
+  header: string;
+  required: boolean;
+  kind: ImportColumnKind;
+  hint?: string;
+}
+export interface ImportRowResult {
+  rowIndex: number;
+  ok: boolean;
+  id?: number;
+  error?: string;
+  message?: string;
+}
+export interface ImportRunResult {
+  ok: boolean;
+  error?: string;
+  message?: string;
+  results?: ImportRowResult[];
+  summary?: { created: number; skipped: number };
+}
+export interface ImportDryRunResult {
+  ok: boolean;
+  error?: string;
+  message?: string;
+  results?: { rowIndex: number; ok: boolean; error?: string; message?: string }[];
+  summary?: { validCount: number; invalidCount: number };
 }
 
 declare global {
