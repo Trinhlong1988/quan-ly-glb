@@ -690,6 +690,7 @@ model Dossier {
   hkdName          String    @map("hkd_name") // Tên Hộ Kinh Doanh
   hkdAddress       String?   @map("hkd_address") // Địa chỉ đăng ký HKD
   taxCode          String?   @map("tax_code") // MST / Mã số ĐK HKD
+  mstStatus        String    @default("ACTIVE") @map("mst_status") // Trạng thái MST: ACTIVE=Hoạt động / CLOSED=Đóng
   dkkdIssueDate    DateTime? @map("dkkd_issue_date") // Ngày cấp ĐKKD
   dkkdIssuePlace   String?   @map("dkkd_issue_place") // Nơi cấp ĐKKD
   ownerName        String    @map("owner_name") // Tên chủ hộ kinh doanh

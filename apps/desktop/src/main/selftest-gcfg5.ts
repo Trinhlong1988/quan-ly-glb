@@ -102,6 +102,23 @@ export async function runDossierSelfTest(): Promise<number> {
   const f4b = (await dsr.listDossiers({ search: 'Hộ Bốn Mặt' })).data?.[0];
   ok('sau gỡ, ĐKKD mặt trước = null (3 mặt còn lại)', f4b?.dkkdFrontPath === null && !!f4b?.dkkdBackPath && !!f4b?.cccdFrontPath, f4b);
 
+  // (10) Trạng thái MST §10c LANE C #12 — mặc định ACTIVE / đổi sang CLOSED / lọc đúng tập / validate
+  ok('hồ sơ tạo mặc định = ACTIVE', (await dsr.listDossiers({ search: 'HKD Số 1' })).data?.find((d) => d.hkdName === 'HKD Số 1')?.mstStatus === 'ACTIVE');
+  const closedDos = await dsr.createDossier({ sourceId: srcIds[0], hkdName: 'Hộ Đã Đóng MST', ownerName: 'Lê Văn Đóng', mstStatus: 'CLOSED' });
+  ok('tạo hồ sơ CLOSED tường minh → ok', closedDos.ok === true, closedDos);
+  ok('hồ sơ tạo CLOSED lưu đúng trạng thái', (await dsr.listDossiers({ search: 'Hộ Đã Đóng MST' })).data?.[0]?.mstStatus === 'CLOSED');
+  const beforeClosed = (await dsr.listDossiers({ mstStatus: 'CLOSED' })).data?.length ?? 0;
+  ok('cập nhật hồ sơ sang CLOSED → ok', (await dsr.updateDossier(dosIds[2], { sourceId: srcIds[0], hkdName: 'HKD Số 2', ownerName: 'Chủ hộ 2', mstStatus: 'CLOSED' })).ok === true);
+  const closedList = (await dsr.listDossiers({ mstStatus: 'CLOSED' })).data ?? [];
+  ok('lọc CLOSED +1 sau cập nhật', closedList.length === beforeClosed + 1, { before: beforeClosed, after: closedList.length });
+  ok('lọc CLOSED chỉ trả hồ sơ CLOSED', closedList.length > 0 && closedList.every((d) => d.mstStatus === 'CLOSED'));
+  const activeList = (await dsr.listDossiers({ mstStatus: 'ACTIVE' })).data ?? [];
+  ok('lọc ACTIVE chỉ trả hồ sơ ACTIVE', activeList.length > 0 && activeList.every((d) => d.mstStatus === 'ACTIVE'));
+  ok('ACTIVE + CLOSED = tổng (không trùng/sót)', activeList.length + closedList.length === ((await dsr.listDossiers()).data?.length ?? -1));
+  // anti-reset (regression QA Lane C): sửa hồ sơ đang CLOSED mà KHÔNG truyền mstStatus → GIỮ CLOSED (không tự về ACTIVE)
+  ok('sửa hồ sơ CLOSED không truyền mstStatus → ok', (await dsr.updateDossier(dosIds[2], { sourceId: srcIds[0], hkdName: 'HKD Số 2', ownerName: 'Chủ hộ 2' })).ok === true);
+  ok('anti-reset: hồ sơ vẫn CLOSED sau update không truyền mstStatus', ((await dsr.listDossiers({ mstStatus: 'CLOSED' })).data ?? []).some((d) => d.hkdName === 'HKD Số 2'));
+
   // (9) xóa hợp lệ (3)
   ok('xóa 1 hồ sơ (đúng mk) → deleted=1', (await dsr.deleteDossiers([dosIds[29]], PW)).deleted === 1);
   ok('hồ sơ đã xóa rời danh sách', (await dsr.listDossiers()).data?.some((d) => d.id === dosIds[29]) === false);
@@ -132,6 +149,8 @@ export async function runDossierSelfTest(): Promise<number> {
   ok('SAI sửa hồ sơ nguồn không tồn tại → NOT_FOUND', (await dsr.updateDossier(dosIds[1], { ...baseD, sourceId: 999004 })).error === 'NOT_FOUND');
   ok('SAI xóa hồ sơ không chọn → VALIDATION', (await dsr.deleteDossiers([], PW)).error === 'VALIDATION');
   ok('SAI xóa hồ sơ sai mật khẩu → WRONG_PASSWORD', (await dsr.deleteDossiers([dosIds[1]], 'sai')).error === 'WRONG_PASSWORD');
+  ok('SAI tạo hồ sơ trạng thái MST không hợp lệ → VALIDATION', (await dsr.createDossier({ ...baseD, mstStatus: 'WRONG' })).error === 'VALIDATION');
+  ok('SAI sửa hồ sơ trạng thái MST không hợp lệ → VALIDATION', (await dsr.updateDossier(dosIds[1], { ...baseD, mstStatus: 'XYZ' })).error === 'VALIDATION');
 
   // (C) 25 lần tạo trùng mã nguồn đang hoạt động → DUPLICATE (25)
   for (let i = 0; i < 25; i++) {

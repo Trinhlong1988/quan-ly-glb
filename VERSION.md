@@ -1,12 +1,12 @@
 ---
 project: Quản Lý GLB (IMS)
 phase: G-REV.B / G-MAINT.E
-current_version: 0.24.0-filters
+current_version: 0.24.1-filters
 status: PHASE_K HOÀN TẤT (K1+K2) COMMITTED+TAGGED. K1=POS unify (PosDevice nguồn sự thật, desync #22 fixed, tag v0.22.0-k1). K2=TID unify: 2 chiều trạng thái derive (Gán máy POS/Giao cho khách), form chuỗi HKD→đối tác→bank(PartnerBank 1-auto/2+-dropdown), 1 trang 3 tab + 2 StatBar/2 lọc/2 cột, timeline TID (tidTimeline), máy khách (customerDeviceSerial), bỏ menu tidcfg. QA-pair đối kháng bắt K1(3)+K2(HIGH mồ côi gán TID=B22/MEDIUM/2 LOW) pre-commit → hardening PASS. (Thu-Chi H1→H2b b09b289; B21 f1be7aa.)
 last_update_ts: 2026-07-11
-last_update_by: LEAD (AUDIT rerun sạch: typecheck 0 · build 0 · vitest 238 · selftest 30 (ngành nghề) failures=0 · QA-pair A+B APPROVE)
+last_update_by: LEAD (AUDIT rerun sạch: typecheck 0 · build 0 · vitest 238 · selftest 9 (HKD MST) pass=127 fail=0 · QA-pair Lane C APPROVE + anti-reset regression)
 rule_break_count: 0
-schema_version: 20
+schema_version: 21
 repo_path: D:\TT HKD AI\tools\quan-ly-glb (chuyển C→D 10/7; bản C giữ làm sao lưu, cấm sửa)
 ---
 

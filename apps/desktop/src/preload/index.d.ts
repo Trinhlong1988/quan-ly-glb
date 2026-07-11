@@ -663,6 +663,7 @@ export interface DossierDto extends AuditTrail {
   hkdName: string;
   hkdAddress: string | null;
   taxCode: string | null;
+  mstStatus: string; // 'ACTIVE'=Hoạt động / 'CLOSED'=Đóng
   dkkdIssueDate: string | null;
   dkkdIssuePlace: string | null;
   ownerName: string;
@@ -687,6 +688,7 @@ export interface DossierDto extends AuditTrail {
 export interface DossierFilter {
   search?: string;
   sourceId?: number;
+  mstStatus?: string; // 'ACTIVE'/'CLOSED'; bỏ trống = tất cả
   fromDate?: string;
   toDate?: string;
 }
@@ -695,6 +697,7 @@ export interface DossierInput {
   hkdName: string;
   hkdAddress?: string | null;
   taxCode?: string | null;
+  mstStatus?: string; // 'ACTIVE' (mặc định) / 'CLOSED'
   dkkdIssueDate?: string | null;
   dkkdIssuePlace?: string | null;
   ownerName: string;

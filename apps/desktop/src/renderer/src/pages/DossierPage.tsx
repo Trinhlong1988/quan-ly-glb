@@ -25,6 +25,16 @@ function fmtPct(v: number): string {
   return `${Number(v.toFixed(3))}%`;
 }
 
+// Trạng thái MST hồ sơ HKD (§10c): Hoạt động (xanh) / Đóng (xám-đỏ). Nhãn dùng chung cho badge + CSV + dropdown.
+const MST_STATUS_LABEL: Record<string, string> = { ACTIVE: 'Hoạt động', CLOSED: 'Đóng' };
+function mstStatusLabel(s: string): string {
+  return MST_STATUS_LABEL[s] ?? s;
+}
+function MstStatusBadge({ status }: { status: string }): JSX.Element {
+  const tone = status === 'CLOSED' ? 'bg-danger/10 text-danger' : 'bg-success/10 text-success';
+  return <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${tone}`}>{mstStatusLabel(status)}</span>;
+}
+
 export function DossierPage({ user }: { user: AuthUser }): JSX.Element {
   const [tab, setTab] = useState<Tab>('dossier');
   const canManage = hasPermission(user, 'CONFIG_DOSSIER_MANAGE');
@@ -168,6 +178,7 @@ function DossierTab({ canManage }: { canManage: boolean }): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [fSource, setFSource] = useState('');
+  const [fMstStatus, setFMstStatus] = useState('');
   const [form, setForm] = useState<{ mode: 'create' | 'edit'; row?: DossierDto } | null>(null);
   const [del, setDel] = useState<DossierDto | null>(null);
   const [bulkDel, setBulkDel] = useState(false);
@@ -179,14 +190,14 @@ function DossierTab({ canManage }: { canManage: boolean }): JSX.Element {
   }
   async function reload(): Promise<void> {
     setLoading(true);
-    const res = await window.api.dossierList({ search: search || undefined, sourceId: fSource ? Number(fSource) : undefined });
+    const res = await window.api.dossierList({ search: search || undefined, sourceId: fSource ? Number(fSource) : undefined, mstStatus: fMstStatus || undefined });
     if (res.ok && res.data) setRows(res.data);
     else if (res.message) toast.alert(res.message);
     sel.clear();
     setLoading(false);
   }
   useEffect(() => { void loadRefs(); }, []);
-  useEffect(() => { void reload(); /* eslint-disable-next-line */ }, [fSource]);
+  useEffect(() => { void reload(); /* eslint-disable-next-line */ }, [fSource, fMstStatus]);
 
   async function doDelete(d: DossierDto, password?: string): Promise<void> {
     const res = await window.api.dossierDelete([d.id], password ?? '');
@@ -206,13 +217,16 @@ function DossierTab({ canManage }: { canManage: boolean }): JSX.Element {
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} hồ sơ</div>
         <div className="flex gap-2">
-          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('ho_so_hkd', ['Nguồn', 'Tên HKD', 'MST/ĐKKD', 'Chủ hộ', 'CCCD', 'Địa chỉ HKD'], rows.map((r) => [r.sourceCode, r.hkdName, r.taxCode, r.ownerName, r.cccdNumber, r.hkdAddress]))}>Xuất Excel</Button>
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('ho_so_hkd', ['Nguồn', 'Tên HKD', 'MST/ĐKKD', 'Trạng thái MST', 'Chủ hộ', 'CCCD', 'Địa chỉ HKD'], rows.map((r) => [r.sourceCode, r.hkdName, r.taxCode, mstStatusLabel(r.mstStatus), r.ownerName, r.cccdNumber, r.hkdAddress]))}>Xuất Excel</Button>
           {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => sources.length ? setForm({ mode: 'create' }) : toast.alert('Cần có ít nhất 1 nguồn hồ sơ trước.', 'Thiếu dữ liệu nền')}>Thêm hồ sơ</Button>}
         </div>
       </div>
       <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Tìm tên HKD / chủ hộ / MST / CCCD…"
-        selects={[{ key: 's', placeholder: 'Tất cả nguồn hồ sơ', value: fSource, options: sources.map((s) => ({ value: String(s.id), label: s.code })), onChange: setFSource }]}
-        onApply={reload} onReset={() => { setSearch(''); setFSource(''); setTimeout(reload, 0); }} />
+        selects={[
+          { key: 's', placeholder: 'Tất cả nguồn hồ sơ', value: fSource, options: sources.map((s) => ({ value: String(s.id), label: s.code })), onChange: setFSource },
+          { key: 'mst', placeholder: 'Tất cả trạng thái MST', value: fMstStatus, options: [{ value: 'ACTIVE', label: 'Hoạt động' }, { value: 'CLOSED', label: 'Đóng' }], onChange: setFMstStatus }
+        ]}
+        onApply={reload} onReset={() => { setSearch(''); setFSource(''); setFMstStatus(''); setTimeout(reload, 0); }} />
       {canManage && <SelectionBar count={sel.count} entityLabel="hồ sơ" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">
@@ -222,6 +236,7 @@ function DossierTab({ canManage }: { canManage: boolean }): JSX.Element {
               <th className="px-4 py-3">Nguồn</th>
               <th className="px-4 py-3">Tên HKD</th>
               <th className="px-4 py-3">MST / ĐKKD</th>
+              <th className="px-4 py-3">Trạng thái MST</th>
               <th className="px-4 py-3">Chủ hộ</th>
               <th className="px-4 py-3">CCCD</th>
               <th className="px-4 py-3">Ảnh ĐKKD</th>
@@ -230,14 +245,15 @@ function DossierTab({ canManage }: { canManage: boolean }): JSX.Element {
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {loading && <tr><td colSpan={canManage ? 9 : 7} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
-            {!loading && rows.length === 0 && <tr><td colSpan={canManage ? 9 : 7} className="px-4 py-10 text-center text-slate-400"><FolderKanban className="mx-auto mb-2 h-6 w-6" /> Chưa có hồ sơ HKD.</td></tr>}
+            {loading && <tr><td colSpan={canManage ? 10 : 8} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+            {!loading && rows.length === 0 && <tr><td colSpan={canManage ? 10 : 8} className="px-4 py-10 text-center text-slate-400"><FolderKanban className="mx-auto mb-2 h-6 w-6" /> Chưa có hồ sơ HKD.</td></tr>}
             {!loading && rows.map((d) => (
               <tr key={d.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(d.id) ? 'bg-brand-tint/40' : '')}>
                 {canManage && <SelectCell id={d.id} sel={sel} />}
                 <td className="px-4 py-3"><span className="rounded bg-brand-tint px-1.5 py-0.5 text-xs font-medium text-brand">{d.sourceCode ?? '—'}</span></td>
                 <td className="px-4 py-3 font-medium text-slate-800">{d.hkdName}</td>
                 <td className="px-4 py-3 font-mono text-xs text-slate-600">{d.taxCode ?? '—'}</td>
+                <td className="px-4 py-3"><MstStatusBadge status={d.mstStatus} /></td>
                 <td className="px-4 py-3 text-slate-600">{d.ownerName}</td>
                 <td className="px-4 py-3 font-mono text-xs text-slate-500">{d.cccdNumber ?? '—'}</td>
                 <td className="px-4 py-3"><div className="flex gap-1">
@@ -273,6 +289,7 @@ function DossierForm({ mode, row, sources, onClose, onSaved }: { mode: 'create' 
     hkdName: row?.hkdName ?? '',
     hkdAddress: row?.hkdAddress ?? '',
     taxCode: row?.taxCode ?? '',
+    mstStatus: row?.mstStatus ?? 'ACTIVE',
     dkkdIssueDate: row?.dkkdIssueDate ? row.dkkdIssueDate.slice(0, 10) : '',
     dkkdIssuePlace: row?.dkkdIssuePlace ?? '',
     ownerName: row?.ownerName ?? '',
@@ -302,6 +319,7 @@ function DossierForm({ mode, row, sources, onClose, onSaved }: { mode: 'create' 
       hkdName: f.hkdName.trim(),
       hkdAddress: f.hkdAddress || null,
       taxCode: f.taxCode || null,
+      mstStatus: f.mstStatus,
       dkkdIssueDate: f.dkkdIssueDate || null,
       dkkdIssuePlace: f.dkkdIssuePlace || null,
       ownerName: f.ownerName.trim(),
@@ -330,6 +348,7 @@ function DossierForm({ mode, row, sources, onClose, onSaved }: { mode: 'create' 
       <div className="grid grid-cols-2 gap-4">
         <Field label="Nguồn hồ sơ" required><select className={inputCls} value={f.sourceId} onChange={set('sourceId')} autoFocus><option value="">— Chọn nguồn —</option>{sources.map((s) => <option key={s.id} value={s.id}>{s.code}</option>)}</select></Field>
         <Field label="Mã số Thuế / Mã số ĐK HKD"><input className={inputCls} value={f.taxCode} onChange={set('taxCode')} /></Field>
+        <Field label="Trạng thái MST"><select className={inputCls} value={f.mstStatus} onChange={set('mstStatus')}><option value="ACTIVE">Hoạt động</option><option value="CLOSED">Đóng</option></select></Field>
         <Field label="Tên Hộ Kinh Doanh" required><input className={inputCls} value={f.hkdName} onChange={set('hkdName')} /></Field>
         <Field label="Địa chỉ đăng ký HKD"><input className={inputCls} value={f.hkdAddress} onChange={set('hkdAddress')} /></Field>
         <Field label="Ngày cấp ĐKKD"><input type="date" className={inputCls} value={f.dkkdIssueDate} onChange={set('dkkdIssueDate')} /></Field>

@@ -65,6 +65,12 @@ function parseDate(v: string | null | undefined): Date | null | undefined {
   return isNaN(d.getTime()) ? undefined : d;
 }
 
+// Trạng thái MST hồ sơ HKD (§10c): 'ACTIVE'=Hoạt động / 'CLOSED'=Đóng.
+const MST_STATUSES = ['ACTIVE', 'CLOSED'] as const;
+function isMstStatus(v: unknown): v is (typeof MST_STATUSES)[number] {
+  return typeof v === 'string' && (MST_STATUSES as readonly string[]).includes(v);
+}
+
 // ═════════════════════════════════════════════════════════════════════════════
 // §10a/b — NGUỒN HỒ SƠ
 // ═════════════════════════════════════════════════════════════════════════════
@@ -179,6 +185,7 @@ export interface DossierDto extends AuditTrail {
   hkdName: string;
   hkdAddress: string | null;
   taxCode: string | null;
+  mstStatus: string; // 'ACTIVE'=Hoạt động / 'CLOSED'=Đóng
   dkkdIssueDate: string | null;
   dkkdIssuePlace: string | null;
   ownerName: string;
@@ -203,6 +210,7 @@ export interface DossierDto extends AuditTrail {
 export interface DossierFilter {
   search?: string;
   sourceId?: number;
+  mstStatus?: string; // lọc theo trạng thái MST ('ACTIVE'/'CLOSED'); bỏ trống = tất cả
   fromDate?: string;
   toDate?: string;
 }
@@ -211,6 +219,7 @@ export interface DossierInput {
   hkdName: string;
   hkdAddress?: string | null;
   taxCode?: string | null;
+  mstStatus?: string; // 'ACTIVE' (mặc định) / 'CLOSED'
   dkkdIssueDate?: string | null;
   dkkdIssuePlace?: string | null;
   ownerName: string;
@@ -238,6 +247,7 @@ export async function listDossiers(filter: DossierFilter = {}): Promise<{ ok: bo
     where: {
       deletedAt: null,
       sourceId: filter.sourceId ?? undefined,
+      mstStatus: isMstStatus(filter.mstStatus) ? filter.mstStatus : undefined,
       createdAt: dateRange(filter.fromDate, filter.toDate),
       OR: filter.search
         ? [{ hkdName: { contains: filter.search, mode: 'insensitive' } }, { ownerName: { contains: filter.search, mode: 'insensitive' } }, { taxCode: { contains: filter.search, mode: 'insensitive' } }, { cccdNumber: { contains: filter.search, mode: 'insensitive' } }]
@@ -256,6 +266,7 @@ export async function listDossiers(filter: DossierFilter = {}): Promise<{ ok: bo
       hkdName: r.hkdName,
       hkdAddress: r.hkdAddress,
       taxCode: r.taxCode,
+      mstStatus: r.mstStatus,
       dkkdIssueDate: r.dkkdIssueDate ? r.dkkdIssueDate.toISOString() : null,
       dkkdIssuePlace: r.dkkdIssuePlace,
       ownerName: r.ownerName,
@@ -297,6 +308,7 @@ export async function createDossier(input: DossierInput): Promise<MutationResult
   if (!input.sourceId) return { ok: false, error: 'VALIDATION', message: 'Vui lòng chọn nguồn hồ sơ.' };
   if (!hkdName) return { ok: false, error: 'VALIDATION', message: 'Tên Hộ Kinh Doanh bắt buộc.' };
   if (!ownerName) return { ok: false, error: 'VALIDATION', message: 'Tên chủ hộ kinh doanh bắt buộc.' };
+  if (input.mstStatus !== undefined && !isMstStatus(input.mstStatus)) return { ok: false, error: 'VALIDATION', message: 'Trạng thái MST không hợp lệ (chỉ Hoạt động / Đóng).' };
   const refErr = await validateRefs(db, input.sourceId);
   if (refErr) return refErr;
 
@@ -306,6 +318,7 @@ export async function createDossier(input: DossierInput): Promise<MutationResult
       hkdName,
       hkdAddress: input.hkdAddress?.trim() || null,
       taxCode: input.taxCode?.trim() || null,
+      mstStatus: isMstStatus(input.mstStatus) ? input.mstStatus : 'ACTIVE',
       dkkdIssueDate: parseDate(input.dkkdIssueDate) ?? null,
       dkkdIssuePlace: input.dkkdIssuePlace?.trim() || null,
       ownerName,
@@ -337,6 +350,7 @@ export async function updateDossier(id: number, input: DossierInput): Promise<Mu
   const sourceId = input.sourceId ?? row.sourceId;
   if (!hkdName) return { ok: false, error: 'VALIDATION', message: 'Tên Hộ Kinh Doanh không được để trống.' };
   if (!ownerName) return { ok: false, error: 'VALIDATION', message: 'Tên chủ hộ không được để trống.' };
+  if (input.mstStatus !== undefined && !isMstStatus(input.mstStatus)) return { ok: false, error: 'VALIDATION', message: 'Trạng thái MST không hợp lệ (chỉ Hoạt động / Đóng).' };
   const refErr = await validateRefs(db, sourceId);
   if (refErr) return refErr;
 
@@ -348,6 +362,7 @@ export async function updateDossier(id: number, input: DossierInput): Promise<Mu
       hkdName,
       hkdAddress: input.hkdAddress !== undefined ? input.hkdAddress?.trim() || null : row.hkdAddress,
       taxCode: input.taxCode !== undefined ? input.taxCode?.trim() || null : row.taxCode,
+      mstStatus: isMstStatus(input.mstStatus) ? input.mstStatus : row.mstStatus,
       dkkdIssueDate: input.dkkdIssueDate !== undefined ? parseDate(input.dkkdIssueDate) ?? null : row.dkkdIssueDate,
       dkkdIssuePlace: input.dkkdIssuePlace !== undefined ? input.dkkdIssuePlace?.trim() || null : row.dkkdIssuePlace,
       ownerName,
