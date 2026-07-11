@@ -27,6 +27,28 @@ export function Login({ onLoggedIn }: { onLoggedIn: (u: AuthUser, mustChange: bo
     };
   }, []);
 
+  // R46: đăng nhập; nếu tài khoản đang đăng nhập ở thiết bị khác → hỏi xác nhận → đăng nhập lại với force=true
+  // (đăng xuất thiết bị kia). Đệ quy 1 lần sau khi người dùng đồng ý.
+  async function doLogin(force: boolean): Promise<void> {
+    const res = await window.api.login(username.trim(), password, remember, force);
+    if (res.ok && res.user) {
+      toast.success(`Xin chào ${res.user.fullName}`);
+      onLoggedIn(res.user, !!res.mustChangePassword);
+      return;
+    }
+    if (res.error === 'SESSION_ACTIVE_ELSEWHERE') {
+      const agree = await toast.confirm(
+        `Tài khoản đang đăng nhập ở "${res.otherDevice ?? 'thiết bị khác'}".\n\nĐăng nhập tại đây sẽ ĐĂNG XUẤT thiết bị kia. Tiếp tục?`,
+        { title: 'Đang đăng nhập ở thiết bị khác', okLabel: 'Đăng nhập tại đây', cancelLabel: 'Hủy' }
+      );
+      if (agree) await doLogin(true);
+      return;
+    }
+    const msg = res.message ?? 'Đăng nhập không hợp lệ.';
+    setError(msg);
+    toast.alert(msg);
+  }
+
   async function submit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     setError(null);
@@ -36,15 +58,7 @@ export function Login({ onLoggedIn }: { onLoggedIn: (u: AuthUser, mustChange: bo
     }
     setBusy(true);
     try {
-      const res = await window.api.login(username.trim(), password, remember);
-      if (res.ok && res.user) {
-        toast.success(`Xin chào ${res.user.fullName}`);
-        onLoggedIn(res.user, !!res.mustChangePassword);
-      } else {
-        const msg = res.message ?? 'Đăng nhập không hợp lệ.';
-        setError(msg);
-        toast.alert(msg);
-      }
+      await doLogin(false);
     } catch {
       const msg = 'Lỗi hệ thống khi đăng nhập.';
       setError(msg);

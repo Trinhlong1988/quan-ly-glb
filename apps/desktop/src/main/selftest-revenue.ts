@@ -111,12 +111,14 @@ export async function runRevenueSelfTest(): Promise<number> {
   ok('công nợ bán = 210.000', d0.data?.debtSell === 210_000, d0.data);
   ok('số GD công nợ = 2', d0.data?.count === 2, d0.data);
 
+  // Đối soát công nợ THỦ CÔNG đã TẮT (chuyển sang phiếu Thu công nợ — Phase H2) → phải trả DEBT_SETTLE_DISABLED,
+  // KHÔNG đổi công nợ. (Test cũ kỳ vọng changed=1 là stale — full-suite rerun sau đổi lõi auth bắt được.)
   const st = await settleTransactions([c1.id!], true);
-  ok('đối soát GD1 → changed=1', st.ok === true && st.changed === 1, st);
+  ok('đối soát thủ công đã tắt → DEBT_SETTLE_DISABLED', st.ok === false && st.error === 'DEBT_SETTLE_DISABLED', st);
   const d1 = await debtSummary({ tidId: tid.id });
-  ok('sau đối soát GD1 → công nợ còn 140.000 (GD2)', d1.data?.debtTotal === 140_000, d1.data);
+  ok('công nợ KHÔNG đổi (vẫn 490.000 — không settle thủ công)', d1.data?.debtTotal === 490_000, d1.data);
   const unsettledList = await listTransactions({ tidId: tid.id, settled: false });
-  ok('lọc chưa đối soát → chỉ 1 GD', unsettledList.data?.length === 1, { len: unsettledList.data?.length });
+  ok('chưa đối soát vẫn 2 GD', unsettledList.data?.length === 2, { len: unsettledList.data?.length });
 
   // ═══════════ F) RÀNG BUỘC ═══════════
   const tidNoPartner = await db.tid.create({ data: { tid: 'TIDNOPART', bankId: bank.id } });

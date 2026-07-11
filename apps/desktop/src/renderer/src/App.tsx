@@ -5,12 +5,37 @@ import { Login } from './pages/Login.js';
 import { ServerConfig } from './pages/ServerConfig.js';
 import { ForceChangePassword } from './pages/ForceChangePassword.js';
 import { Dashboard } from './pages/Dashboard.js';
+import { useToast } from './lib/toast.js';
 
 type Screen = 'loading' | 'server-config' | 'login' | 'force-change' | 'dashboard';
 
 export function App(): JSX.Element {
+  const toast = useToast();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [screen, setScreen] = useState<Screen>('loading');
+
+  // R46 nhịp tim: đang đăng nhập → ~15s gọi 1 lần. Nếu phiên bị đá (đăng nhập ở thiết bị khác) → báo + về đăng nhập.
+  useEffect(() => {
+    if (!user) return;
+    let alive = true;
+    const tick = async (): Promise<void> => {
+      try {
+        const r = await window.api.sessionHeartbeat();
+        if (alive && r.kicked) {
+          toast.alert('Tài khoản của bạn vừa đăng nhập ở thiết bị khác nên phiên này đã kết thúc.', 'Đã đăng xuất');
+          setUser(null);
+          setScreen('login');
+        }
+      } catch {
+        /* mạng chập chờn — bỏ qua nhịp này, thử lại nhịp sau */
+      }
+    };
+    const id = setInterval(tick, 15000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, [user, toast]);
 
   // G10.3 khởi động: client CHƯA cấu hình / kết nối fail → màn "Cấu hình máy chủ" (KHÔNG crash).
   // Máy chủ (serverRole) hoặc đã kết nối được → vào đăng nhập.

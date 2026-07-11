@@ -6,6 +6,14 @@ export interface LoginOutcome {
   mustChangePassword?: boolean;
   error?: string;
   message?: string;
+  otherDevice?: string; // R46: tên thiết bị đang đăng nhập (khi SESSION_ACTIVE_ELSEWHERE)
+}
+export interface OnlineUserDto {
+  userId: number;
+  username: string;
+  fullName: string;
+  deviceInfo: string | null;
+  since: string;
 }
 export interface MutationOutcome {
   ok: boolean;
@@ -1153,9 +1161,11 @@ export interface AuditQuery {
 }
 
 export interface GlbApi {
-  login(username: string, password: string, remember: boolean): Promise<LoginOutcome>;
+  login(username: string, password: string, remember: boolean, force?: boolean): Promise<LoginOutcome>;
   me(): Promise<AuthUser | null>;
   logout(): Promise<{ ok: boolean }>;
+  sessionHeartbeat(): Promise<{ ok: boolean; kicked?: boolean }>;
+  onlineUsers(): Promise<{ ok: boolean; error?: string; message?: string; data?: OnlineUserDto[] }>;
   changePassword(currentPassword: string, newPassword: string, confirmPassword?: string): Promise<MutationOutcome>;
   adminResetPassword(userId: number, newPassword: string, actorPassword: string): Promise<MutationOutcome>;
   level2Status(): Promise<{ ok: boolean; hasLevel2?: boolean; error?: string; message?: string }>;

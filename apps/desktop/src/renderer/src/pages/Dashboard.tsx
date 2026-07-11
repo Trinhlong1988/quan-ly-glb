@@ -22,7 +22,7 @@ import {
   Coins,
   PiggyBank
 } from 'lucide-react';
-import type { DashboardStats } from '../../../preload/index.d';
+import type { DashboardStats, OnlineUserDto } from '../../../preload/index.d';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, hasAnyPermission } from '@glb/shared';
 import { MessagesDrawer } from '../components/MessagesDrawer.js';
@@ -379,6 +379,9 @@ function Home({ user }: { user: AuthUser; visibleCount: number }): JSX.Element {
         </p>
       </div>
 
+      {/* R41 — user đang đăng nhập (realtime ~15s). Chỉ vai có quyền xem nhân sự. */}
+      {hasPermission(user, 'USER_READ') && <OnlineUsersPanel />}
+
       {/* Lợi nhuận accrual tháng (PHASE H2-core) — chỉ hiện với vai có quyền thu-chi */}
       {hasPermission(user, 'CASHENTRY_VIEW') && <ProfitPanel />}
 
@@ -567,6 +570,61 @@ function BreakdownCard({
             </div>
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+/** R41 — Bảng "Đang đăng nhập": bộ đếm + danh sách user online, tự làm mới ~15s. */
+function OnlineUsersPanel(): JSX.Element {
+  const [rows, setRows] = useState<OnlineUserDto[]>([]);
+  useEffect(() => {
+    let alive = true;
+    const load = async (): Promise<void> => {
+      try {
+        const r = await window.api.onlineUsers();
+        if (alive && r.ok && r.data) setRows(r.data);
+      } catch {
+        /* bỏ qua nhịp lỗi */
+      }
+    };
+    void load();
+    const id = setInterval(load, 15000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, []);
+  return (
+    <div className="rounded-2xl border border-line bg-white p-5 shadow-sm">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-600">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+          </span>
+          Đang đăng nhập
+          <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-bold tabular-nums text-emerald-600">{rows.length}</span>
+        </h3>
+        <span className="text-xs text-slate-400">tự cập nhật ~15 giây</span>
+      </div>
+      {rows.length === 0 ? (
+        <div className="py-2 text-sm text-slate-400">Chưa có ai đang đăng nhập.</div>
+      ) : (
+        <ul className="divide-y divide-line">
+          {rows.map((u) => (
+            <li key={u.userId} className="flex items-center justify-between py-2">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand/10 text-xs font-bold text-brand">{(u.fullName || u.username).charAt(0).toUpperCase()}</span>
+                <div>
+                  <div className="text-sm font-medium text-slate-700">{u.fullName || u.username}</div>
+                  <div className="text-xs text-slate-400">@{u.username}{u.deviceInfo ? ` · ${u.deviceInfo}` : ''}</div>
+                </div>
+              </div>
+              <span className="text-xs text-slate-400">từ {new Date(u.since).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

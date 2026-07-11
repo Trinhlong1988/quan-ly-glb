@@ -336,6 +336,12 @@ app.whenReady().then(async () => {
     app.exit(code);
     return;
   }
+  if (process.env['GLB_SELFTEST'] === '35') {
+    const { runSessionSelfTest } = await import('./selftest-session.js');
+    const code = await runSessionSelfTest();
+    app.exit(code);
+    return;
+  }
 
   await createWindow();
   startHousekeeping();

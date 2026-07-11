@@ -3,10 +3,13 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 const api = {
   // Auth
-  login: (username: string, password: string, remember: boolean) =>
-    ipcRenderer.invoke('auth:login', { username, password, remember }),
+  login: (username: string, password: string, remember: boolean, force?: boolean) =>
+    ipcRenderer.invoke('auth:login', { username, password, remember, force }),
   me: () => ipcRenderer.invoke('auth:me'),
   logout: () => ipcRenderer.invoke('auth:logout'),
+  // R46 nhịp tim + R41 danh sách đang đăng nhập.
+  sessionHeartbeat: () => ipcRenderer.invoke('session:heartbeat'),
+  onlineUsers: () => ipcRenderer.invoke('session:onlineUsers'),
   changePassword: (currentPassword: string, newPassword: string, confirmPassword?: string) =>
     ipcRenderer.invoke('auth:changePassword', { currentPassword, newPassword, confirmPassword }),
   adminResetPassword: (userId: number, newPassword: string, actorPassword: string) =>

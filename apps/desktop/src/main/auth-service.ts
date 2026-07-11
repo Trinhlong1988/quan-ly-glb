@@ -63,12 +63,28 @@ async function clearFailedAttempts(db: Db, userId: number, current: number): Pro
 }
 
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12h
+// R46: phiên coi là CÒN SỐNG nếu nhịp tim (lastSeenAt) trong vòng STALE. Renderer heartbeat mỗi ~15s →
+// bỏ lỡ 3 nhịp (45s) coi như thiết bị đã tắt/mất mạng → phiên chết, không chặn đăng nhập nơi khác.
+const SESSION_STALE_MS = 45 * 1000;
+// Khóa advisory 2-int (key1 cố định, key2 = userId) serialize mọi luồng đăng nhập CÙNG 1 user → chống race
+// tạo 2 phiên (mỗi thiết bị đọc "chưa có phiên" rồi cùng tạo). Cùng lớp bài học B27 (TOCTOU).
+const LOGIN_LOCK_KEY = 918273;
 
 interface SessionState {
   sessionId: string;
   user: AuthUser;
 }
 let current: SessionState | null = null;
+
+/** Danh sách phiên CÒN SỐNG (chưa hết hạn + nhịp tim còn) của 1 user — trừ phiên `exceptId` nếu có. */
+async function liveSessionsOf(db: Db, userId: number, exceptId?: string): Promise<{ id: string; deviceInfo: string | null; lastSeenAt: Date }[]> {
+  const now = Date.now();
+  const rows = await db.loginSession.findMany({
+    where: { userId, expiresAt: { gt: new Date(now) }, lastSeenAt: { gt: new Date(now - SESSION_STALE_MS) }, ...(exceptId ? { id: { not: exceptId } } : {}) },
+    select: { id: true, deviceInfo: true, lastSeenAt: true }
+  });
+  return rows;
+}
 
 /** Build the flattened AuthUser (roles + effective permissions) from the DB. */
 async function buildAuthUser(db: Db, userId: number): Promise<AuthUser> {
@@ -107,9 +123,18 @@ export interface LoginOutcome {
   mustChangePassword?: boolean;
   error?: string;
   message?: string;
+  /** R46: khi tài khoản đang đăng nhập ở thiết bị khác — tên thiết bị đó để hiển thị xác nhận. */
+  otherDevice?: string;
 }
 
-export async function login(username: string, password: string): Promise<LoginOutcome> {
+export interface LoginOpts {
+  /** true = đăng nhập tại đây, ĐĂNG XUẤT thiết bị đang đăng nhập (sau khi người dùng xác nhận). */
+  force?: boolean;
+  /** Tên máy/thiết bị (os.hostname) để hiển thị + lưu vào phiên. */
+  deviceInfo?: string;
+}
+
+export async function login(username: string, password: string, opts: LoginOpts = {}): Promise<LoginOutcome> {
   const db = getDb();
   const row = await db.user.findFirst({ where: { username, deletedAt: null } });
 
@@ -157,25 +182,95 @@ export async function login(username: string, password: string): Promise<LoginOu
   if (row && row.failedAttempts > 0) await clearFailedAttempts(db, row.id, row.failedAttempts);
 
   const authUser = await buildAuthUser(db, record!.id);
+  const userId = record!.id;
   const sessionId = randomUUID();
-  await db.loginSession.create({
-    data: {
-      id: sessionId,
-      userId: record!.id,
-      expiresAt: new Date(Date.now() + SESSION_TTL_MS)
-    }
-  });
-  current = { sessionId, user: authUser };
 
+  // R46 — 1 tài khoản 1 thiết bị. Serialize theo user (advisory lock) rồi kiểm/ghi phiên trong CÙNG transaction.
+  // Đăng nhập lại trên CÙNG thiết bị (khớp deviceInfo) → thay thế IM LẶNG (app khởi động lại / đăng nhập lại
+  // không cần hỏi). Chỉ CHẶN + hỏi khi đang đăng nhập ở thiết bị KHÁC.
+  const dev = opts.deviceInfo ?? null;
+  const outcome = await db.$transaction(async (txc) => {
+    await txc.$executeRawUnsafe('SELECT pg_advisory_xact_lock($1, $2)', LOGIN_LOCK_KEY, userId);
+    const live = await liveSessionsOf(txc as unknown as Db, userId);
+    const sameDevice = live.filter((o) => (o.deviceInfo ?? null) === dev);
+    const otherDevices = live.filter((o) => (o.deviceInfo ?? null) !== dev);
+    if (otherDevices.length > 0 && !opts.force) {
+      // Đang đăng nhập ở thiết bị khác + CHƯA xác nhận → KHÔNG tạo phiên, trả tên thiết bị để hỏi.
+      return { blocked: true as const, otherDevice: otherDevices[0].deviceInfo ?? 'thiết bị khác' };
+    }
+    // Xóa phiên cùng thiết bị (thay thế) + (nếu force) phiên thiết bị khác (đá ra → kick ở heartbeat).
+    const toDelete = [...sameDevice, ...(opts.force ? otherDevices : [])].map((o) => o.id);
+    if (toDelete.length > 0) await txc.loginSession.deleteMany({ where: { userId, id: { in: toDelete } } });
+    await txc.loginSession.create({
+      data: { id: sessionId, userId, expiresAt: new Date(Date.now() + SESSION_TTL_MS), lastSeenAt: new Date(), deviceInfo: dev }
+    });
+    return { blocked: false as const };
+  });
+
+  if (outcome.blocked) {
+    return {
+      ok: false,
+      error: 'SESSION_ACTIVE_ELSEWHERE',
+      message: `Tài khoản đang đăng nhập ở ${outcome.otherDevice}. Xác nhận đăng nhập tại đây sẽ đăng xuất thiết bị kia.`,
+      otherDevice: outcome.otherDevice
+    };
+  }
+
+  current = { sessionId, user: authUser };
   await writeAudit(db, {
-    actorUserId: record!.id,
+    actorUserId: userId,
     action: 'LOGIN_SUCCESS',
     targetType: 'User',
-    targetId: String(record!.id),
-    after: { username: authUser.username }
+    targetId: String(userId),
+    after: { username: authUser.username, device: opts.deviceInfo ?? null, kickedOther: opts.force === true }
   });
 
   return { ok: true, user: authUser, mustChangePassword: decision.mustChangePassword };
+}
+
+/**
+ * R46 — nhịp tim: renderer gọi định kỳ. Cập nhật lastSeenAt cho phiên hiện tại. Nếu phiên KHÔNG còn trong DB
+ * (bị thiết bị khác đăng nhập đá ra / hết hạn) → trả kicked=true để renderer buộc về màn đăng nhập.
+ */
+export async function heartbeat(): Promise<{ ok: boolean; kicked?: boolean }> {
+  if (!current) return { ok: false };
+  const db = getDb();
+  const res = await db.loginSession.updateMany({
+    where: { id: current.sessionId, expiresAt: { gt: new Date() } },
+    data: { lastSeenAt: new Date() }
+  });
+  if (res.count === 0) {
+    current = null;
+    return { ok: false, kicked: true };
+  }
+  return { ok: true };
+}
+
+export interface OnlineUserDto {
+  userId: number;
+  username: string;
+  fullName: string;
+  deviceInfo: string | null;
+  since: string; // ISO createdAt của phiên còn sống mới nhất
+}
+
+/** R41 — danh sách user ĐANG đăng nhập (phiên còn nhịp tim), gộp theo user (1 dòng/1 user). */
+export async function listOnlineUsers(): Promise<{ ok: boolean; error?: string; message?: string; data?: OnlineUserDto[] }> {
+  const g = await requirePermission('USER_READ', { action: 'LOGIN_SUCCESS', targetType: 'User' });
+  if (!g.ok) return g;
+  const { db } = g;
+  const now = Date.now();
+  const rows = await db.loginSession.findMany({
+    where: { expiresAt: { gt: new Date(now) }, lastSeenAt: { gt: new Date(now - SESSION_STALE_MS) } },
+    include: { user: { select: { id: true, username: true, fullName: true } } },
+    orderBy: { createdAt: 'desc' }
+  });
+  const byUser = new Map<number, OnlineUserDto>();
+  for (const s of rows) {
+    if (!s.user || byUser.has(s.userId)) continue; // giữ phiên mới nhất/1 user
+    byUser.set(s.userId, { userId: s.userId, username: s.user.username, fullName: s.user.fullName, deviceInfo: s.deviceInfo, since: s.createdAt.toISOString() });
+  }
+  return { ok: true, data: [...byUser.values()] };
 }
 
 export function me(): AuthUser | null {

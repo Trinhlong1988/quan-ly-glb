@@ -42,6 +42,13 @@ describe('buildReportWorkbook — bảng dữ liệu chuẩn nhà', () => {
     expect((ws.views[0] as { ySplit?: number }).ySplit).toBe(3);
   });
 
+  it('font chữ chuẩn 13 (tên cột + dữ liệu)', async () => {
+    const wb = await load(await buildReportWorkbook({ title: 'x', headers, rows }));
+    const ws = wb.getWorksheet('Dữ liệu')!;
+    expect(ws.getCell('A3').font?.size).toBe(13); // tên cột
+    expect(ws.getCell('A4').font?.size).toBe(13); // dữ liệu
+  });
+
   it('cột số (number) căn phải', async () => {
     const wb = await load(await buildReportWorkbook({ title: 'x', headers, rows }));
     const ws = wb.getWorksheet('Dữ liệu')!;

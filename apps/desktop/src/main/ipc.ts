@@ -1,6 +1,7 @@
 // IPC registration (main). Renderer never touches the DB — all DB work lives behind these handlers.
 import { ipcMain, dialog, BrowserWindow, shell } from 'electron';
 import { writeFile } from 'node:fs/promises';
+import os from 'node:os';
 import { validatePassword } from '@glb/shared';
 import * as auth from './auth-service.js';
 import * as roleSvc from './role-service.js';
@@ -46,15 +47,19 @@ export function registerIpc(): void {
   ipcMain.handle('serverConfig:save', async (_e, input: ServerConfigInput) => saveServerConfig(input ?? {}));
 
   // ---- Auth (Phase A) ----------------------------------------------------
-  ipcMain.handle('auth:login', async (_e, args: { username: string; password: string; remember?: boolean }) => {
-    const { username, password, remember } = args ?? ({} as never);
-    const result = await auth.login(username, password);
+  ipcMain.handle('auth:login', async (_e, args: { username: string; password: string; remember?: boolean; force?: boolean }) => {
+    const { username, password, remember, force } = args ?? ({} as never);
+    // R46: gắn tên thiết bị (hostname) để hiển thị "đang đăng nhập ở thiết bị khác".
+    const result = await auth.login(username, password, { force, deviceInfo: os.hostname() });
     if (result.ok) {
       if (remember) saveRemembered(username, password);
       else clearRemembered();
     }
     return result;
   });
+  // R46 nhịp tim (renderer gọi ~15s) + R41 danh sách user đang đăng nhập.
+  ipcMain.handle('session:heartbeat', async () => auth.heartbeat());
+  ipcMain.handle('session:onlineUsers', async () => auth.listOnlineUsers());
   ipcMain.handle('auth:me', async () => auth.me());
   ipcMain.handle('auth:logout', async () => {
     await auth.logout();

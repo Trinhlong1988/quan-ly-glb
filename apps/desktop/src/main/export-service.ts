@@ -119,7 +119,7 @@ function rowHeightFor(values: (Cell | string)[], widths: number[], base: number)
     const lines = wrapLines(String(v), widths[i] ?? 12);
     if (lines > maxLines) maxLines = lines;
   });
-  return Math.max(base, maxLines * 15 + 5);
+  return Math.max(base, maxLines * 18 + 6); // 13pt ≈ 18pt/dòng
 }
 
 /** Dựng bảng dữ liệu chuẩn nhà → Buffer .xlsx. */
@@ -145,17 +145,17 @@ export async function buildReportWorkbook(input: ReportInput): Promise<Buffer> {
   ws.mergeCells(`A2:${lastCol}2`);
   const s = ws.getCell('A2');
   s.value = input.summary ?? `Tổng: ${input.rows.length} dòng   •   Ngày xuất: ${fmtVNDate(new Date())}`;
-  s.font = { name: FONT, size: 11.5, bold: true, color: { argb: 'FF7F6000' } };
+  s.font = { name: FONT, size: 13, bold: true, color: { argb: 'FF7F6000' } };
   s.alignment = { vertical: 'middle', horizontal: 'center' };
   s.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C_SUMMARY } };
-  ws.getRow(2).height = 22;
+  ws.getRow(2).height = 24;
 
   // Hàng 3 — TÊN CỘT (IN HOA)
   const hr = ws.getRow(3);
   headers.forEach((h, i) => {
     const c = hr.getCell(i + 1);
     c.value = h;
-    c.font = { name: FONT, size: 11, bold: true };
+    c.font = { name: FONT, size: 13, bold: true };
     c.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
     c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C_HEADER } };
     c.border = BORDER;
@@ -173,7 +173,7 @@ export async function buildReportWorkbook(input: ReportInput): Promise<Buffer> {
       const v = r[ci] ?? '';
       const wrap = aligns[ci] === 'left';
       c.value = v;
-      c.font = { name: FONT, size: 11 };
+      c.font = { name: FONT, size: 13 };
       c.alignment = { vertical: 'middle', horizontal: aligns[ci], wrapText: wrap };
       c.border = BORDER;
       if (ri % 2 === 1) c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C_ZEBRA } };
@@ -199,7 +199,7 @@ export async function buildTemplateWorkbook(input: TemplateInput): Promise<Buffe
   input.headers.forEach((h, i) => {
     const c = hr.getCell(i + 1);
     c.value = h; // GIỮ NGUYÊN nhãn (không IN HOA) để khớp header khi nhập lại
-    c.font = { name: FONT, size: 11, bold: true };
+    c.font = { name: FONT, size: 13, bold: true };
     c.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
     c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C_HEADER } };
     c.border = BORDER;
@@ -213,7 +213,7 @@ export async function buildTemplateWorkbook(input: TemplateInput): Promise<Buffe
     ['CỘT', 'BẮT BUỘC', 'GỢI Ý'].forEach((h, i) => {
       const c = h0.getCell(i + 1);
       c.value = h;
-      c.font = { name: FONT, size: 11, bold: true };
+      c.font = { name: FONT, size: 13, bold: true };
       c.alignment = { vertical: 'middle', horizontal: 'center' };
       c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C_HEADER } };
       c.border = BORDER;
@@ -223,7 +223,7 @@ export async function buildTemplateWorkbook(input: TemplateInput): Promise<Buffe
       [hint.header, hint.required ? 'Có' : '', hint.hint ?? ''].forEach((v, ci) => {
         const c = row.getCell(ci + 1);
         c.value = v;
-        c.font = { name: FONT, size: 11 };
+        c.font = { name: FONT, size: 13 };
         c.alignment = { vertical: 'middle', horizontal: ci === 1 ? 'center' : 'left', wrapText: true };
         c.border = BORDER;
       });

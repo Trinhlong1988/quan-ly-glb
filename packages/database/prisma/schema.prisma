@@ -151,14 +151,19 @@ model BackupLog {
   @@map("backup_logs")
 }
 
+// R46 (Mr.Long 12/7) — 1 tài khoản chỉ đăng nhập 1 THIẾT BỊ cùng lúc. lastSeenAt = nhịp tim (heartbeat) để
+// phát hiện phiên còn sống (online) + dọn phiên chết; deviceInfo hiển thị "đang đăng nhập ở thiết bị khác".
 model LoginSession {
-  id        String   @id
-  userId    Int      @map("user_id")
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+  id         String   @id
+  userId     Int      @map("user_id")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt  DateTime @map("expires_at") @db.Timestamptz(3)
+  lastSeenAt DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+  deviceInfo String?  @map("device_info")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("login_sessions")
 }
 
