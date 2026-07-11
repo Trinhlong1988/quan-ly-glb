@@ -3,7 +3,7 @@
 import { app } from 'electron';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, copyFileSync, renameSync, readFileSync, statSync } from 'node:fs';
-import { join, extname, basename } from 'node:path';
+import { join, extname, basename, resolve, sep } from 'node:path';
 
 const ALLOWED_EXT = new Set(['.png', '.jpg', '.jpeg', '.pdf']);
 const MIME: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.pdf': 'application/pdf' };
@@ -77,9 +77,11 @@ export function storeAttachment(kind: AttachKind, id: number, side: AttachSide, 
 /** Đọc file đã lưu → data URL để hiển thị trong renderer (sandbox không đọc fs trực tiếp). */
 export function readAttachmentDataUrl(relPath: string): { ok: boolean; dataUrl?: string; error?: string; message?: string } {
   if (!relPath) return { ok: false, error: 'NO_PATH', message: 'Thiếu đường dẫn.' };
-  // Chặn path traversal.
-  if (relPath.includes('..')) return { ok: false, error: 'BAD_PATH', message: 'Đường dẫn không hợp lệ.' };
-  const abs = join(uploadsRoot(), relPath);
+  // R48 — Chặn path traversal TRIỆT ĐỂ: giải đường dẫn tuyệt đối và bắt buộc nằm TRONG uploadsRoot
+  // (không dựa vào kiểm chuỗi '..' — chống cả ký hiệu tuyệt đối / symlink-escape / mã hóa lạ).
+  const root = uploadsRoot();
+  const abs = resolve(root, relPath);
+  if (abs !== root && !abs.startsWith(root + sep)) return { ok: false, error: 'BAD_PATH', message: 'Đường dẫn không hợp lệ.' };
   if (!existsSync(abs)) return { ok: false, error: 'NOT_FOUND', message: 'File không còn tồn tại.' };
   const ext = extname(abs).toLowerCase();
   const mime = MIME[ext] ?? 'application/octet-stream';

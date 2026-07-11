@@ -1164,7 +1164,7 @@ export interface GlbApi {
   login(username: string, password: string, remember: boolean, force?: boolean): Promise<LoginOutcome>;
   me(): Promise<AuthUser | null>;
   logout(): Promise<{ ok: boolean }>;
-  sessionHeartbeat(): Promise<{ ok: boolean; kicked?: boolean }>;
+  sessionHeartbeat(): Promise<{ ok: boolean; kicked?: boolean; byDevice?: string }>;
   onlineUsers(): Promise<{ ok: boolean; error?: string; message?: string; data?: OnlineUserDto[] }>;
   changePassword(currentPassword: string, newPassword: string, confirmPassword?: string): Promise<MutationOutcome>;
   adminResetPassword(userId: number, newPassword: string, actorPassword: string): Promise<MutationOutcome>;

@@ -74,7 +74,7 @@ export function DebtPage({ user }: { user: AuthUser }): JSX.Element {
       customerId: fCustomer ? Number(fCustomer) : undefined,
       tidId: fTid ? Number(fTid) : undefined,
       dateFrom: fFrom ? new Date(fFrom + 'T00:00:00').toISOString() : undefined,
-      dateTo: fTo ? new Date(fTo + 'T23:59:59').toISOString() : undefined
+      dateTo: fTo ? new Date(fTo + 'T23:59:59.999').toISOString() : undefined
     };
   }
 

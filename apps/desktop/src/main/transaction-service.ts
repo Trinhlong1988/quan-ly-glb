@@ -226,9 +226,14 @@ export async function createTransaction(input: CreateTransactionInput): Promise<
   const customerId = input.customerId === undefined ? tid.customerId : input.customerId;
 
   // R2: khách hàng "Đã khóa"/"Đã hủy" → CHẶN giao dịch mới (vẫn xem được lịch sử).
+  // R48: khách hàng ĐÃ XÓA MỀM (deletedAt) cũng phải CHẶN — trước đây guard chỉ chạy khi deletedAt==null nên
+  // khách đã hủy qua duyệt vẫn gắn được GD mới → tái xuất hiện thành người nợ. Nay chặn cả 2.
   if (customerId != null) {
     const cust = await db.customer.findUnique({ where: { id: customerId }, select: { status: true, deletedAt: true } });
-    if (cust && cust.deletedAt == null && (cust.status === 'LOCKED' || cust.status === 'CANCELLED')) {
+    if (!cust || cust.deletedAt != null) {
+      return { ok: false, error: 'CUSTOMER_INACTIVE', message: 'Khách hàng không tồn tại hoặc đã bị hủy khỏi hệ thống — không thể tạo giao dịch mới.' };
+    }
+    if (cust.status === 'LOCKED' || cust.status === 'CANCELLED') {
       return { ok: false, error: 'CUSTOMER_INACTIVE', message: `Khách hàng đang ở trạng thái "${cust.status === 'LOCKED' ? 'Đã khóa' : 'Đã hủy'}" — không thể tạo giao dịch mới.` };
     }
   }

@@ -342,6 +342,12 @@ app.whenReady().then(async () => {
     app.exit(code);
     return;
   }
+  if (process.env['GLB_SELFTEST'] === '36') {
+    const { runBackupSelfTest } = await import('./selftest-backup.js');
+    const code = await runBackupSelfTest();
+    app.exit(code);
+    return;
+  }
 
   await createWindow();
   startHousekeeping();
@@ -372,10 +378,11 @@ function startHousekeeping(): void {
   const tick = async (): Promise<void> => {
     try {
       const { getDb } = await import('./db.js');
-      const { systemBackupIfDue, systemStorageCheck, systemWeeklyMaintenanceIfDue } = await import('./storage-service.js');
+      const { systemBackupIfDue, systemStorageCheck, systemWeeklyMaintenanceIfDue, backupWatchdog } = await import('./storage-service.js');
       const db = getDb();
       await systemBackupIfDue(db);
       await systemWeeklyMaintenanceIfDue(db);
+      await backupWatchdog(db); // C2 (R48): cảnh báo nếu bản sao lưu quá hạn (chống "sót backup")
       await systemStorageCheck(db);
     } catch (err) {
       // eslint-disable-next-line no-console

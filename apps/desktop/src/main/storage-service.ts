@@ -22,7 +22,10 @@ const K = {
   maintenanceDayOfWeek: 'maintenance.dayOfWeek', // 0=Chủ nhật … 6=Thứ bảy
   maintenanceHour: 'maintenance.hour', // 0..23
   autoPurgeWeekly: 'maintenance.autoPurge', // '1' = tự dọn dữ liệu quá hạn khi bảo trì tuần
-  lastMaintenanceAt: 'maintenance.lastAt'
+  lastMaintenanceAt: 'maintenance.lastAt',
+  lastBackupFailureAt: 'backup.lastFailureAt', // C1 — mốc backup tự động thất bại gần nhất
+  lastBackupFailAlertAt: 'backup.lastFailAlertAt', // C1 — throttle thông báo thất bại
+  lastBackupStaleAlertAt: 'backup.lastStaleAlertAt' // C2 — throttle cảnh báo backup quá hạn
 } as const;
 
 const DEFAULTS = {
@@ -252,7 +255,51 @@ export async function systemBackupIfDue(db: Db): Promise<{ ran: boolean; filePat
     await setStr(db, K.lastBackupAt, new Date().toISOString());
     return { ran: true, filePath: bk.filePath };
   }
+  await reportBackupFailure(db, 'sao lưu tự động hằng ngày', bk.error);
   return { ran: false };
+}
+
+/**
+ * C1 (R48) — KHÔNG để backup thất bại LẶNG. Ghi audit AUTO_BACKUP_FAILED + đẩy thông báo Admin/Manager
+ * (throttle 6h để không spam). Lưu mốc thất bại để watchdog/StorageStatus hiển thị.
+ */
+async function reportBackupFailure(db: Db, whichBackup: string, error?: string): Promise<void> {
+  await setStr(db, K.lastBackupFailureAt, new Date().toISOString());
+  await writeAudit(db, { actorUserId: null, action: 'AUTO_BACKUP_FAILED', targetType: 'System', after: { backup: whichBackup, error: error ?? 'không rõ' } });
+  const lastAlert = await getStr(db, K.lastBackupFailAlertAt);
+  if (lastAlert && Date.now() - new Date(lastAlert).getTime() < 6 * 3600_000) return;
+  await notifyAdmins(db, {
+    category: 'BACKUP_FAIL',
+    subject: '🛑 SAO LƯU TỰ ĐỘNG THẤT BẠI',
+    body: `Tác vụ "${whichBackup}" KHÔNG tạo được bản sao lưu. Lỗi: ${error ?? 'không rõ'}.\n` +
+      `Hãy kiểm tra pg_dump / dung lượng đĩa / quyền ghi thư mục backup NGAY — dữ liệu đang KHÔNG được sao lưu.`
+  });
+  await setStr(db, K.lastBackupFailAlertAt, new Date().toISOString());
+}
+
+/**
+ * C2 (R48) — Watchdog: nếu bản sao lưu gần nhất QUÁ CŨ (chưa từng backup, hoặc > 2× chu kỳ) → cảnh báo
+ * Admin/Manager + audit BACKUP_STALE (throttle 24h). Đây là chốt chặn "sót backup" quan trọng nhất.
+ * Gọi định kỳ (mỗi giờ) từ housekeeping.
+ */
+export async function backupWatchdog(db: Db): Promise<{ stale: boolean; lastBackupAt: string | null; ageHours: number | null }> {
+  const intervalH = await backupInterval(db);
+  const last = await getStr(db, K.lastBackupAt);
+  const ageHours = last ? (Date.now() - new Date(last).getTime()) / 3600_000 : null;
+  const stale = ageHours == null || ageHours > 2 * intervalH;
+  if (!stale) return { stale: false, lastBackupAt: last, ageHours };
+  const lastAlert = await getStr(db, K.lastBackupStaleAlertAt);
+  if (lastAlert && Date.now() - new Date(lastAlert).getTime() < 24 * 3600_000) return { stale: true, lastBackupAt: last, ageHours };
+  const ageTxt = ageHours == null ? 'CHƯA CÓ bản sao lưu nào' : `bản gần nhất đã ${Math.round(ageHours)} giờ trước`;
+  await notifyAdmins(db, {
+    category: 'BACKUP_STALE',
+    subject: '⚠️ SAO LƯU QUÁ HẠN',
+    body: `Hệ thống ${ageTxt} (chu kỳ ${intervalH}h). Có thể scheduler không chạy / app tắt lâu / backup lỗi.\n` +
+      `Vào Bảo trì hệ thống tạo backup thủ công + kiểm tra lịch sao lưu.`
+  });
+  await writeAudit(db, { actorUserId: null, action: 'BACKUP_STALE', targetType: 'System', after: { lastBackupAt: last, ageHours: ageHours == null ? null : Math.round(ageHours) } });
+  await setStr(db, K.lastBackupStaleAlertAt, new Date().toISOString());
+  return { stale: true, lastBackupAt: last, ageHours };
 }
 
 /**
@@ -296,9 +343,9 @@ export async function systemWeeklyMaintenanceIfDue(db: Db): Promise<{ ran: boole
   const last = await getStr(db, K.lastMaintenanceAt);
   // Đến hạn nếu chưa từng chạy, hoặc lần chạy cuối TRƯỚC mốc lịch gần nhất (bù cả khi app từng tắt).
   if (last && new Date(last).getTime() >= scheduled.getTime()) return { ran: false };
-  // 1) backup an toàn
+  // 1) backup an toàn — nếu FAIL: KHÔNG dọn (an toàn) + KHÔNG lặng (C1: báo Admin).
   const bk = await systemBackup(db, 'weekly maintenance snapshot (Storage-Guard)');
-  if (!bk.ok) return { ran: false };
+  if (!bk.ok) { await reportBackupFailure(db, 'sao lưu trước bảo trì tuần', bk.error); return { ran: false }; }
 
   // 2) tự dọn dữ liệu quá hạn (nếu bật)
   const autoPurge = (await getStr(db, K.autoPurgeWeekly)) !== '0';

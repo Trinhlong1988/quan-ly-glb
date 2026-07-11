@@ -28,6 +28,7 @@ import * as cashEntrySvc from './cash-entry-service.js';
 import * as importSvc from './import-service.js';
 import * as exportSvc from './export-service.js';
 import { readAttachmentDataUrl } from './file-store.js';
+import { requirePermission } from './guard.js';
 import * as trashSvc from './trash-service.js';
 import * as msgSvc from './message-service.js';
 import * as dashboardSvc from './dashboard-service.js';
@@ -261,7 +262,16 @@ export function registerIpc(): void {
     if (res.canceled || res.filePaths.length === 0) return { ok: false, canceled: true };
     return { ok: true, path: res.filePaths[0] };
   });
-  ipcMain.handle('file:read', async (_e, relPath: string) => readAttachmentDataUrl(relPath));
+  // R48 — GẮN QUYỀN đọc tệp đính kèm (trước đây MỞ cho mọi phiên → IDOR đọc trộm CCCD/ĐKKD). Ảnh thuộc
+  // hồ sơ HKD (dossier) → DOSSIER_VIEW; tài khoản nhận tiền (receiveAccount) → RCV_ACCT_VIEW; tiền tố lạ → chặn.
+  ipcMain.handle('file:read', async (_e, relPath: string) => {
+    const kind = String(relPath ?? '').split('/')[0];
+    const perm = kind === 'dossier' ? 'DOSSIER_VIEW' : kind === 'receiveAccount' ? 'RCV_ACCT_VIEW' : null;
+    if (!perm) return { ok: false, error: 'FORBIDDEN', message: 'Không có quyền xem tệp này.' };
+    const g = await requirePermission(perm, { action: 'file:read', targetType: kind });
+    if (!g.ok) return g;
+    return readAttachmentDataUrl(relPath);
+  });
 
   // ── G-CFG.5 (§10) Quản lý Hồ sơ HKD ──
   ipcMain.handle('dossierSource:list', async () => dossierSvc.listSources());

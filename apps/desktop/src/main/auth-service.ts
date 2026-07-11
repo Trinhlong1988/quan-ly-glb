@@ -232,7 +232,7 @@ export async function login(username: string, password: string, opts: LoginOpts 
  * R46 — nhịp tim: renderer gọi định kỳ. Cập nhật lastSeenAt cho phiên hiện tại. Nếu phiên KHÔNG còn trong DB
  * (bị thiết bị khác đăng nhập đá ra / hết hạn) → trả kicked=true để renderer buộc về màn đăng nhập.
  */
-export async function heartbeat(): Promise<{ ok: boolean; kicked?: boolean }> {
+export async function heartbeat(): Promise<{ ok: boolean; kicked?: boolean; byDevice?: string }> {
   if (!current) return { ok: false };
   const db = getDb();
   const res = await db.loginSession.updateMany({
@@ -240,8 +240,11 @@ export async function heartbeat(): Promise<{ ok: boolean; kicked?: boolean }> {
     data: { lastSeenAt: new Date() }
   });
   if (res.count === 0) {
+    const uid = current.user.id;
     current = null;
-    return { ok: false, kicked: true };
+    // C7 (R48) — cho renderer biết THIẾT BỊ nào vừa đăng nhập đè để báo rõ ràng.
+    const live = await liveSessionsOf(db, uid);
+    return { ok: false, kicked: true, byDevice: live[0]?.deviceInfo ?? undefined };
   }
   return { ok: true };
 }

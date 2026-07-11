@@ -140,7 +140,19 @@ async function writeBackupArchive(
   if (!existsSync(dumpTmp)) throw new Error('pg_dump không tạo được file dump.');
 
   const dumpBytes = readFileSync(dumpTmp);
+  // C3 (R48) — KIỂM TOÀN VẸN NGAY KHI TẠO: dump không được rỗng/cụt + `pg_restore --list` phải parse được TOC.
+  // Chống "backup sai/hỏng vẫn ghi nhận thành công" (yêu cầu tối thượng của Mr.Long).
+  if (dumpBytes.length < 512) {
+    try { unlinkSync(dumpTmp); } catch { /* bỏ qua */ }
+    throw new Error(`Bản dump quá nhỏ (${dumpBytes.length} bytes) — nghi cụt/rỗng, TỪ CHỐI ghi nhận.`);
+  }
+  const listRes = spawnSync(pgToolPath('pg_restore'), ['--list', dumpTmp], {
+    env: { ...process.env, PGPASSWORD: conn.password }, encoding: 'utf8', windowsHide: true, maxBuffer: 64 * 1024 * 1024
+  });
   try { unlinkSync(dumpTmp); } catch { /* dọn tạm — bỏ qua nếu fail */ }
+  if (listRes.error || listRes.status !== 0) {
+    throw new Error(`Bản dump KHÔNG đọc được bằng pg_restore --list (nghi hỏng): ${(listRes.stderr || listRes.error?.message || '').toString().trim()}`);
+  }
 
   const checksum = sha256Hex(dumpBytes);
   const manifest = buildBackupManifest({ createdBy: actorUsername, checksum, databaseFile: DUMP_ENTRY, note });
@@ -247,9 +259,11 @@ export async function restoreBackup(filePath: string, password: string): Promise
       }
     }
 
-    // R_BACKUP_003: snapshot current state BEFORE overwriting. Giữ metadata dòng backup_logs
-    // để RE-INSERT lại sau pg_restore (bug B20 — xem ghi chú bên dưới).
+    // R_BACKUP_003: snapshot current state BEFORE overwriting.
     const preRestore = await writeBackupArchive(db, user.username, 'auto pre-restore snapshot');
+    // C5 (R48) — chụp TOÀN BỘ backup_logs hiện tại (pre-restore snapshot + mọi bản trước) để re-insert
+    // dòng bị mất sau pg_restore (bug B20 mở rộng: dump chỉ chứa các bản CŨ hơn nó → mọi bản MỚI hơn bị mất log).
+    const priorLogs = await db.backupLog.findMany();
 
     // pg_restore --clean --if-exists --single-transaction: drop+recreate objects rồi nạp dữ liệu.
     // Khác SQLite (không swap-on-restart): Postgres áp dụng NGAY, không cần khởi động lại.
@@ -270,21 +284,17 @@ export async function restoreBackup(filePath: string, password: string): Promise
     if (res.error) return { ok: false, error: 'RESTORE_FAILED', message: `Không chạy được pg_restore (${bin}): ${res.error.message}` };
     if (res.status !== 0) return { ok: false, error: 'RESTORE_FAILED', message: `pg_restore lỗi (exit ${res.status}): ${(res.stderr || '').toString().trim()}` };
 
-    // B20 (data-safety): pg_restore --clean --if-exists DROP+CREATE lại bảng `backup_logs` rồi nạp
-    // các dòng CŨ từ dump → dòng backup_logs của "auto pre-restore snapshot" (ghi ngay trên) BỊ GHI ĐÈ
-    // MẤT. File ZIP an-toàn VẪN còn trên đĩa, chỉ mất BẢN GHI log → không tra cứu/undo được nữa.
-    // → RE-INSERT lại dòng pre-restore snapshot (giữ nguyên createdAt) để bản sao lưu an-toàn lại
-    // xuất hiện trong listBackups. Prisma client vẫn hoạt động: schema y hệt, chỉ dữ liệu đổi.
-    await db.backupLog.create({
-      data: {
-        filePath: preRestore.logRow.filePath,
-        fileSize: preRestore.logRow.fileSize,
-        checksum: preRestore.logRow.checksum,
-        createdBy: preRestore.logRow.createdBy,
-        note: preRestore.logRow.note,
-        createdAt: preRestore.logRow.createdAt
-      }
-    });
+    // B20/C5: sau pg_restore, bảng backup_logs = nội dung CŨ trong dump. Re-insert MỌI dòng đã có trước
+    // restore mà nay không còn (theo filePath) — giữ nguyên metadata — để không mất bản ghi bản sao lưu nào
+    // (file ZIP vẫn trên đĩa). Không chỉ pre-restore snapshot mà cả các bản mới hơn dump được chọn.
+    void preRestore; // metadata pre-restore đã nằm trong priorLogs
+    const afterFiles = new Set((await db.backupLog.findMany({ select: { filePath: true } })).map((r) => r.filePath));
+    for (const r of priorLogs) {
+      if (afterFiles.has(r.filePath)) continue;
+      await db.backupLog.create({
+        data: { filePath: r.filePath, fileSize: r.fileSize, checksum: r.checksum, createdBy: r.createdBy, note: r.note, createdAt: r.createdAt }
+      });
+    }
 
     await writeAudit(db, {
       actorUserId: user.id,

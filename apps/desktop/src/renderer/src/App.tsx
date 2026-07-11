@@ -22,7 +22,8 @@ export function App(): JSX.Element {
       try {
         const r = await window.api.sessionHeartbeat();
         if (alive && r.kicked) {
-          toast.alert('Tài khoản của bạn vừa đăng nhập ở thiết bị khác nên phiên này đã kết thúc.', 'Đã đăng xuất');
+          const where = r.byDevice ? ` ở thiết bị "${r.byDevice}"` : ' ở thiết bị khác';
+          toast.alert(`Tài khoản của bạn vừa đăng nhập${where} nên phiên này đã kết thúc. Mọi thao tác chưa lưu sẽ không được giữ lại.`, 'Đã đăng xuất');
           setUser(null);
           setScreen('login');
         }

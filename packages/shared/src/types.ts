@@ -193,6 +193,10 @@ export type AuditAction =
   | 'BILL_CANCEL_REJECTED'
   // ── Nhóm E — Bảo trì & Bộ nhớ ──
   | 'AUTO_BACKUP'
+  | 'AUTO_BACKUP_FAILED'
+  | 'BACKUP_STALE'
+  | 'BACKUP_MIRRORED'
+  | 'BACKUP_MIRROR_FAILED'
   | 'STORAGE_ALERT'
   | 'STORAGE_CLEANUP'
   // Extra (superset of §16 minimum): a mutation refused because the actor lacked the
