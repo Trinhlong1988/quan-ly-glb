@@ -10,6 +10,7 @@ import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
 import { Button } from '../components/Button.js';
 import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../components/Selection.js';
+import { AuditTrailHeadCells, AuditTrailCells } from '../components/AuditCells.js';
 import { exportCsv } from '../lib/exportCsv.js';
 
 type Tab = 'rate' | 'type';
@@ -89,7 +90,7 @@ function TypeTab({ canManage }: { canManage: boolean }): JSX.Element {
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} loại phí · <span className="text-slate-400">ví dụ: Ủy quyền, Tiền chờ, Tiền Nhanh</span></div>
         <div className="flex gap-2">
-          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('loai_phi', ['Tên loại phí', 'Người sửa gần nhất', 'Ngày', 'Giờ'], rows.map((t) => [t.name, t.updatedByName ?? t.createdByName ?? '', fmtDate(t.updatedAt), fmtTime(t.updatedAt)]))}>Xuất Excel</Button>
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('loai_phi', ['Tên loại phí', 'Người tạo', 'Ngày tạo', 'Giờ tạo', 'Người sửa', 'Ngày sửa', 'Giờ sửa'], rows.map((t) => [t.name, t.createdByName ?? '', fmtDate(t.createdAt), fmtTime(t.createdAt), t.updatedByName ?? '', fmtDate(t.updatedAt), fmtTime(t.updatedAt)]))}>Xuất Excel</Button>
           {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm loại phí</Button>}
         </div>
       </div>
@@ -100,22 +101,18 @@ function TypeTab({ canManage }: { canManage: boolean }): JSX.Element {
             <tr>
               {canManage && <SelectAllCell ids={rows.map((r) => r.id)} sel={sel} />}
               <th className="px-4 py-3">Tên loại phí</th>
-              <th className="px-4 py-3">Người sửa gần nhất</th>
-              <th className="px-4 py-3">Ngày</th>
-              <th className="px-4 py-3">Giờ</th>
+              <AuditTrailHeadCells />
               {canManage && <th className="px-4 py-3 text-right">Thao tác</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {loading && <tr><td colSpan={canManage ? 6 : 4} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
-            {!loading && rows.length === 0 && <tr><td colSpan={canManage ? 6 : 4} className="px-4 py-10 text-center text-slate-400"><Tag className="mx-auto mb-2 h-6 w-6" /> Chưa có loại phí.</td></tr>}
+            {loading && <tr><td colSpan={canManage ? 9 : 7} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+            {!loading && rows.length === 0 && <tr><td colSpan={canManage ? 9 : 7} className="px-4 py-10 text-center text-slate-400"><Tag className="mx-auto mb-2 h-6 w-6" /> Chưa có loại phí.</td></tr>}
             {!loading && rows.map((t) => (
               <tr key={t.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(t.id) ? 'bg-brand-tint/40' : '')}>
                 {canManage && <SelectCell id={t.id} sel={sel} />}
                 <td className="px-4 py-3 font-medium text-slate-800">{t.name}</td>
-                <td className="px-4 py-3 text-slate-600">{t.updatedByName ?? t.createdByName ?? '—'}</td>
-                <td className="px-4 py-3 text-xs text-slate-500">{fmtDate(t.updatedAt)}</td>
-                <td className="px-4 py-3 text-xs text-slate-500">{fmtTime(t.updatedAt)}</td>
+                <AuditTrailCells row={t} />
                 {canManage && (
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">

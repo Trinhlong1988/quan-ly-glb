@@ -13,6 +13,7 @@ import { Button } from '../components/Button.js';
 import { ImportButton } from '../components/ImportModal.js';
 import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../components/Selection.js';
 import { Thumb, AttachField } from '../components/Attach.js';
+import { AuditTrailHeadCells, AuditTrailCells } from '../components/AuditCells.js';
 import { exportCsv } from '../lib/exportCsv.js';
 
 type Tab = 'dossier' | 'source';
@@ -95,7 +96,7 @@ function SourceTab({ canManage }: { canManage: boolean }): JSX.Element {
         <div className="text-sm text-slate-500">{rows.length} nguồn hồ sơ</div>
         <div className="flex gap-2">
           <button onClick={() => void reload()} title="Tải lại dữ liệu mới nhất (giữ nguyên bộ lọc)" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200"><RefreshCw className="h-4 w-4" /> Làm mới</button>
-          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('nguon_ho_so', ['Mã nguồn hồ sơ', 'Chiết khấu', 'Người sửa gần nhất', 'Ngày', 'Giờ'], rows.map((s) => [s.code, fmtPct(s.discountRate), s.updatedByName ?? s.createdByName ?? '', fmtDate(s.updatedAt), fmtTime(s.updatedAt)]))}>Xuất Excel</Button>
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('nguon_ho_so', ['Mã nguồn hồ sơ', 'Chiết khấu', 'Người tạo', 'Ngày tạo', 'Giờ tạo', 'Người sửa', 'Ngày sửa', 'Giờ sửa'], rows.map((s) => [s.code, fmtPct(s.discountRate), s.createdByName ?? '', fmtDate(s.createdAt), fmtTime(s.createdAt), s.updatedByName ?? '', fmtDate(s.updatedAt), fmtTime(s.updatedAt)]))}>Xuất Excel</Button>
           {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm nguồn hồ sơ</Button>}
         </div>
       </div>
@@ -108,23 +109,19 @@ function SourceTab({ canManage }: { canManage: boolean }): JSX.Element {
               {canManage && <SelectAllCell ids={rows.map((r) => r.id)} sel={sel} />}
               <th className="px-4 py-3">Mã nguồn hồ sơ</th>
               <th className="px-4 py-3 text-right">Chiết khấu</th>
-              <th className="px-4 py-3">Người sửa gần nhất</th>
-              <th className="px-4 py-3">Ngày</th>
-              <th className="px-4 py-3">Giờ</th>
+              <AuditTrailHeadCells />
               {canManage && <th className="px-4 py-3 text-right">Thao tác</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {loading && <tr><td colSpan={canManage ? 7 : 5} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
-            {!loading && rows.length === 0 && <tr><td colSpan={canManage ? 7 : 5} className="px-4 py-10 text-center text-slate-400"><Tag className="mx-auto mb-2 h-6 w-6" /> Chưa có nguồn hồ sơ.</td></tr>}
+            {loading && <tr><td colSpan={canManage ? 10 : 8} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+            {!loading && rows.length === 0 && <tr><td colSpan={canManage ? 10 : 8} className="px-4 py-10 text-center text-slate-400"><Tag className="mx-auto mb-2 h-6 w-6" /> Chưa có nguồn hồ sơ.</td></tr>}
             {!loading && rows.map((s) => (
               <tr key={s.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(s.id) ? 'bg-brand-tint/40' : '')}>
                 {canManage && <SelectCell id={s.id} sel={sel} />}
                 <td className="px-4 py-3 font-medium text-slate-800">{s.code}</td>
                 <td className="px-4 py-3 text-right font-mono text-brand">{fmtPct(s.discountRate)}</td>
-                <td className="px-4 py-3 text-slate-600">{s.updatedByName ?? s.createdByName ?? '—'}</td>
-                <td className="px-4 py-3 text-xs text-slate-500">{fmtDate(s.updatedAt)}</td>
-                <td className="px-4 py-3 text-xs text-slate-500">{fmtTime(s.updatedAt)}</td>
+                <AuditTrailCells row={s} />
                 {canManage && (
                   <td className="px-4 py-3"><div className="flex justify-end gap-1">
                     <IconBtn title="Sửa" variant="edit" onClick={() => setForm({ mode: 'edit', row: s })}><Pencil className="h-4 w-4" /></IconBtn>

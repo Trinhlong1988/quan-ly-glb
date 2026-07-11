@@ -15,6 +15,7 @@ import { Button } from '../components/Button.js';
 import { ImportButton } from '../components/ImportModal.js';
 import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../components/Selection.js';
 import { exportCsv } from '../lib/exportCsv.js';
+import { AuditTrailHeadCells, AuditTrailCells, AUDIT_TRAIL_COLS } from '../components/AuditCells.js';
 
 type Tab = 'supplier' | 'model' | 'intake' | 'status';
 
@@ -33,16 +34,6 @@ function IconBtn({ children, title, variant, onClick }: { children: JSX.Element;
     <button title={title} onClick={onClick} className={'rounded-md p-1.5 transition ' + tone}>
       {children}
     </button>
-  );
-}
-
-function trailCells(row: { updatedByName: string | null; createdByName: string | null; updatedAt: string }): JSX.Element {
-  return (
-    <>
-      <td className="px-4 py-3 text-slate-600">{row.updatedByName ?? row.createdByName ?? '—'}</td>
-      <td className="px-4 py-3 text-xs text-slate-500">{fmtDate(row.updatedAt)}</td>
-      <td className="px-4 py-3 text-xs text-slate-500">{fmtTime(row.updatedAt)}</td>
-    </>
   );
 }
 
@@ -119,7 +110,7 @@ export function SupplierTab({ canManage }: { canManage: boolean }): JSX.Element 
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} nhà cung cấp</div>
         <div className="flex gap-2">
-          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('nha_cung_cap', ['Mã', 'Tên nhà cung cấp', 'Người liên hệ', 'Số điện thoại', 'Địa chỉ', 'Cập nhật'], rows.map((r) => [r.code, r.name, r.contactPerson, r.phone, r.address, `${fmtDate(r.updatedAt)} ${fmtTime(r.updatedAt)}`]))}>Xuất Excel</Button>
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('nha_cung_cap', ['Mã', 'Tên nhà cung cấp', 'Người liên hệ', 'Số điện thoại', 'Địa chỉ', 'Người tạo', 'Ngày tạo', 'Giờ tạo', 'Người sửa', 'Ngày sửa', 'Giờ sửa'], rows.map((r) => [r.code, r.name, r.contactPerson, r.phone, r.address, r.createdByName ?? '', fmtDate(r.createdAt), fmtTime(r.createdAt), r.updatedByName ?? '', fmtDate(r.updatedAt), fmtTime(r.updatedAt)]))}>Xuất Excel</Button>
           {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm nhà cung cấp</Button>}
         </div>
       </div>
@@ -135,15 +126,13 @@ export function SupplierTab({ canManage }: { canManage: boolean }): JSX.Element 
               <th className="px-4 py-3">Tên nhà cung cấp</th>
               <th className="px-4 py-3">Người liên hệ</th>
               <th className="px-4 py-3">Số điện thoại</th>
-              <th className="px-4 py-3">Người sửa gần nhất</th>
-              <th className="px-4 py-3">Ngày</th>
-              <th className="px-4 py-3">Giờ</th>
+              <AuditTrailHeadCells />
               {canManage && <th className="px-4 py-3 text-right">Thao tác</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {loading && <tr><td colSpan={canManage ? 9 : 7} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
-            {!loading && rows.length === 0 && <tr><td colSpan={canManage ? 9 : 7} className="px-4 py-10 text-center text-slate-400"><Building2 className="mx-auto mb-2 h-6 w-6" /> Chưa có nhà cung cấp.</td></tr>}
+            {loading && <tr><td colSpan={4 + AUDIT_TRAIL_COLS + (canManage ? 2 : 0)} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+            {!loading && rows.length === 0 && <tr><td colSpan={4 + AUDIT_TRAIL_COLS + (canManage ? 2 : 0)} className="px-4 py-10 text-center text-slate-400"><Building2 className="mx-auto mb-2 h-6 w-6" /> Chưa có nhà cung cấp.</td></tr>}
             {!loading && rows.map((s) => (
               <tr key={s.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(s.id) ? 'bg-brand-tint/40' : '')}>
                 {canManage && <SelectCell id={s.id} sel={sel} />}
@@ -151,7 +140,7 @@ export function SupplierTab({ canManage }: { canManage: boolean }): JSX.Element 
                 <td className="px-4 py-3 font-medium text-slate-800">{s.name}</td>
                 <td className="px-4 py-3 text-slate-600">{s.contactPerson ?? '—'}</td>
                 <td className="px-4 py-3 text-slate-600">{s.phone ?? '—'}</td>
-                {trailCells(s)}
+                <AuditTrailCells row={s} />
                 {canManage && (
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">
@@ -249,7 +238,7 @@ export function ModelTab({ canManage }: { canManage: boolean }): JSX.Element {
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} chủng loại máy</div>
         <div className="flex gap-2">
-          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('chung_loai_pos', ['Mã máy', 'Tên máy', 'Cập nhật'], rows.map((r) => [r.code, r.name, `${fmtDate(r.updatedAt)} ${fmtTime(r.updatedAt)}`]))}>Xuất Excel</Button>
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('chung_loai_pos', ['Mã máy', 'Tên máy', 'Người tạo', 'Ngày tạo', 'Giờ tạo', 'Người sửa', 'Ngày sửa', 'Giờ sửa'], rows.map((r) => [r.code, r.name, r.createdByName ?? '', fmtDate(r.createdAt), fmtTime(r.createdAt), r.updatedByName ?? '', fmtDate(r.updatedAt), fmtTime(r.updatedAt)]))}>Xuất Excel</Button>
           {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm chủng loại</Button>}
         </div>
       </div>
@@ -263,21 +252,19 @@ export function ModelTab({ canManage }: { canManage: boolean }): JSX.Element {
               {canManage && <SelectAllCell ids={rows.map((r) => r.id)} sel={sel} />}
               <th className="px-4 py-3">Mã máy POS</th>
               <th className="px-4 py-3">Tên máy POS</th>
-              <th className="px-4 py-3">Người sửa gần nhất</th>
-              <th className="px-4 py-3">Ngày</th>
-              <th className="px-4 py-3">Giờ</th>
+              <AuditTrailHeadCells />
               {canManage && <th className="px-4 py-3 text-right">Thao tác</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {loading && <tr><td colSpan={canManage ? 7 : 5} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
-            {!loading && rows.length === 0 && <tr><td colSpan={canManage ? 7 : 5} className="px-4 py-10 text-center text-slate-400"><Cpu className="mx-auto mb-2 h-6 w-6" /> Chưa có chủng loại máy.</td></tr>}
+            {loading && <tr><td colSpan={2 + AUDIT_TRAIL_COLS + (canManage ? 2 : 0)} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+            {!loading && rows.length === 0 && <tr><td colSpan={2 + AUDIT_TRAIL_COLS + (canManage ? 2 : 0)} className="px-4 py-10 text-center text-slate-400"><Cpu className="mx-auto mb-2 h-6 w-6" /> Chưa có chủng loại máy.</td></tr>}
             {!loading && rows.map((m) => (
               <tr key={m.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(m.id) ? 'bg-brand-tint/40' : '')}>
                 {canManage && <SelectCell id={m.id} sel={sel} />}
                 <td className="px-4 py-3 font-mono text-xs font-semibold text-brand">{m.code}</td>
                 <td className="px-4 py-3 font-medium text-slate-800">{m.name}</td>
-                {trailCells(m)}
+                <AuditTrailCells row={m} />
                 {canManage && (
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">
@@ -368,7 +355,7 @@ export function StatusTab({ canManage }: { canManage: boolean }): JSX.Element {
         <div className="text-sm text-slate-500">{rows.length} trạng thái nhập máy · <span className="text-slate-400">ví dụ: Máy mới, Máy cũ, Máy đổi, Máy thuê</span></div>
         <div className="flex gap-2">
           <button onClick={() => void reload()} title="Tải lại dữ liệu mới nhất (giữ nguyên bộ lọc)" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200"><RefreshCw className="h-4 w-4" /> Làm mới</button>
-          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('trang_thai_nhap', ['Tên trạng thái', 'Người sửa gần nhất', 'Ngày', 'Giờ'], rows.map((s) => [s.name, s.updatedByName ?? s.createdByName ?? '', fmtDate(s.updatedAt), fmtTime(s.updatedAt)]))}>Xuất Excel</Button>
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('trang_thai_nhap', ['Tên trạng thái', 'Người tạo', 'Ngày tạo', 'Giờ tạo', 'Người sửa', 'Ngày sửa', 'Giờ sửa'], rows.map((s) => [s.name, s.createdByName ?? '', fmtDate(s.createdAt), fmtTime(s.createdAt), s.updatedByName ?? '', fmtDate(s.updatedAt), fmtTime(s.updatedAt)]))}>Xuất Excel</Button>
           {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm trạng thái</Button>}
         </div>
       </div>
@@ -380,20 +367,18 @@ export function StatusTab({ canManage }: { canManage: boolean }): JSX.Element {
             <tr>
               {canManage && <SelectAllCell ids={rows.map((r) => r.id)} sel={sel} />}
               <th className="px-4 py-3">Tên trạng thái</th>
-              <th className="px-4 py-3">Người sửa gần nhất</th>
-              <th className="px-4 py-3">Ngày</th>
-              <th className="px-4 py-3">Giờ</th>
+              <AuditTrailHeadCells />
               {canManage && <th className="px-4 py-3 text-right">Thao tác</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {loading && <tr><td colSpan={canManage ? 6 : 4} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
-            {!loading && rows.length === 0 && <tr><td colSpan={canManage ? 6 : 4} className="px-4 py-10 text-center text-slate-400"><Tag className="mx-auto mb-2 h-6 w-6" /> Chưa có trạng thái nhập máy.</td></tr>}
+            {loading && <tr><td colSpan={1 + AUDIT_TRAIL_COLS + (canManage ? 2 : 0)} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+            {!loading && rows.length === 0 && <tr><td colSpan={1 + AUDIT_TRAIL_COLS + (canManage ? 2 : 0)} className="px-4 py-10 text-center text-slate-400"><Tag className="mx-auto mb-2 h-6 w-6" /> Chưa có trạng thái nhập máy.</td></tr>}
             {!loading && rows.map((s) => (
               <tr key={s.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(s.id) ? 'bg-brand-tint/40' : '')}>
                 {canManage && <SelectCell id={s.id} sel={sel} />}
                 <td className="px-4 py-3 font-medium text-slate-800">{s.name}</td>
-                {trailCells(s)}
+                <AuditTrailCells row={s} />
                 {canManage && (
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">

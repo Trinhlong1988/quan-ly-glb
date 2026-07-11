@@ -12,6 +12,7 @@ import { Button } from '../components/Button.js';
 import { StatBar } from '../components/StatBar.js';
 import { statusTone } from '../components/StatusPill.js';
 import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../components/Selection.js';
+import { AuditTrailHeadCells, AuditTrailCells, AUDIT_TRAIL_COLS } from '../components/AuditCells.js';
 import { exportCsv } from '../lib/exportCsv.js';
 
 function IconBtn({ children, title, variant, onClick }: { children: JSX.Element; title: string; variant?: 'edit' | 'danger'; onClick: () => void }): JSX.Element {
@@ -83,7 +84,7 @@ export function IndustryConfigPage({ user }: { user: AuthUser }): JSX.Element {
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} ngành nghề</div>
         <div className="flex gap-2">
-          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('nganh_nghe', ['Mã', 'Tên ngành', 'Trạng thái', 'Ghi chú', 'Người sửa gần nhất', 'Ngày', 'Giờ'], rows.map((r) => [r.code, r.name, r.active ? 'Đang dùng' : 'Ngừng dùng', r.note ?? '', r.updatedByName ?? r.createdByName ?? '', fmtDate(r.updatedAt), fmtTime(r.updatedAt)]))}>Xuất Excel</Button>
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('nganh_nghe', ['Mã', 'Tên ngành', 'Trạng thái', 'Ghi chú', 'Người tạo', 'Ngày tạo', 'Giờ tạo', 'Người sửa', 'Ngày sửa', 'Giờ sửa'], rows.map((r) => [r.code, r.name, r.active ? 'Đang dùng' : 'Ngừng dùng', r.note ?? '', r.createdByName ?? '', fmtDate(r.createdAt), fmtTime(r.createdAt), r.updatedByName ?? '', fmtDate(r.updatedAt), fmtTime(r.updatedAt)]))}>Xuất Excel</Button>
           {canCreate && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm ngành nghề</Button>}
         </div>
       </div>
@@ -102,15 +103,13 @@ export function IndustryConfigPage({ user }: { user: AuthUser }): JSX.Element {
               <th className="px-4 py-3">Tên ngành</th>
               <th className="px-4 py-3">Trạng thái</th>
               <th className="px-4 py-3">Ghi chú</th>
-              <th className="px-4 py-3">Người sửa gần nhất</th>
-              <th className="px-4 py-3">Ngày</th>
-              <th className="px-4 py-3">Giờ</th>
+              <AuditTrailHeadCells />
               {(canUpdate || canDelete) && <th className="px-4 py-3 text-right">Thao tác</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {loading && <tr><td colSpan={9} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
-            {!loading && rows.length === 0 && <tr><td colSpan={9} className="px-4 py-10 text-center text-slate-400"><Tags className="mx-auto mb-2 h-6 w-6" /> Chưa có ngành nghề.</td></tr>}
+            {loading && <tr><td colSpan={6 + AUDIT_TRAIL_COLS} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+            {!loading && rows.length === 0 && <tr><td colSpan={6 + AUDIT_TRAIL_COLS} className="px-4 py-10 text-center text-slate-400"><Tags className="mx-auto mb-2 h-6 w-6" /> Chưa có ngành nghề.</td></tr>}
             {!loading && rows.map((r) => (
               <tr key={r.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(r.id) ? 'bg-brand-tint/40' : '')}>
                 {canDelete && <SelectCell id={r.id} sel={sel} />}
@@ -118,9 +117,7 @@ export function IndustryConfigPage({ user }: { user: AuthUser }): JSX.Element {
                 <td className="px-4 py-3 font-medium text-slate-800">{r.name}</td>
                 <td className="px-4 py-3"><ActivePill active={r.active} /></td>
                 <td className="px-4 py-3 text-slate-600">{r.note ?? '—'}</td>
-                <td className="px-4 py-3 text-slate-600">{r.updatedByName ?? r.createdByName ?? '—'}</td>
-                <td className="px-4 py-3 text-xs text-slate-500">{fmtDate(r.updatedAt)}</td>
-                <td className="px-4 py-3 text-xs text-slate-500">{fmtTime(r.updatedAt)}</td>
+                <AuditTrailCells row={r} />
                 {(canUpdate || canDelete) && (
                   <td className="px-4 py-3"><div className="flex justify-end gap-1">
                     {canUpdate && <IconBtn title="Sửa" variant="edit" onClick={() => setForm({ mode: 'edit', row: r })}><Pencil className="h-4 w-4" /></IconBtn>}

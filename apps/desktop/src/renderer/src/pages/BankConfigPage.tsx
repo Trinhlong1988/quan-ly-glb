@@ -12,6 +12,7 @@ import { FilterBar } from '../components/FilterBar.js';
 import { Button } from '../components/Button.js';
 import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../components/Selection.js';
 import { StatBar } from '../components/StatBar.js';
+import { AuditTrailHeadCells, AuditTrailCells, AUDIT_TRAIL_COLS } from '../components/AuditCells.js';
 import { exportCsv } from '../lib/exportCsv.js';
 
 /** Badge trạng thái ngân hàng (ACTIVE=đang hoạt động, INACTIVE=không hoạt động). */
@@ -29,17 +30,6 @@ function IconBtn({ children, title, variant, onClick }: { children: JSX.Element;
     <button title={title} onClick={onClick} className={'rounded-md p-1.5 transition ' + tone}>
       {children}
     </button>
-  );
-}
-
-/** Cột truy vết dùng chung: người sửa/tạo gần nhất + Ngày | Giờ. */
-function trailCells(row: { updatedByName: string | null; createdByName: string | null; updatedAt: string }): JSX.Element {
-  return (
-    <>
-      <td className="px-4 py-3 text-slate-600">{row.updatedByName ?? row.createdByName ?? '—'}</td>
-      <td className="px-4 py-3 text-xs text-slate-500">{fmtDate(row.updatedAt)}</td>
-      <td className="px-4 py-3 text-xs text-slate-500">{fmtTime(row.updatedAt)}</td>
-    </>
   );
 }
 
@@ -121,7 +111,7 @@ function BankTab({ canManage }: { canManage: boolean }): JSX.Element {
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} ngân hàng</div>
         <div className="flex gap-2">
-          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('ngan_hang', ['STT', 'Mã', 'Tên ngân hàng', 'Trạng thái', 'Người sửa gần nhất', 'Cập nhật'], rows.map((r) => [r.seqCode ?? '', r.code, r.name, r.status === 'ACTIVE' ? 'Đang hoạt động' : 'Không hoạt động', r.updatedByName ?? r.createdByName, `${fmtDate(r.updatedAt)} ${fmtTime(r.updatedAt)}`]))}>Xuất Excel</Button>
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('ngan_hang', ['STT', 'Mã', 'Tên ngân hàng', 'Trạng thái', 'Người tạo', 'Ngày tạo', 'Giờ tạo', 'Người sửa', 'Ngày sửa', 'Giờ sửa'], rows.map((r) => [r.seqCode ?? '', r.code, r.name, r.status === 'ACTIVE' ? 'Đang hoạt động' : 'Không hoạt động', r.createdByName ?? '', fmtDate(r.createdAt), fmtTime(r.createdAt), r.updatedByName ?? '', fmtDate(r.updatedAt), fmtTime(r.updatedAt)]))}>Xuất Excel</Button>
           {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm ngân hàng</Button>}
         </div>
       </div>
@@ -143,15 +133,13 @@ function BankTab({ canManage }: { canManage: boolean }): JSX.Element {
               <th className="px-4 py-3">Mã</th>
               <th className="px-4 py-3">Tên ngân hàng</th>
               <th className="px-4 py-3">Trạng thái</th>
-              <th className="px-4 py-3">Người sửa gần nhất</th>
-              <th className="px-4 py-3">Ngày</th>
-              <th className="px-4 py-3">Giờ</th>
+              <AuditTrailHeadCells />
               {canManage && <th className="px-4 py-3 text-right">Thao tác</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {loading && <tr><td colSpan={canManage ? 9 : 7} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
-            {!loading && rows.length === 0 && <tr><td colSpan={canManage ? 9 : 7} className="px-4 py-10 text-center text-slate-400"><Landmark className="mx-auto mb-2 h-6 w-6" /> Chưa có ngân hàng.</td></tr>}
+            {loading && <tr><td colSpan={(canManage ? 6 : 4) + AUDIT_TRAIL_COLS} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+            {!loading && rows.length === 0 && <tr><td colSpan={(canManage ? 6 : 4) + AUDIT_TRAIL_COLS} className="px-4 py-10 text-center text-slate-400"><Landmark className="mx-auto mb-2 h-6 w-6" /> Chưa có ngân hàng.</td></tr>}
             {!loading && rows.map((b) => (
               <tr key={b.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(b.id) ? 'bg-brand-tint/40' : '')}>
                 {canManage && <SelectCell id={b.id} sel={sel} />}
@@ -159,7 +147,7 @@ function BankTab({ canManage }: { canManage: boolean }): JSX.Element {
                 <td className="px-4 py-3 font-mono text-xs font-semibold text-brand">{b.code}</td>
                 <td className="px-4 py-3 font-medium text-slate-800">{b.name}</td>
                 <td className="px-4 py-3"><BankStatusBadge status={b.status} /></td>
-                {trailCells(b)}
+                <AuditTrailCells row={b} />
                 {canManage && (
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">
@@ -255,7 +243,7 @@ function CardTypeTab({ canManage }: { canManage: boolean }): JSX.Element {
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} loại thẻ</div>
         <div className="flex gap-2">
-          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('loai_the', ['Mã', 'Tên loại thẻ', 'Ngân hàng', 'Người sửa gần nhất', 'Cập nhật'], rows.map((r) => [r.code, r.name, r.bankName, r.updatedByName ?? r.createdByName, `${fmtDate(r.updatedAt)} ${fmtTime(r.updatedAt)}`]))}>Xuất Excel</Button>
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('loai_the', ['Mã', 'Tên loại thẻ', 'Ngân hàng', 'Người tạo', 'Ngày tạo', 'Giờ tạo', 'Người sửa', 'Ngày sửa', 'Giờ sửa'], rows.map((r) => [r.code, r.name, r.bankName, r.createdByName ?? '', fmtDate(r.createdAt), fmtTime(r.createdAt), r.updatedByName ?? '', fmtDate(r.updatedAt), fmtTime(r.updatedAt)]))}>Xuất Excel</Button>
           {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm loại thẻ</Button>}
         </div>
       </div>
@@ -269,22 +257,20 @@ function CardTypeTab({ canManage }: { canManage: boolean }): JSX.Element {
               <th className="px-4 py-3">Mã</th>
               <th className="px-4 py-3">Tên loại thẻ</th>
               <th className="px-4 py-3">Ngân hàng</th>
-              <th className="px-4 py-3">Người sửa gần nhất</th>
-              <th className="px-4 py-3">Ngày</th>
-              <th className="px-4 py-3">Giờ</th>
+              <AuditTrailHeadCells />
               {canManage && <th className="px-4 py-3 text-right">Thao tác</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {loading && <tr><td colSpan={canManage ? 8 : 6} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
-            {!loading && rows.length === 0 && <tr><td colSpan={canManage ? 8 : 6} className="px-4 py-10 text-center text-slate-400"><CreditCard className="mx-auto mb-2 h-6 w-6" /> Chưa có loại thẻ.</td></tr>}
+            {loading && <tr><td colSpan={(canManage ? 5 : 3) + AUDIT_TRAIL_COLS} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+            {!loading && rows.length === 0 && <tr><td colSpan={(canManage ? 5 : 3) + AUDIT_TRAIL_COLS} className="px-4 py-10 text-center text-slate-400"><CreditCard className="mx-auto mb-2 h-6 w-6" /> Chưa có loại thẻ.</td></tr>}
             {!loading && rows.map((c) => (
               <tr key={c.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(c.id) ? 'bg-brand-tint/40' : '')}>
                 {canManage && <SelectCell id={c.id} sel={sel} />}
                 <td className="px-4 py-3 font-mono text-xs font-semibold text-brand">{c.code}</td>
                 <td className="px-4 py-3 font-medium text-slate-800">{c.name}</td>
                 <td className="px-4 py-3 text-slate-600">{c.bankCode ? `${c.bankCode} · ${c.bankName}` : (c.bankName ?? '—')}</td>
-                {trailCells(c)}
+                <AuditTrailCells row={c} />
                 {canManage && (
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">
@@ -388,7 +374,7 @@ function PartnerTab({ canManage }: { canManage: boolean }): JSX.Element {
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} đối tác</div>
         <div className="flex gap-2">
-          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('doi_tac', ['Mã', 'Tên đối tác', 'Người liên hệ', 'Số điện thoại', 'Ngân hàng liên kết', 'Cập nhật'], rows.map((r) => [r.code, r.name, r.contactPerson, r.phone, r.bankIds.map(bankName).join(' | '), `${fmtDate(r.updatedAt)} ${fmtTime(r.updatedAt)}`]))}>Xuất Excel</Button>
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('doi_tac', ['Mã', 'Tên đối tác', 'Người liên hệ', 'Số điện thoại', 'Ngân hàng liên kết', 'Người tạo', 'Ngày tạo', 'Giờ tạo', 'Người sửa', 'Ngày sửa', 'Giờ sửa'], rows.map((r) => [r.code, r.name, r.contactPerson, r.phone, r.bankIds.map(bankName).join(' | '), r.createdByName ?? '', fmtDate(r.createdAt), fmtTime(r.createdAt), r.updatedByName ?? '', fmtDate(r.updatedAt), fmtTime(r.updatedAt)]))}>Xuất Excel</Button>
           {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm đối tác</Button>}
         </div>
       </div>
@@ -404,12 +390,13 @@ function PartnerTab({ canManage }: { canManage: boolean }): JSX.Element {
               <th className="px-4 py-3">Người liên hệ</th>
               <th className="px-4 py-3">Số điện thoại</th>
               <th className="px-4 py-3">Ngân hàng liên kết</th>
+              <AuditTrailHeadCells />
               {canManage && <th className="px-4 py-3 text-right">Thao tác</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {loading && <tr><td colSpan={canManage ? 7 : 5} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
-            {!loading && rows.length === 0 && <tr><td colSpan={canManage ? 7 : 5} className="px-4 py-10 text-center text-slate-400"><Building2 className="mx-auto mb-2 h-6 w-6" /> Chưa có đối tác.</td></tr>}
+            {loading && <tr><td colSpan={(canManage ? 7 : 5) + AUDIT_TRAIL_COLS} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+            {!loading && rows.length === 0 && <tr><td colSpan={(canManage ? 7 : 5) + AUDIT_TRAIL_COLS} className="px-4 py-10 text-center text-slate-400"><Building2 className="mx-auto mb-2 h-6 w-6" /> Chưa có đối tác.</td></tr>}
             {!loading && rows.map((p) => (
               <tr key={p.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(p.id) ? 'bg-brand-tint/40' : '')}>
                 {canManage && <SelectCell id={p.id} sel={sel} />}
@@ -422,6 +409,7 @@ function PartnerTab({ canManage }: { canManage: boolean }): JSX.Element {
                     {p.bankIds.length === 0 ? <span className="text-slate-400">—</span> : p.bankIds.map((id) => <span key={id} className="rounded bg-brand-tint px-1.5 py-0.5 text-xs font-medium text-brand">{bankName(id)}</span>)}
                   </div>
                 </td>
+                <AuditTrailCells row={p} />
                 {canManage && (
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">
