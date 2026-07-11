@@ -5,6 +5,7 @@
 // (writer bỏ qua nếu không hỗ trợ, không gây lỗi).
 import * as XLSX from 'xlsx';
 import type { ImportTemplateColumn } from '../../../preload/index.d';
+import { getDialogBridge } from './dialogBridge.js';
 
 // Trần số dòng/mẻ (khớp backend MAX_IMPORT_ROWS) — chặn sớm ở renderer trước khi gửi IPC (FIX 3).
 export const MAX_IMPORT_ROWS = 2000;
@@ -18,24 +19,30 @@ export interface ParseResult {
   error?: string;
 }
 
-/** Tải file .xlsx MẪU rỗng: 1 dòng header đúng nhãn cột. `filename` không cần đuôi. */
-export function downloadTemplate(columns: ImportTemplateColumn[], filename: string): void {
+/**
+ * Tải file .xlsx MẪU nhập chuẩn nhà (R38): sheet "Mẫu nhập" chỉ 1 dòng header (để nhập lại khớp cột) +
+ * sheet "Hướng dẫn" (cột/bắt buộc/gợi ý). Đi qua IPC → LƯU qua hộp thoại HĐH → hỏi "Mở / Không mở".
+ * `fileBase` = tên tiếng Việt, ví dụ "Mẫu nhập khách hàng".
+ */
+export async function downloadTemplate(columns: ImportTemplateColumn[], fileBase: string): Promise<void> {
+  const dlg = getDialogBridge();
   const headers = columns.map((c) => c.header);
-  const ws = XLSX.utils.aoa_to_sheet([headers]);
-  // Giãn rộng cột cho dễ nhập (đủ chứa header + gợi ý).
-  ws['!cols'] = columns.map((c) => ({ wch: Math.max(14, c.header.length + 4) }));
-  // Freeze dòng tiêu đề (best-effort — writer bỏ qua nếu không hỗ trợ).
-  (ws as unknown as Record<string, unknown>)['!freeze'] = { xSplit: 0, ySplit: 1, topLeftCell: 'A2', activePane: 'bottomLeft', state: 'frozen' };
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Mẫu nhập');
-  const out = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
-  const blob = new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = /\.xlsx$/i.test(filename) ? filename : `${filename}.xlsx`;
-  a.click();
-  URL.revokeObjectURL(url);
+  const hints = columns.map((c) => ({ header: c.header, required: c.required, hint: c.hint }));
+  const d = new Date();
+  const fileName = `${fileBase} ${d.getDate()}.${d.getMonth() + 1}.${d.getFullYear()}.xlsx`;
+  let res;
+  try {
+    res = await window.api.reportExport({ kind: 'template', fileBase, fileName, title: fileBase, headers, hints });
+  } catch (e) {
+    return dlg.alert('Không tạo được file mẫu: ' + (e instanceof Error ? e.message : String(e)), 'Lỗi tải mẫu');
+  }
+  if (!res.ok) return dlg.alert(res.message ?? 'Không tạo được file mẫu.', 'Lỗi tải mẫu');
+  if (res.canceled || !res.path) return;
+  const open = await dlg.confirm(`Đã lưu file mẫu tại:\n${res.path}\n\nMở để điền ngay?`, { title: 'Đã tải mẫu nhập', okLabel: 'Mở file', cancelLabel: 'Không mở' });
+  if (open) {
+    const o = await window.api.openFilePath(res.path);
+    if (!o.ok) dlg.alert(o.message ?? 'Không mở được file.', 'Không mở được file');
+  }
 }
 
 /** Đọc file Excel người dùng chọn → mảng object theo header (sheet ĐẦU). Phòng thủ mọi lỗi. */

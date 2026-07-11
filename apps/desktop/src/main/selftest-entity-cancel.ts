@@ -119,6 +119,12 @@ export async function runEntityCancelSelfTest(): Promise<number> {
   const inbox = await listEntityCancelRequests('PENDING');
   ok('inbox PENDING trả ok (đã xử lý hết)', inbox.ok === true && (inbox.data ?? []).length === 0, { n: inbox.data?.length });
 
+  // ═══ 8) BACKSTOP TƯƠNG TRANH (audit đợt 4): partial-unique 1 yêu cầu CANCEL PENDING / (loại,id) ═══
+  const idx = await db.$queryRawUnsafe<{ indexname: string }[]>(
+    `SELECT indexname FROM pg_indexes WHERE tablename='approval_requests' AND indexname='approval_requests_pending_cancel_uq'`
+  );
+  ok('tồn tại partial-unique index approval_requests_pending_cancel_uq', Array.isArray(idx) && idx.length === 1, idx);
+
   await logout();
   // eslint-disable-next-line no-console
   console.log(`ENTITYCANCEL34 SUMMARY | pass=${pass} fail=${fail}`);

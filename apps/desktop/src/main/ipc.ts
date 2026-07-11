@@ -1,5 +1,6 @@
 // IPC registration (main). Renderer never touches the DB — all DB work lives behind these handlers.
-import { ipcMain, dialog, BrowserWindow } from 'electron';
+import { ipcMain, dialog, BrowserWindow, shell } from 'electron';
+import { writeFile } from 'node:fs/promises';
 import { validatePassword } from '@glb/shared';
 import * as auth from './auth-service.js';
 import * as roleSvc from './role-service.js';
@@ -24,6 +25,7 @@ import * as cashCatSvc from './cash-category-service.js';
 import * as fundSvc from './fund-service.js';
 import * as cashEntrySvc from './cash-entry-service.js';
 import * as importSvc from './import-service.js';
+import * as exportSvc from './export-service.js';
 import { readAttachmentDataUrl } from './file-store.js';
 import * as trashSvc from './trash-service.js';
 import * as msgSvc from './message-service.js';
@@ -304,6 +306,32 @@ export function registerIpc(): void {
   ipcMain.handle('cashEntry:create', async (_e, input: cashEntrySvc.CreateCashEntryInput) => cashEntrySvc.createCashEntry(input));
   ipcMain.handle('cashEntry:createDebtReceipt', async (_e, input: cashEntrySvc.CreateDebtReceiptInput) => cashEntrySvc.createDebtReceipt(input));
   ipcMain.handle('cashEntry:cancel', async (_e, args: { id: number; reason: string; password: string }) => cashEntrySvc.cancelCashEntry(args.id, args.reason, args.password));
+
+  // ── XUẤT EXCEL chuẩn nhà (.xlsx thật) + LƯU qua hộp thoại HĐH + MỞ file (R38/R39) ──
+  // Nhớ thư mục lưu gần nhất để lần sau gợi ý đúng chỗ (đỡ phải dò lại).
+  let lastExportDir: string | null = null;
+  ipcMain.handle('report:export', async (_e, p: { kind?: 'report' | 'template'; fileBase: string; fileName: string; title: string; headers: string[]; rows?: exportSvc.Cell[][]; summary?: string; hints?: { header: string; required?: boolean; hint?: string }[] }) => {
+    try {
+      const buf = p.kind === 'template'
+        ? await exportSvc.buildTemplateWorkbook({ title: p.title, headers: p.headers, hints: p.hints })
+        : await exportSvc.buildReportWorkbook({ title: p.title, headers: p.headers, rows: p.rows ?? [], summary: p.summary });
+      const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+      const suggested = (lastExportDir ? lastExportDir + '\\' : '') + p.fileName;
+      const opts = { defaultPath: suggested, filters: [{ name: 'Excel', extensions: ['xlsx'] }] };
+      const res = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);
+      if (res.canceled || !res.filePath) return { ok: true, canceled: true };
+      await writeFile(res.filePath, buf);
+      lastExportDir = res.filePath.replace(/[\\/][^\\/]*$/, '');
+      return { ok: true, path: res.filePath };
+    } catch (e) {
+      return { ok: false, error: 'EXPORT_FAILED', message: 'Không xuất được Excel: ' + (e instanceof Error ? e.message : String(e)) };
+    }
+  });
+  // Mở file vừa lưu bằng ứng dụng mặc định (Excel). Trả lỗi rõ nếu không mở được (file đang mở/khóa…).
+  ipcMain.handle('file:open', async (_e, path: string) => {
+    const err = await shell.openPath(path);
+    return err ? { ok: false, message: 'Không mở được file: ' + err } : { ok: true };
+  });
 
   // ── PHASE IMPORT (#9) — Nhập liệu hàng loạt từ Excel ──
   ipcMain.handle('import:template', async (_e, entityKey: string) => importSvc.importTemplateColumns(entityKey));

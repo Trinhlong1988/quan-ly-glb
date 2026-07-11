@@ -153,6 +153,12 @@ const REGISTRY: Record<string, EntityConfig> = {
     applyCancel: async (txc, id, approver) => {
       // Guard tại lúc DUYỆT (người thực thi = approver): không tự xóa mình, không xóa Admin cuối, Manager không xóa Admin.
       if (id === approver.id) throw new TxGuardError('SELF_DELETE', 'Không thể tự xóa chính mình.');
+      // Serialize MỌI luồng duyệt-xóa User (advisory xact lock chung) — chống TOCTOU LAST_ADMIN: 2 luồng duyệt
+      // xóa 2 Admin KHÁC nhau đồng thời đều đọc count admin CŨ (chưa thấy commit của nhau) → cùng qua guard →
+      // về 0 Admin (khóa toàn hệ thống). Khóa giữ tới hết tx → luồng sau đọc count SAU khi luồng trước commit.
+      // $executeRawUnsafe (KHÔNG $queryRaw): pg_advisory_xact_lock trả kiểu void → queryCompiler wasm không
+      // deserialize được cột void; executeRaw chỉ trả số dòng nên chạy an toàn.
+      await txc.$executeRawUnsafe('SELECT pg_advisory_xact_lock(748301)');
       const targetAdmin = await userIsAdmin(txc, id);
       if (targetAdmin && (await countOtherActiveAdmins(txc, id)) === 0) throw new TxGuardError('LAST_ADMIN', 'Không thể xóa Admin cuối cùng.');
       if (targetAdmin && !approver.roles.includes(ADMIN_ROLE_CODE)) throw new TxGuardError('MANAGER_SCOPE', 'Bạn không được xóa tài khoản Admin.');
@@ -229,6 +235,10 @@ export async function requestEntityCancel(entityType: string, entityId: number, 
     });
   } catch (e) {
     if (e instanceof TxGuardError) return { ok: false, error: e.code, message: e.userMessage };
+    // Backstop cấp DB: partial unique `approval_requests_pending_cancel_uq` bắn P2002 nếu 2 luồng cùng tạo
+    // yêu cầu hủy PENDING trùng (race qua khỏi findFirst) — quy về cùng thông báo ALREADY_PENDING.
+    if (e && typeof e === 'object' && (e as { code?: string }).code === 'P2002')
+      return { ok: false, error: 'ALREADY_PENDING', message: 'Đã có yêu cầu hủy đang chờ duyệt cho mục này.' };
     throw e;
   }
   const label = (await cfg.display(db, entityId)) ?? String(entityId);

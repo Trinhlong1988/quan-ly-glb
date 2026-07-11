@@ -210,6 +210,10 @@ const api = {
   cashEntryCancel: (id: number, reason: string, password: string) => ipcRenderer.invoke('cashEntry:cancel', { id, reason, password }),
 
   // Nhập liệu hàng loạt từ Excel (#9)
+  // Xuất Excel chuẩn nhà (.xlsx) → lưu qua hộp thoại + mở file (R38/R39).
+  reportExport: (p: { kind?: 'report' | 'template'; fileBase: string; fileName: string; title: string; headers: string[]; rows?: (string | number | null | undefined)[][]; summary?: string; hints?: { header: string; required?: boolean; hint?: string }[] }) => ipcRenderer.invoke('report:export', p),
+  openFilePath: (path: string) => ipcRenderer.invoke('file:open', path),
+
   importTemplate: (entityKey: string) => ipcRenderer.invoke('import:template', entityKey),
   importDryRun: (entityKey: string, rows: Record<string, unknown>[]) => ipcRenderer.invoke('import:dryRun', { entityKey, rows }),
   importRun: (entityKey: string, rows: Record<string, unknown>[]) => ipcRenderer.invoke('import:run', { entityKey, rows }),

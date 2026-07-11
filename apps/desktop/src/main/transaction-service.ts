@@ -182,7 +182,8 @@ async function resolveFeeForTxn(
     };
   // R30: phí bán THỰC TẾ theo TID × thẻ (thỏa thuận khi giao) ưu tiên hơn phí bán NIÊM YẾT (FeeRate.phiBan).
   // Phí cài máy vẫn lấy từ kỳ FeeRate hiệu lực → CL_KH = (phí bán thực tế nếu có, else niêm yết) − phí cài máy.
-  const override = await db.tidSellFee.findFirst({ where: { tidId: tidRow.id, cardTypeId, deletedAt: null } });
+  // orderBy id desc → xác định (chọn override mới nhất) kể cả nếu lỡ tồn tại >1 dòng active; khớp listTidSellFees.
+  const override = await db.tidSellFee.findFirst({ where: { tidId: tidRow.id, cardTypeId, deletedAt: null }, orderBy: { id: 'desc' } });
   const phiBan = override ? override.phiBan : rate.phiBan;
   return {
     ok: true,

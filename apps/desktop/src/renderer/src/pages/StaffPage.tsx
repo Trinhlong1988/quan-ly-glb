@@ -487,7 +487,7 @@ function StaffForm({
                   type="checkbox"
                   checked={selectedRoles.has(r.code)}
                   onChange={() => toggleRole(r.code)}
-                  className="h-4 w-4 accent-[#1657d0]"
+                  className="h-4 w-4 accent-brand"
                 />
                 {r.name}
               </label>

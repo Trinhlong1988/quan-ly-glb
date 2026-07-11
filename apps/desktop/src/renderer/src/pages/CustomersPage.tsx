@@ -15,7 +15,7 @@ import { StatusBadge, useStatusOptions, statusSelectOptions, toneCls } from '../
 import { exportCsv } from '../lib/exportCsv.js';
 
 // Bộ đếm TOÀN CỤC (độc lập bộ lọc list) cho dash StatBar — khớp shape countCustomers ở main.
-type CustomerCounts = { total: number; active: number; locked: number; cancelled: number; unassigned: number; byAgent: { agentId: number; count: number }[] };
+type CustomerCounts = { total: number; active: number; locked: number; cancelled: number };
 
 /** Khách hàng (§D): hiển thị `KH## · biệt danh (tên thật)` + Số điện thoại. Mã tự sinh, nickname bắt buộc. */
 export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {

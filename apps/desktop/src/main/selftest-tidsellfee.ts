@@ -84,6 +84,23 @@ export async function runTidSellFeeSelfTest(): Promise<number> {
   const r4c1 = list4.data?.rows.find((r) => r.cardTypeId === card1.id);
   ok('lệnh lỗi không ghi override', r4c1?.phiBanThucTe === null, r4c1);
 
+  // ═══ 6) BACKSTOP TƯƠNG TRANH (audit đợt 4): partial-unique 1 override CÒN SỐNG / (tid,thẻ) ═══
+  const idx = await db.$queryRawUnsafe<{ indexname: string }[]>(
+    `SELECT indexname FROM pg_indexes WHERE tablename='tid_sell_fees' AND indexname='tid_sell_fees_active_uq'`
+  );
+  ok('tồn tại partial-unique index tid_sell_fees_active_uq', Array.isArray(idx) && idx.length === 1, idx);
+  // Tạo 1 override hợp lệ rồi cố CHÈN THẲNG dòng active trùng (tid,thẻ) → phải bị index chặn (P2002/23505).
+  await setTidSellFees({ tidId: tid.id, entries: [{ cardTypeId: card1.id, phiBan: 2.0 }] });
+  let dupBlocked = false;
+  try {
+    await db.tidSellFee.create({ data: { tidId: tid.id, cardTypeId: card1.id, phiBan: 1900, createdBy: 1, updatedBy: 1 } });
+  } catch {
+    dupBlocked = true;
+  }
+  ok('chèn thẳng dòng override active trùng → bị index chặn', dupBlocked);
+  const actives = await db.tidSellFee.count({ where: { tidId: tid.id, cardTypeId: card1.id, deletedAt: null } });
+  ok('chỉ 1 override CÒN SỐNG / (tid,thẻ)', actives === 1, { actives });
+
   await logout();
   // eslint-disable-next-line no-console
   console.log(`TIDSELLFEE33 SUMMARY | pass=${pass} fail=${fail}`);

@@ -53,7 +53,8 @@ export async function listTidSellFees(tidId: number): Promise<{ ok: boolean; err
   const bank = tid.bankId != null ? await db.bank.findUnique({ where: { id: tid.bankId }, select: { code: true } }) : null;
   // Loại thẻ của ngân hàng TID (nếu TID chưa gán ngân hàng → rỗng, UI báo cấu hình TID trước).
   const cards = tid.bankId != null ? await db.cardType.findMany({ where: { bankId: tid.bankId, deletedAt: null }, orderBy: { id: 'asc' } }) : [];
-  const overrides = await db.tidSellFee.findMany({ where: { tidId, deletedAt: null } });
+  // orderBy id asc → Map giữ dòng CUỐI = id lớn nhất (mới nhất), khớp resolveFeeForTxn (orderBy id desc → id lớn nhất).
+  const overrides = await db.tidSellFee.findMany({ where: { tidId, deletedAt: null }, orderBy: { id: 'asc' } });
   const ovByCard = new Map(overrides.map((o) => [o.cardTypeId, o]));
   const now = new Date();
 
@@ -119,8 +120,11 @@ export async function setTidSellFees(input: SetTidSellFeesInput): Promise<Mutati
   const now = new Date();
   const changed: { cardTypeId: number; phiBan: number | null }[] = [];
   await db.$transaction(async (txc) => {
+    // Khóa hàng TID để serialize 2 lệnh set song song cùng TID (chống race tạo 2 dòng override active — tiền sai).
+    // Sau khóa, findFirst đọc trong khóa thấy dòng luồng trước đã commit → update thay vì create trùng.
+    await txc.$queryRawUnsafe('SELECT id FROM tids WHERE id = $1 FOR UPDATE', tid.id);
     for (const e of input.entries) {
-      const existing = await txc.tidSellFee.findFirst({ where: { tidId: tid.id, cardTypeId: e.cardTypeId, deletedAt: null } });
+      const existing = await txc.tidSellFee.findFirst({ where: { tidId: tid.id, cardTypeId: e.cardTypeId, deletedAt: null }, orderBy: { id: 'desc' } });
       if (e.phiBan == null) {
         // Xóa override → quay về niêm yết.
         if (existing) {

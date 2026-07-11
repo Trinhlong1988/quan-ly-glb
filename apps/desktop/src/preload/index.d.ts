@@ -1346,6 +1346,10 @@ export interface GlbApi {
   cashEntryCreateDebtReceipt(input: CreateDebtReceiptInput): Promise<MutationOutcome>;
   cashEntryCancel(id: number, reason: string, password: string): Promise<MutationOutcome>;
 
+  // ── XUẤT EXCEL chuẩn nhà (.xlsx) → lưu qua hộp thoại HĐH + mở file (R38/R39) ──
+  reportExport(p: ReportExportInput): Promise<{ ok: boolean; canceled?: boolean; path?: string; error?: string; message?: string }>;
+  openFilePath(path: string): Promise<{ ok: boolean; message?: string }>;
+
   // ── PHASE IMPORT (#9) — Nhập liệu hàng loạt từ Excel ──
   importTemplate(entityKey: string): Promise<{ ok: boolean; data?: ImportTemplateColumn[]; error?: string; message?: string }>;
   importDryRun(entityKey: string, rows: Record<string, unknown>[]): Promise<ImportDryRunResult>;
@@ -1648,6 +1652,18 @@ export interface TrashRow {
 export interface TrashLinkRef {
   label: string;
   count: number;
+}
+
+// ── XUẤT EXCEL chuẩn nhà (R38/R39) ──
+export interface ReportExportInput {
+  kind?: 'report' | 'template';
+  fileBase: string; // tên gốc tiếng Việt, ví dụ "Danh sách ngân hàng"
+  fileName: string; // tên file gợi ý đầy đủ, ví dụ "Danh sách ngân hàng 11.7.2026.xlsx"
+  title: string; // tiêu đề bảng (sẽ IN HOA)
+  headers: string[];
+  rows?: (string | number | null | undefined)[][];
+  summary?: string;
+  hints?: { header: string; required?: boolean; hint?: string }[];
 }
 
 // ── PHASE IMPORT (#9) — Nhập liệu hàng loạt từ Excel ──

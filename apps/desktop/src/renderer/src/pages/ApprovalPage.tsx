@@ -136,7 +136,7 @@ export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
     <div>
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-slate-800">Duyệt Hủy</h2>
+          <h2 className="text-lg font-semibold text-slate-800">Quản lý dữ liệu yêu cầu duyệt hủy</h2>
           <p className="text-sm text-slate-500">Yêu cầu hủy (bill, TID, máy POS, khách hàng, nhân sự) đang chờ bạn duyệt — người tạo yêu cầu khác người duyệt (phân vai theo cấp).</p>
         </div>
         <div className="flex items-center gap-2">

@@ -644,7 +644,9 @@ model FeeRate {
 // Biểu phí FeeRate (Đối tác × Loại thẻ) chỉ là phí NIÊM YẾT chung; phí bán thật thỏa thuận riêng cho
 // mỗi TID/khách/thẻ, nhập lúc giao máy. `phiBan` Int = %×1000 (như FeeRate). resolveFeeForTxn ưu tiên
 // override này thay cho FeeRate.phiBan khi tính CL_KH (phí cài máy vẫn lấy từ kỳ FeeRate hiệu lực).
-// KHÔNG @@unique DB (có deletedAt — bài học B05); "1 phí / 1 (tid, thẻ) còn sống" enforce ở service (upsert).
+// KHÔNG @@unique DB đầy đủ (có deletedAt — bài học B05). "1 phí / 1 (tid, thẻ) còn sống" enforce ở service
+// (setTidSellFees khóa FOR UPDATE hàng tid) + PARTIAL UNIQUE INDEX `tid_sell_fees_active_uq` (WHERE deleted_at
+// IS NULL) làm backstop cấp DB — xem migration 20260712100000_r30r34_concurrency_guards.
 model TidSellFee {
   id         Int       @id @default(autoincrement())
   tidId      Int       @map("tid_id")

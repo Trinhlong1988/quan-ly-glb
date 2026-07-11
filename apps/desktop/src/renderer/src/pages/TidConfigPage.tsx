@@ -218,12 +218,12 @@ function TidTab({ canManage, canCancelReq }: { canManage: boolean; canCancelReq:
               <th className="px-4 py-3">Trạng thái</th>
               <th className="px-4 py-3">Nguồn hồ sơ</th>
               <th className="px-4 py-3">Vòng đời</th>
-              {canManage && <th className="px-4 py-3 text-right">Thao tác</th>}
+              {(canManage || canCancelReq) && <th className="px-4 py-3 text-right">Thao tác</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {loading && <tr><td colSpan={canManage ? 9 : 8} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
-            {!loading && rows.length === 0 && <tr><td colSpan={canManage ? 9 : 8} className="px-4 py-10 text-center text-slate-400"><CreditCard className="mx-auto mb-2 h-6 w-6" /> Chưa có TID cấu hình.</td></tr>}
+            {loading && <tr><td colSpan={(canManage || canCancelReq) ? 9 : 8} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+            {!loading && rows.length === 0 && <tr><td colSpan={(canManage || canCancelReq) ? 9 : 8} className="px-4 py-10 text-center text-slate-400"><CreditCard className="mx-auto mb-2 h-6 w-6" /> Chưa có TID cấu hình.</td></tr>}
             {!loading && rows.map((t) => (
               <tr key={t.id} className="hover:bg-appbg/60">
                 <td className="px-4 py-3 font-mono text-xs font-medium text-slate-800">{t.tid}</td>
@@ -234,9 +234,9 @@ function TidTab({ canManage, canCancelReq }: { canManage: boolean; canCancelReq:
                 <td className="px-4 py-3">{t.configStatusName ? <span className="rounded bg-brand-tint px-1.5 py-0.5 text-xs font-medium text-brand">{t.configStatusName}</span> : <span className="text-xs text-slate-400">—</span>}</td>
                 <td className="px-4 py-3 text-slate-600">{t.dossierSourceCode ?? '—'}</td>
                 <td className="px-4 py-3"><span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">{t.status}</span></td>
-                {canManage && (
+                {(canManage || canCancelReq) && (
                   <td className="px-4 py-3"><div className="flex justify-end gap-1">
-                    <IconBtn title="Sửa" variant="edit" onClick={() => setForm({ mode: 'edit', row: t })}><Pencil className="h-4 w-4" /></IconBtn>
+                    {canManage && <IconBtn title="Sửa" variant="edit" onClick={() => setForm({ mode: 'edit', row: t })}><Pencil className="h-4 w-4" /></IconBtn>}
                     {canCancelReq && <IconBtn title="Yêu cầu hủy" variant="danger" onClick={() => setCancelTarget({ entityType: 'Tid', entityId: t.id, entityLabel: t.tid, typeLabel: 'TID' })}><Trash2 className="h-4 w-4" /></IconBtn>}
                   </div></td>
                 )}

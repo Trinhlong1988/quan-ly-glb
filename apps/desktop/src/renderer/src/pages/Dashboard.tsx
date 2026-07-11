@@ -67,7 +67,7 @@ const MENU: MenuItem[] = [
   { key: 'finance', label: 'Quản Lý Tài Chính', icon: <Wallet className="h-[18px] w-[18px]" />, perms: ['CASHENTRY_VIEW', 'FUND_VIEW', 'CASHCAT_VIEW'] },
   { key: 'tid', label: 'Quản Lý TID', icon: <CreditCard className="h-[18px] w-[18px]" />, perms: ['TID_VIEW', 'CONFIG_TID_VIEW'], badge: 'undeliveredTid' },
   // R34: "Duyệt Hủy" gộp yêu cầu hủy bill + hủy dữ liệu (TID/POS/Khách/Nhân sự). Hiện với ai có bất kỳ quyền duyệt.
-  { key: 'approval', label: 'Duyệt Hủy', icon: <ClipboardCheck className="h-[18px] w-[18px]" />, perms: ['BILL_CANCEL_APPROVE', 'TID_CANCEL_APPROVE', 'POS_CANCEL_APPROVE', 'CUSTOMER_CANCEL_APPROVE', 'USER_CANCEL_APPROVE'] },
+  { key: 'approval', label: 'Quản lý dữ liệu yêu cầu duyệt hủy', icon: <ClipboardCheck className="h-[18px] w-[18px]" />, perms: ['BILL_CANCEL_APPROVE', 'TID_CANCEL_APPROVE', 'POS_CANCEL_APPROVE', 'CUSTOMER_CANCEL_APPROVE', 'USER_CANCEL_APPROVE'] },
   { key: 'system', label: 'Quản Lý Cấu Hình Hệ Thống', icon: <Settings className="h-[18px] w-[18px]" />, perms: ['AUDIT_LOG_VIEW', 'SYSTEM_SETTING_VIEW', 'BACKUP_CREATE', 'BACKUP_RESTORE', 'STORAGE_VIEW', 'TRASH_VIEW'] }
 ];
 

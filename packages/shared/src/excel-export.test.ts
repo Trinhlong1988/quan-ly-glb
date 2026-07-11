@@ -1,85 +1,78 @@
 import { describe, it, expect } from 'vitest';
-// Hàm THUẦN dựng HTML export sống trong renderer lib (không phụ thuộc DOM khi chỉ dựng chuỗi).
-// Vitest chỉ quét packages/shared + packages/business-rules nên test đặt ở đây, import chéo.
-import { buildExcelHtml } from '../../../apps/desktop/src/renderer/src/lib/exportCsv.js';
+import ExcelJS from 'exceljs';
+// R38/R39 — Xuất Excel .xlsx THẬT chuẩn nhà GLOBEWAY (thay .xls-HTML giả). Builder thuần ở main/export-service.
+// Vitest chỉ quét packages/* nên test đặt ở đây, import chéo sang apps/desktop.
+import { buildReportWorkbook, buildTemplateWorkbook } from '../../../apps/desktop/src/main/export-service.js';
 
-describe('buildExcelHtml — Excel xuất đẹp (.xls HTML-table)', () => {
+async function load(buf: Buffer): Promise<ExcelJS.Workbook> {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buf);
+  return wb;
+}
+
+describe('buildReportWorkbook — bảng dữ liệu chuẩn nhà', () => {
   const headers = ['Mã', 'Tên ngân hàng', 'Số tiền'];
   const rows: (string | number)[][] = [
     ['NH1', 'Ngân hàng Á Châu', 1000],
     ['NH2', 'Vietcombank', 250000]
   ];
 
-  it('sinh ra <table> có <thead>/<tbody>', () => {
-    const html = buildExcelHtml(headers, rows, 'Ngân hàng');
-    expect(html).toContain('<table');
-    expect(html).toContain('<thead>');
-    expect(html).toContain('<tbody>');
+  it('IN HOA tiêu đề + tên cột', async () => {
+    const wb = await load(await buildReportWorkbook({ title: 'Danh sách ngân hàng', headers, rows }));
+    const ws = wb.getWorksheet('Dữ liệu')!;
+    expect(ws.getCell('A1').value).toBe('DANH SÁCH NGÂN HÀNG');
+    expect(ws.getCell('A3').value).toBe('MÃ');
+    expect(ws.getCell('B3').value).toBe('TÊN NGÂN HÀNG');
   });
 
-  it('dùng font Times New Roman', () => {
-    const html = buildExcelHtml(headers, rows, 'Ngân hàng');
-    expect(html).toContain("font-family:'Times New Roman'");
+  it('trang A4 DỌC + fit 1 trang ngang', async () => {
+    const wb = await load(await buildReportWorkbook({ title: 'x', headers, rows }));
+    const ws = wb.getWorksheet('Dữ liệu')!;
+    expect(ws.pageSetup.orientation).toBe('portrait');
+    expect(ws.pageSetup.fitToWidth).toBe(1);
+    expect(ws.pageSetup.paperSize).toBe(9); // A4
   });
 
-  it('kẻ ô bằng border 1px solid', () => {
-    const html = buildExcelHtml(headers, rows, 'Ngân hàng');
-    expect(html).toContain('border:1px solid');
+  it('có LỌC (autofilter) + đóng băng hàng tiêu đề', async () => {
+    const wb = await load(await buildReportWorkbook({ title: 'x', headers, rows }));
+    const ws = wb.getWorksheet('Dữ liệu')!;
+    expect(ws.autoFilter).toBeTruthy();
+    expect(ws.views[0]?.state).toBe('frozen');
+    expect((ws.views[0] as { ySplit?: number }).ySplit).toBe(3);
   });
 
-  it('hàng tiêu đề in đậm (font-weight:bold trong <th>)', () => {
-    const html = buildExcelHtml(headers, rows, 'Ngân hàng');
-    const th = html.slice(html.indexOf('<th'), html.indexOf('</th>'));
-    expect(th).toContain('font-weight:bold');
+  it('số căn phải, chữ căn trái', async () => {
+    const wb = await load(await buildReportWorkbook({ title: 'x', headers, rows }));
+    const ws = wb.getWorksheet('Dữ liệu')!;
+    expect(ws.getCell('C4').alignment?.horizontal).toBe('right'); // 1000
+    expect(ws.getCell('B4').alignment?.horizontal).toBe('left'); // tên
   });
 
-  it('đúng số hàng dữ liệu (mỗi row = 1 <tr> trong tbody)', () => {
-    const html = buildExcelHtml(headers, rows, 'Ngân hàng');
-    const tbody = html.slice(html.indexOf('<tbody>'), html.indexOf('</tbody>'));
-    const trCount = (tbody.match(/<tr>/g) ?? []).length;
-    expect(trCount).toBe(rows.length);
+  it('dòng tổng hợp tự sinh khi không truyền', async () => {
+    const wb = await load(await buildReportWorkbook({ title: 'x', headers, rows }));
+    const ws = wb.getWorksheet('Dữ liệu')!;
+    expect(String(ws.getCell('A2').value)).toContain('Tổng: 2 dòng');
   });
 
-  it('có đủ ô header (mỗi cột = 1 <th>)', () => {
-    const html = buildExcelHtml(headers, rows, 'Ngân hàng');
-    const thCount = (html.match(/<th /g) ?? []).length;
-    expect(thCount).toBe(headers.length);
+  it('không dòng dữ liệu vẫn xuất được', async () => {
+    const wb = await load(await buildReportWorkbook({ title: 'Rỗng', headers, rows: [] }));
+    expect(wb.getWorksheet('Dữ liệu')).toBeTruthy();
+  });
+});
+
+describe('buildTemplateWorkbook — mẫu nhập', () => {
+  const headers = ['Mã', 'Tên', 'Ngân hàng'];
+  const hints = [{ header: 'Mã', required: true, hint: 'Tối đa 20 ký tự' }];
+
+  it('sheet Mẫu nhập GIỮ nhãn cột gốc ở dòng 1 (để nhập lại khớp)', async () => {
+    const wb = await load(await buildTemplateWorkbook({ title: 'Mẫu nhập ngân hàng', headers, hints }));
+    const ws = wb.getWorksheet('Mẫu nhập')!;
+    expect(ws.getCell('A1').value).toBe('Mã'); // KHÔNG in hoa — khớp header khi import lại
+    expect(ws.getCell('B1').value).toBe('Tên');
   });
 
-  it('hàng xen kẽ (2 màu nền khác nhau cho các dòng liền kề)', () => {
-    const html = buildExcelHtml(headers, [['a'], ['b'], ['c']], 'x');
-    expect(html).toContain('background:#ffffff');
-    expect(html).toContain('background:#dce6f1');
-  });
-
-  it('số căn phải, text căn trái', () => {
-    const html = buildExcelHtml(['n'], [[123]], 'x');
-    expect(html).toContain('text-align:right');
-    const html2 = buildExcelHtml(['t'], [['abc']], 'x');
-    expect(html2).toContain('text-align:left');
-  });
-
-  it('escape ký tự < > & " (chống vỡ bảng / injection)', () => {
-    const html = buildExcelHtml(['H'], [['<b>x</b> & "q"']], 'T');
-    expect(html).toContain('&lt;b&gt;x&lt;/b&gt; &amp; &quot;q&quot;');
-    expect(html).not.toContain('<b>x</b>');
-  });
-
-  it('giữ tiếng Việt có dấu (UTF-8) trong nội dung', () => {
-    const html = buildExcelHtml(['Tên'], [['Nguyễn Văn Đức — Hồ sơ HKD']], 'Hồ sơ');
-    expect(html).toContain('Nguyễn Văn Đức — Hồ sơ HKD');
-    expect(html).toContain('<meta charset="utf-8"');
-  });
-
-  it('có dòng tiêu đề trên cùng + dòng ngày xuất', () => {
-    const html = buildExcelHtml(headers, rows, 'Tiêu Đề Đẹp');
-    expect(html).toContain('Tiêu Đề Đẹp');
-    expect(html).toContain('Ngày xuất:');
-  });
-
-  it('KHÔNG tự format lại số (giữ nguyên giá trị truyền vào)', () => {
-    const html = buildExcelHtml(['Số tiền'], [[250000]], 'x');
-    expect(html).toContain('>250000<');
-    expect(html).not.toContain('250,000');
+  it('có sheet Hướng dẫn khi truyền hints', async () => {
+    const wb = await load(await buildTemplateWorkbook({ title: 'x', headers, hints }));
+    expect(wb.getWorksheet('Hướng dẫn')).toBeTruthy();
   });
 });

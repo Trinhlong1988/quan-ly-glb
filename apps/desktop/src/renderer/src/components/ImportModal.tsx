@@ -38,8 +38,8 @@ function ImportModal({ entityKey, label, onClose, onImported }: { entityKey: str
   async function handleTemplate(): Promise<void> {
     const res = await window.api.importTemplate(entityKey);
     if (!res.ok || !res.data) return toast.alert(res.message ?? 'Không lấy được mẫu nhập.', 'Lỗi tải mẫu');
-    downloadTemplate(res.data, `mau_nhap_${entityKey}`);
-    toast.success('Đã tải file mẫu — hãy điền rồi Nhập từ Excel.');
+    // downloadTemplate tự lưu qua hộp thoại + hỏi "Mở / Không mở" (không cần toast thêm, tránh chồng thông báo).
+    await downloadTemplate(res.data, `Mẫu nhập ${label.toLowerCase()}`);
   }
 
   function resetState(): void {

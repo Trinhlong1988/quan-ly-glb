@@ -1,6 +1,6 @@
 {
   "name": "@glb/desktop",
-  "version": "0.1.8",
+  "version": "0.2.0",
   "private": true,
   "description": "Quản Lý GLB — Electron desktop app (G1 Phase A: login → force change password → dashboard).",
   "main": "./out/main/index.js",
@@ -21,6 +21,7 @@
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "electron-updater": "^6.6.2",
+    "exceljs": "^4.4.0",
     "lucide-react": "^0.462.0",
     "pg": "^8.22.0",
     "react": "^18.3.1",
