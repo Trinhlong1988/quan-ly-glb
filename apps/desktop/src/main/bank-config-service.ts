@@ -60,21 +60,32 @@ function trail(
 // ─────────────────────────────────────────────────────────────────────────────
 export interface BankDto extends AuditTrail {
   id: number;
+  seq: number | null;
+  seqCode: string | null; // NH01, NH02... (từ seq)
   name: string;
   code: string;
+  status: string; // ACTIVE | INACTIVE
 }
 export interface BankFilter {
   search?: string;
+  status?: string; // ACTIVE | INACTIVE
   fromDate?: string;
   toDate?: string;
 }
 export interface CreateBankInput {
   name: string;
   code: string;
+  status?: string;
 }
 export interface UpdateBankInput {
   name?: string;
   code?: string;
+  status?: string;
+}
+
+/** seq → mã hiển thị NH01, NH02... */
+export function bankSeqCode(seq: number | null | undefined): string | null {
+  return seq == null ? null : 'NH' + String(seq).padStart(2, '0');
 }
 
 export async function listBanks(filter: BankFilter = {}): Promise<{ ok: boolean; data?: BankDto[]; error?: string; message?: string }> {
@@ -83,13 +94,14 @@ export async function listBanks(filter: BankFilter = {}): Promise<{ ok: boolean;
   const rows = await g.db.bank.findMany({
     where: {
       deletedAt: null,
+      status: filter.status || undefined,
       createdAt: dateRange(filter.fromDate, filter.toDate),
       OR: filter.search ? [{ code: { contains: filter.search, mode: 'insensitive' } }, { name: { contains: filter.search, mode: 'insensitive' } }] : undefined
     },
-    orderBy: { name: 'asc' }
+    orderBy: [{ seq: 'asc' }, { name: 'asc' }] // NH01, NH02... trước; bản chưa có seq (hiếm) rơi cuối theo tên
   });
   const names = await resolveUserNames(g.db, rows.flatMap((r) => [r.createdBy, r.updatedBy]));
-  return { ok: true, data: rows.map((r) => ({ id: r.id, name: r.name, code: r.code, ...trail(r, names) })) };
+  return { ok: true, data: rows.map((r) => ({ id: r.id, seq: r.seq, seqCode: bankSeqCode(r.seq), name: r.name, code: r.code, status: r.status, ...trail(r, names) })) };
 }
 
 export async function createBank(input: CreateBankInput): Promise<MutationResult> {
@@ -99,6 +111,7 @@ export async function createBank(input: CreateBankInput): Promise<MutationResult
 
   const name = input.name?.trim();
   const code = input.code?.trim().toUpperCase();
+  const status = input.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE';
   if (!name) return { ok: false, error: 'VALIDATION', message: 'Tên ngân hàng bắt buộc.' };
   if (!code) return { ok: false, error: 'VALIDATION', message: 'Mã ngân hàng bắt buộc.' };
 
@@ -109,9 +122,13 @@ export async function createBank(input: CreateBankInput): Promise<MutationResult
       : { ok: false, error: 'DUPLICATE', message: `Mã ngân hàng "${code}" đã tồn tại.` };
   }
 
+  // seq tuần tự = max(seq)+1 trên TOÀN BẢNG (kể cả đã xóa) → số NH không tái dùng.
+  const maxSeq = await db.bank.aggregate({ _max: { seq: true } });
+  const nextSeq = (maxSeq._max.seq ?? 0) + 1;
+
   let created;
   try {
-    created = await db.bank.create({ data: { name, code, createdBy: user.id } });
+    created = await db.bank.create({ data: { name, code, status, seq: nextSeq, createdBy: user.id } });
   } catch (e) {
     if (isUniqueViolation(e)) return { ok: false, error: 'DUPLICATE', message: `Mã ngân hàng "${code}" đã tồn tại.` };
     throw e;
@@ -136,6 +153,7 @@ export async function updateBank(id: number, input: UpdateBankInput): Promise<Mu
 
   const name = input.name !== undefined ? input.name.trim() : row.name;
   const code = input.code !== undefined ? input.code.trim().toUpperCase() : row.code;
+  const status = input.status !== undefined ? (input.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE') : row.status;
   if (!name) return { ok: false, error: 'VALIDATION', message: 'Tên ngân hàng không được để trống.' };
   if (!code) return { ok: false, error: 'VALIDATION', message: 'Mã ngân hàng không được để trống.' };
   if (code !== row.code) {
@@ -147,10 +165,10 @@ export async function updateBank(id: number, input: UpdateBankInput): Promise<Mu
     }
   }
 
-  const before = auditSnapshot({ name: row.name, code: row.code });
+  const before = auditSnapshot({ name: row.name, code: row.code, status: row.status });
   let updated;
   try {
-    updated = await db.bank.update({ where: { id }, data: { name, code, updatedBy: user.id } });
+    updated = await db.bank.update({ where: { id }, data: { name, code, status, updatedBy: user.id } });
   } catch (e) {
     if (isUniqueViolation(e)) return { ok: false, error: 'DUPLICATE', message: `Mã ngân hàng "${code}" đã tồn tại.` };
     throw e;
@@ -161,7 +179,7 @@ export async function updateBank(id: number, input: UpdateBankInput): Promise<Mu
     targetType: 'Bank',
     targetId: String(id),
     before,
-    after: auditSnapshot({ name: updated.name, code: updated.code })
+    after: auditSnapshot({ name: updated.name, code: updated.code, status: updated.status })
   });
   return { ok: true, id };
 }

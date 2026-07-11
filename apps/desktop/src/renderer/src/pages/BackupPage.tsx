@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { DatabaseBackup, Loader2, RotateCcw, HardDriveDownload } from 'lucide-react';
+import { DatabaseBackup, Loader2, RotateCcw, HardDriveDownload, RefreshCw } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDateTime } from '@glb/shared';
 import type { BackupDto } from '../../../preload/index.d';
@@ -52,16 +52,21 @@ export function BackupPage({ user }: { user: AuthUser }): JSX.Element {
           <h2 className="text-lg font-semibold text-slate-800">Sao lưu & Phục hồi</h2>
           <p className="text-sm text-slate-500">Sao lưu & phục hồi cơ sở dữ liệu tại máy. Phục hồi yêu cầu mật khẩu quản trị.</p>
         </div>
-        {canCreate && (
-          <button
-            onClick={createBackup}
-            disabled={creating}
-            className="flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-60"
-          >
-            {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <HardDriveDownload className="h-4 w-4" />}
-            Tạo bản sao lưu ngay
+        <div className="flex items-center gap-2">
+          <button onClick={reload} title="Tải lại dữ liệu mới nhất" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200">
+            <RefreshCw className="h-4 w-4" /> Làm mới
           </button>
-        )}
+          {canCreate && (
+            <button
+              onClick={createBackup}
+              disabled={creating}
+              className="flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-60"
+            >
+              {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <HardDriveDownload className="h-4 w-4" />}
+              Tạo bản sao lưu ngay
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">

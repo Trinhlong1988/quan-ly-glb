@@ -10,7 +10,14 @@ import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
 import { Button } from '../components/Button.js';
 import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../components/Selection.js';
+import { StatBar } from '../components/StatBar.js';
 import { exportCsv } from '../lib/exportCsv.js';
+
+/** Badge trạng thái ngân hàng (ACTIVE=đang hoạt động, INACTIVE=không hoạt động). */
+function BankStatusBadge({ status }: { status: string }): JSX.Element {
+  const active = status === 'ACTIVE';
+  return <span className={'inline-flex rounded-full px-2 py-0.5 text-xs font-medium ' + (active ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-500')}>{active ? 'Đang hoạt động' : 'Không hoạt động'}</span>;
+}
 
 type Tab = 'bank' | 'cardtype' | 'partner';
 
@@ -70,6 +77,7 @@ function BankTab({ canManage }: { canManage: boolean }): JSX.Element {
   const [rows, setRows] = useState<BankDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [form, setForm] = useState<{ mode: 'create' | 'edit'; row?: BankDto } | null>(null);
@@ -79,7 +87,7 @@ function BankTab({ canManage }: { canManage: boolean }): JSX.Element {
 
   async function reload(): Promise<void> {
     setLoading(true);
-    const res = await window.api.bankList({ search: search || undefined, fromDate: fromDate || undefined, toDate: toDate || undefined });
+    const res = await window.api.bankList({ search: search || undefined, status: statusFilter || undefined, fromDate: fromDate || undefined, toDate: toDate || undefined });
     if (res.ok && res.data) setRows(res.data);
     else if (res.message) toast.alert(res.message);
     sel.clear();
@@ -108,19 +116,28 @@ function BankTab({ canManage }: { canManage: boolean }): JSX.Element {
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} ngân hàng</div>
         <div className="flex gap-2">
-          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('ngan_hang', ['Mã', 'Tên ngân hàng', 'Người sửa gần nhất', 'Cập nhật'], rows.map((r) => [r.code, r.name, r.updatedByName ?? r.createdByName, `${fmtDate(r.updatedAt)} ${fmtTime(r.updatedAt)}`]))}>Xuất Excel</Button>
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('ngan_hang', ['STT', 'Mã', 'Tên ngân hàng', 'Trạng thái', 'Người sửa gần nhất', 'Cập nhật'], rows.map((r) => [r.seqCode ?? '', r.code, r.name, r.status === 'ACTIVE' ? 'Đang hoạt động' : 'Không hoạt động', r.updatedByName ?? r.createdByName, `${fmtDate(r.updatedAt)} ${fmtTime(r.updatedAt)}`]))}>Xuất Excel</Button>
           {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm ngân hàng</Button>}
         </div>
       </div>
-      <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Tìm mã / tên ngân hàng…" fromDate={fromDate} toDate={toDate} onFromDate={setFromDate} onToDate={setToDate} onApply={reload} onReset={() => { setSearch(''); setFromDate(''); setToDate(''); setTimeout(reload, 0); }} />
+      <StatBar
+        items={[
+          { label: 'Tổng ngân hàng', value: rows.length, tone: 'bg-brand-tint text-brand' },
+          { label: 'Đang hoạt động', value: rows.filter((b) => b.status === 'ACTIVE').length, tone: 'bg-emerald-50 text-emerald-600' },
+          { label: 'Không hoạt động', value: rows.filter((b) => b.status === 'INACTIVE').length, tone: 'bg-slate-100 text-slate-500' }
+        ]}
+      />
+      <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Tìm mã / tên ngân hàng…" fromDate={fromDate} toDate={toDate} onFromDate={setFromDate} onToDate={setToDate} selects={[{ key: 'status', placeholder: 'Tất cả trạng thái', value: statusFilter, options: [{ value: 'ACTIVE', label: 'Đang hoạt động' }, { value: 'INACTIVE', label: 'Không hoạt động' }], onChange: setStatusFilter }]} onApply={reload} onReset={() => { setSearch(''); setStatusFilter(''); setFromDate(''); setToDate(''); setTimeout(reload, 0); }} />
       {canManage && <SelectionBar count={sel.count} entityLabel="ngân hàng" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>
               {canManage && <SelectAllCell ids={rows.map((r) => r.id)} sel={sel} />}
+              <th className="px-4 py-3">STT</th>
               <th className="px-4 py-3">Mã</th>
               <th className="px-4 py-3">Tên ngân hàng</th>
+              <th className="px-4 py-3">Trạng thái</th>
               <th className="px-4 py-3">Người sửa gần nhất</th>
               <th className="px-4 py-3">Ngày</th>
               <th className="px-4 py-3">Giờ</th>
@@ -128,13 +145,15 @@ function BankTab({ canManage }: { canManage: boolean }): JSX.Element {
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {loading && <tr><td colSpan={canManage ? 7 : 5} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
-            {!loading && rows.length === 0 && <tr><td colSpan={canManage ? 7 : 5} className="px-4 py-10 text-center text-slate-400"><Landmark className="mx-auto mb-2 h-6 w-6" /> Chưa có ngân hàng.</td></tr>}
+            {loading && <tr><td colSpan={canManage ? 9 : 7} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+            {!loading && rows.length === 0 && <tr><td colSpan={canManage ? 9 : 7} className="px-4 py-10 text-center text-slate-400"><Landmark className="mx-auto mb-2 h-6 w-6" /> Chưa có ngân hàng.</td></tr>}
             {!loading && rows.map((b) => (
               <tr key={b.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(b.id) ? 'bg-brand-tint/40' : '')}>
                 {canManage && <SelectCell id={b.id} sel={sel} />}
+                <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-500">{b.seqCode ?? '—'}</td>
                 <td className="px-4 py-3 font-mono text-xs font-semibold text-brand">{b.code}</td>
                 <td className="px-4 py-3 font-medium text-slate-800">{b.name}</td>
+                <td className="px-4 py-3"><BankStatusBadge status={b.status} /></td>
                 {trailCells(b)}
                 {canManage && (
                   <td className="px-4 py-3">
@@ -160,12 +179,13 @@ function BankForm({ mode, row, onClose, onSaved }: { mode: 'create' | 'edit'; ro
   const toast = useToast();
   const [name, setName] = useState(row?.name ?? '');
   const [code, setCode] = useState(row?.code ?? '');
+  const [status, setStatus] = useState(row?.status ?? 'ACTIVE');
   const [busy, setBusy] = useState(false);
   async function save(): Promise<void> {
     if (!name.trim()) return toast.alert('Tên ngân hàng bắt buộc.', 'Thiếu thông tin');
     if (!code.trim()) return toast.alert('Mã ngân hàng bắt buộc.', 'Thiếu thông tin');
     setBusy(true);
-    const res = mode === 'edit' && row ? await window.api.bankUpdate(row.id, { name: name.trim(), code: code.trim() }) : await window.api.bankCreate({ name: name.trim(), code: code.trim() });
+    const res = mode === 'edit' && row ? await window.api.bankUpdate(row.id, { name: name.trim(), code: code.trim(), status }) : await window.api.bankCreate({ name: name.trim(), code: code.trim(), status });
     setBusy(false);
     if (res.ok) { toast.success(mode === 'edit' ? 'Đã cập nhật ngân hàng' : `Đã thêm ngân hàng ${code}`); onSaved(); }
     else toast.alert(res.message ?? 'Lưu ngân hàng thất bại', 'Không lưu được');
@@ -175,6 +195,7 @@ function BankForm({ mode, row, onClose, onSaved }: { mode: 'create' | 'edit'; ro
       <div className="grid gap-4">
         <Field label="Tên ngân hàng" required><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} autoFocus placeholder="Ngân hàng TMCP Ngoại thương" /></Field>
         <Field label="Mã ngân hàng" required hint="Ví dụ: VCB, TCB (không trùng)"><input className={inputCls} value={code} onChange={(e) => setCode(e.target.value)} placeholder="VCB" /></Field>
+        <Field label="Trạng thái"><select className={inputCls} value={status} onChange={(e) => setStatus(e.target.value)}><option value="ACTIVE">Đang hoạt động</option><option value="INACTIVE">Không hoạt động</option></select></Field>
       </div>
       <div className="mt-6 flex justify-end gap-2">
         <Button variant="neutral" onClick={onClose}>Hủy</Button>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Loader2, ScrollText, Search, Download, FilterX } from 'lucide-react';
+import { Loader2, ScrollText, Search, Download, FilterX, RefreshCw } from 'lucide-react';
 import type { AuditRowDto } from '../../../preload/index.d';
 import { fmtDate, fmtTime, fmtDateTime } from '@glb/shared';
 import { useToast } from '../lib/toast.js';
@@ -132,6 +132,9 @@ export function AuditPage(): JSX.Element {
         </button>
         <button onClick={resetFilters} title="Xóa toàn bộ bộ lọc, đưa về mặc định" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-brand/10 text-brand hover:bg-brand/20">
           <FilterX className="h-4 w-4" /> Xóa lọc
+        </button>
+        <button onClick={reload} title="Tải lại dữ liệu mới nhất (giữ nguyên bộ lọc)" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200">
+          <RefreshCw className="h-4 w-4" /> Làm mới
         </button>
         <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('nhat_ky', ['Ngày', 'Giờ', 'Người thao tác', 'Hành động', 'Đối tượng'], rows.map((r) => [fmtDate(r.createdAt), fmtTime(r.createdAt), r.actorUsername ?? (r.actorUserId ? `#${r.actorUserId}` : ''), actionLabel(r.action), r.targetType ? targetLabel(r.targetType) + (r.targetId ? ` #${r.targetId}` : '') : '']))}>
           Xuất Excel

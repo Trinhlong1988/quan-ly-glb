@@ -422,8 +422,10 @@ model CodeCounter {
 // Ngân hàng (§C1/C2). Mã ngân hàng unique.
 model Bank {
   id        Int       @id @default(autoincrement())
+  seq       Int?      @unique // số thứ tự tuần tự → hiển thị NH01, NH02... (gán khi tạo, cố định)
   name      String
   code      String    @unique // VCB, TCB... (unique, không phân biệt hoa/thường ở service)
+  status    String    @default("ACTIVE") // ACTIVE | INACTIVE (ngân hàng ngừng dùng — vẫn giữ, không gợi ý khi tạo TID)
   createdBy Int?      @map("created_by")
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedBy Int?      @map("updated_by")

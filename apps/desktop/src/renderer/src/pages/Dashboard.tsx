@@ -26,7 +26,8 @@ import {
   Tags,
   Receipt,
   PiggyBank,
-  Loader2
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
 import type { DashboardStats } from '../../../preload/index.d';
 import type { AuthUser } from '@glb/shared';
@@ -375,6 +376,12 @@ function Home({ user }: { user: AuthUser; visibleCount: number }): JSX.Element {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Tải lại thủ công (nút "Làm mới" trang chủ) — bổ sung cho poll 15s realtime.
+  const refresh = (): void => {
+    setLoading(true);
+    window.api.dashboardStats().then((r) => { if (r.ok && r.data) setStats(r.data); setLoading(false); });
+  };
+
   useEffect(() => {
     let alive = true;
     const tick = (): void => {
@@ -398,7 +405,9 @@ function Home({ user }: { user: AuthUser; visibleCount: number }): JSX.Element {
     { label: 'Máy POS', value: c?.posDevices ?? 0, icon: <HardDrive className="h-5 w-5" />, tint: 'bg-amber-500/10 text-amber-600' },
     { label: 'Hồ sơ HKD', value: c?.dossiers ?? 0, icon: <FolderKanban className="h-5 w-5" />, tint: 'bg-violet-500/10 text-violet-600' },
     { label: 'Nhân sự', value: c?.users ?? 0, icon: <Users className="h-5 w-5" />, tint: 'bg-sky-500/10 text-sky-600' },
-    { label: 'Ngân hàng', value: c?.banks ?? 0, icon: <Landmark className="h-5 w-5" />, tint: 'bg-rose-500/10 text-rose-600' }
+    { label: 'Ngân hàng', value: c?.banks ?? 0, icon: <Landmark className="h-5 w-5" />, tint: 'bg-rose-500/10 text-rose-600' },
+    { label: 'NH đang hoạt động', value: c?.banksActive ?? 0, icon: <Landmark className="h-5 w-5" />, tint: 'bg-emerald-500/10 text-emerald-600' },
+    { label: 'NH không hoạt động', value: c?.banksInactive ?? 0, icon: <Landmark className="h-5 w-5" />, tint: 'bg-slate-400/10 text-slate-500' }
   ];
 
   return (
@@ -416,6 +425,10 @@ function Home({ user }: { user: AuthUser; visibleCount: number }): JSX.Element {
       {hasPermission(user, 'CASHENTRY_VIEW') && <ProfitPanel />}
 
       {/* KPI realtime */}
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-slate-600">Chỉ số tổng quan (realtime)</h3>
+        <button onClick={refresh} title="Tải lại số liệu mới nhất" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200"><RefreshCw className="h-4 w-4" /> Làm mới</button>
+      </div>
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
         {kpis.map((k) => (
           <div key={k.label} className="rounded-xl border border-line bg-white p-4 shadow-sm transition hover:shadow-md">

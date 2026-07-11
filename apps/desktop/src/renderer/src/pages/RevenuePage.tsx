@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Ban, Trash2, Loader2, TrendingUp, Download, Receipt, Handshake, Users, FilterX } from 'lucide-react';
+import { Plus, Ban, Trash2, Loader2, TrendingUp, Download, Receipt, Handshake, Users, FilterX, RefreshCw } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate } from '@glb/shared';
 import type {
@@ -211,6 +211,7 @@ export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
           </label>
           <button onClick={applyFilter} className="rounded-md bg-brand px-3 py-2 text-sm font-medium text-white hover:bg-brand-hover">Lọc</button>
           <button onClick={resetFilter} title="Xóa toàn bộ bộ lọc, đưa về mặc định" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-brand/10 text-brand hover:bg-brand/20"><FilterX className="h-4 w-4" /> Xóa lọc</button>
+          <button onClick={() => void reload()} title="Tải lại dữ liệu mới nhất (giữ nguyên bộ lọc)" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200"><RefreshCw className="h-4 w-4" /> Làm mới</button>
           <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('doanh_thu', ['Mã GD', 'Ngày', 'TID', 'MID', 'HKD', 'Khách', 'Loại thẻ', 'Số tiền', 'Chênh đối tác', 'Chênh bán', 'Doanh thu', 'Đối soát'], rows.map((r) => [r.code ?? '', fmtDate(r.txnDate), r.tid ?? '', r.mid ?? '', r.hkdName ?? '', r.customerName ?? '', r.cardTypeName ?? '', String(r.amount), String(r.revenuePartner), String(r.revenueSell), String(r.revenueAmount), r.settled ? 'Đã đối soát' : 'Chưa']))}>Xuất Excel</Button>
         </div>
       </div>

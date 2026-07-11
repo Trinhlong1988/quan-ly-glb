@@ -118,6 +118,11 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
           <p className="text-sm text-slate-500">Terminal ID · 2 chiều độc lập: Gán máy POS · Giao cho khách · vòng đời + timeline TID.</p>
         </div>
         <div className="flex items-center gap-2">
+          {tab === 'undelivered' && (
+            <button onClick={() => void reload()} title="Tải lại dữ liệu mới nhất (giữ nguyên bộ lọc)" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200">
+              <RefreshCw className="h-4 w-4" /> Làm mới
+            </button>
+          )}
           {tab === 'all' && (
             <Button
               variant="confirm"
@@ -417,6 +422,9 @@ function RevenueRankingTab(): JSX.Element {
         </button>
         <button onClick={reset} title="Về kỳ mặc định (tháng hiện tại)" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-brand/10 text-brand hover:bg-brand/20">
           <FilterX className="h-4 w-4" /> Xóa lọc
+        </button>
+        <button onClick={() => void load(from, to)} title="Tải lại dữ liệu mới nhất (giữ nguyên bộ lọc)" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200">
+          <RefreshCw className="h-4 w-4" /> Làm mới
         </button>
       </div>
 

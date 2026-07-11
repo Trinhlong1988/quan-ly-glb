@@ -11,6 +11,8 @@ export interface DashboardStats {
     dossiers: number;
     users: number;
     banks: number;
+    banksActive: number;
+    banksInactive: number;
     partners: number;
   };
   tidsByBank: { label: string; count: number }[];
@@ -36,13 +38,15 @@ export async function getStats(): Promise<{ ok: boolean; data?: DashboardStats; 
   const db = g.db;
   const alive = { deletedAt: null } as const;
 
-  const [tids, customers, posDevices, dossiers, users, banks, partners] = await Promise.all([
+  const [tids, customers, posDevices, dossiers, users, banks, banksActive, banksInactive, partners] = await Promise.all([
     db.tid.count({ where: alive }),
     db.customer.count({ where: alive }),
     db.posDevice.count(),
     db.dossier.count({ where: alive }),
     db.user.count({ where: { deletedAt: null, status: { not: 'DELETED' } } }),
     db.bank.count({ where: alive }),
+    db.bank.count({ where: { ...alive, status: 'ACTIVE' } }),
+    db.bank.count({ where: { ...alive, status: 'INACTIVE' } }),
     db.partner.count({ where: alive })
   ]);
 
@@ -78,7 +82,7 @@ export async function getStats(): Promise<{ ok: boolean; data?: DashboardStats; 
   for (const c of custDates) custM.set(monthKey(c.createdAt), (custM.get(monthKey(c.createdAt)) ?? 0) + 1);
   const monthly = months.map((m) => ({ month: m, tids: tidM.get(m) ?? 0, customers: custM.get(m) ?? 0 }));
 
-  return { ok: true, data: { counts: { tids, customers, posDevices, dossiers, users, banks, partners }, tidsByBank, posByStatus, monthly } };
+  return { ok: true, data: { counts: { tids, customers, posDevices, dossiers, users, banks, banksActive, banksInactive, partners }, tidsByBank, posByStatus, monthly } };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

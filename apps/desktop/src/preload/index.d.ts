@@ -347,8 +347,11 @@ export interface AuditTrail {
 }
 export interface BankDto extends AuditTrail {
   id: number;
+  seq: number | null;
+  seqCode: string | null;
   name: string;
   code: string;
+  status: string;
 }
 export interface BankLite {
   id: number;
@@ -357,16 +360,19 @@ export interface BankLite {
 }
 export interface BankFilter {
   search?: string;
+  status?: string;
   fromDate?: string;
   toDate?: string;
 }
 export interface CreateBankInput {
   name: string;
   code: string;
+  status?: string;
 }
 export interface UpdateBankInput {
   name?: string;
   code?: string;
+  status?: string;
 }
 export interface CardTypeDto extends AuditTrail {
   id: number;
@@ -1521,7 +1527,7 @@ export interface UpdateTransactionInput {
 }
 
 export interface DashboardStats {
-  counts: { tids: number; customers: number; posDevices: number; dossiers: number; users: number; banks: number; partners: number };
+  counts: { tids: number; customers: number; posDevices: number; dossiers: number; users: number; banks: number; banksActive: number; banksInactive: number; partners: number };
   tidsByBank: { label: string; count: number }[];
   posByStatus: { label: string; count: number }[];
   monthly: { month: string; tids: number; customers: number }[];

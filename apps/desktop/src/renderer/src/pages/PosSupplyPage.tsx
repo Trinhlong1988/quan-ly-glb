@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2, Loader2, Building2, Cpu, PackagePlus, Tag, Download } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, Building2, Cpu, PackagePlus, Tag, Download, RefreshCw } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate, fmtTime, groupDigits, parseVndInput, prereqMessage } from '@glb/shared';
 import type { PrereqDef } from '@glb/shared';
@@ -361,6 +361,7 @@ export function StatusTab({ canManage }: { canManage: boolean }): JSX.Element {
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} trạng thái nhập máy · <span className="text-slate-400">ví dụ: Máy mới, Máy cũ, Máy đổi, Máy thuê</span></div>
         <div className="flex gap-2">
+          <button onClick={() => void reload()} title="Tải lại dữ liệu mới nhất (giữ nguyên bộ lọc)" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200"><RefreshCw className="h-4 w-4" /> Làm mới</button>
           <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('trang_thai_nhap', ['Tên trạng thái', 'Người sửa gần nhất', 'Ngày', 'Giờ'], rows.map((s) => [s.name, s.updatedByName ?? s.createdByName ?? '', fmtDate(s.updatedAt), fmtTime(s.updatedAt)]))}>Xuất Excel</Button>
           {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm trạng thái</Button>}
         </div>

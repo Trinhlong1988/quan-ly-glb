@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Pencil, Lock, Unlock, Trash2, ShieldCheck, Loader2, Download } from 'lucide-react';
+import { Plus, Pencil, Lock, Unlock, Trash2, ShieldCheck, Loader2, Download, RefreshCw } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission } from '@glb/shared';
 import type { RoleDto, PermissionDto } from '../../../preload/index.d';
@@ -63,6 +63,9 @@ export function RolesPage({ user }: { user: AuthUser }): JSX.Element {
           <p className="text-sm text-slate-500">Tạo, phân quyền, khóa/mở khóa và xóa vai trò hệ thống.</p>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={reload} title="Tải lại dữ liệu mới nhất" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200">
+            <RefreshCw className="h-4 w-4" /> Làm mới
+          </button>
           <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('vai_tro', ['Vai trò', 'Mã', 'Số quyền', 'Nhân sự', 'Trạng thái'], roles.map((r) => [r.name, r.code, r.permissions.length, r.userCount, statusLabel(r.status)]))}>
             Xuất Excel
           </Button>

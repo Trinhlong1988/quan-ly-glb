@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2, Loader2, FolderKanban, Tag, Download } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, FolderKanban, Tag, Download, RefreshCw } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate, fmtTime } from '@glb/shared';
 import type { DossierSourceDto, DossierDto, DossierInput } from '../../../preload/index.d';
@@ -93,6 +93,7 @@ function SourceTab({ canManage }: { canManage: boolean }): JSX.Element {
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} nguồn hồ sơ</div>
         <div className="flex gap-2">
+          <button onClick={() => void reload()} title="Tải lại dữ liệu mới nhất (giữ nguyên bộ lọc)" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200"><RefreshCw className="h-4 w-4" /> Làm mới</button>
           <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('nguon_ho_so', ['Mã nguồn hồ sơ', 'Chiết khấu', 'Người sửa gần nhất', 'Ngày', 'Giờ'], rows.map((s) => [s.code, fmtPct(s.discountRate), s.updatedByName ?? s.createdByName ?? '', fmtDate(s.updatedAt), fmtTime(s.updatedAt)]))}>Xuất Excel</Button>
           {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm nguồn hồ sơ</Button>}
         </div>

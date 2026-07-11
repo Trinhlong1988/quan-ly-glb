@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Check, X, Loader2, ClipboardCheck, Download } from 'lucide-react';
+import { Check, X, Loader2, ClipboardCheck, Download, RefreshCw } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { fmtDate } from '@glb/shared';
 import type { CancelRequestDto } from '../../../preload/index.d';
@@ -109,9 +109,14 @@ export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
           <h2 className="text-lg font-semibold text-slate-800">Duyệt hủy bill</h2>
           <p className="text-sm text-slate-500">Các yêu cầu hủy bill đang chờ bạn duyệt — người tạo yêu cầu khác người duyệt (phân vai theo cấp).</p>
         </div>
-        <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('duyet_huy_bill', ['Mã bill', 'Số tiền', 'Lý do hủy', 'Người tạo yêu cầu', 'Thời gian'], rows.map((r) => [r.billCode ?? `#${r.transactionId}`, r.amount, r.reason, r.requestedByName ?? `#${r.requestedBy}`, fmtDate(r.requestedAt)]))}>
-          Xuất Excel
-        </Button>
+        <div className="flex items-center gap-2">
+          <button onClick={reload} title="Tải lại dữ liệu mới nhất" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200">
+            <RefreshCw className="h-4 w-4" /> Làm mới
+          </button>
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('duyet_huy_bill', ['Mã bill', 'Số tiền', 'Lý do hủy', 'Người tạo yêu cầu', 'Thời gian'], rows.map((r) => [r.billCode ?? `#${r.transactionId}`, r.amount, r.reason, r.requestedByName ?? `#${r.requestedBy}`, fmtDate(r.requestedAt)]))}>
+            Xuất Excel
+          </Button>
+        </div>
       </div>
 
       <StatBar
