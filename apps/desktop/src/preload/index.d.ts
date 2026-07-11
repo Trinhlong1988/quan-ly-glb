@@ -113,6 +113,7 @@ export interface CustomerDto {
   address: string | null;
   agentId: number | null;
   note: string | null;
+  status: string;
   display: string;
   createdAt: string;
 }
@@ -215,6 +216,7 @@ export interface UndeliveredSummary {
 export interface CustomerFilter {
   search?: string;
   agentId?: number;
+  status?: string;
   fromDate?: string;
   toDate?: string;
 }
@@ -226,6 +228,7 @@ export interface CreateCustomerInput {
   address?: string | null;
   agentId?: number | null;
   note?: string | null;
+  status?: string;
 }
 export interface UpdateCustomerInput {
   fullName?: string;
@@ -235,6 +238,7 @@ export interface UpdateCustomerInput {
   address?: string | null;
   agentId?: number | null;
   note?: string | null;
+  status?: string;
 }
 export interface PosFilter {
   search?: string;

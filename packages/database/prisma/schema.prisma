@@ -188,6 +188,7 @@ model Customer {
   code      String    @unique // KH01, KH02...
   fullName  String    @map("full_name") // tên thật
   nickname  String // biệt danh dễ gọi — BẮT BUỘC (§D)
+  status    String    @default("ACTIVE") // ACTIVE (đang hoạt động) | LOCKED (đã khóa, chặn GD mới) | CANCELLED (đã hủy, ẩn khỏi list mặc định)
   phone     String?
   email     String?
   address   String?

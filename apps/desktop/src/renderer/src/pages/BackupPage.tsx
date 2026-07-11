@@ -5,6 +5,13 @@ import { hasPermission, fmtDateTime } from '@glb/shared';
 import type { BackupDto } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
+import { StatBar } from '../components/StatBar.js';
+
+/** Dung lượng gọn: <1MB → KB, còn lại → MB (số thập phân dùng dấu phẩy — chuẩn VN). */
+function fmtSize(bytes: number): string {
+  if (bytes >= 1024 * 1024) return (Math.round((bytes / 1024 / 1024) * 10) / 10).toString().replace('.', ',') + ' MB';
+  return (Math.round((bytes / 1024) * 10) / 10).toString().replace('.', ',') + ' KB';
+}
 
 export function BackupPage({ user }: { user: AuthUser }): JSX.Element {
   const toast = useToast();
@@ -68,6 +75,16 @@ export function BackupPage({ user }: { user: AuthUser }): JSX.Element {
           )}
         </div>
       </div>
+
+      {/* Bộ đếm — đếm CLIENT từ backupList (trả full, không phân trang). */}
+      <StatBar
+        items={[
+          { label: 'Tổng bản sao lưu', value: rows.length, tone: 'bg-brand-tint text-brand' },
+          { label: 'Còn file', value: rows.filter((b) => b.exists).length, tone: 'bg-success/10 text-success' },
+          { label: 'Mất file', value: rows.filter((b) => !b.exists).length, tone: 'bg-danger/10 text-danger' },
+          { label: 'Tổng dung lượng', value: fmtSize(rows.reduce((s, b) => s + (b.fileSize ?? 0), 0)) }
+        ]}
+      />
 
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">

@@ -8,11 +8,15 @@ import { Modal } from '../components/Modal.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
+import { StatBar } from '../components/StatBar.js';
 import { Button } from '../components/Button.js';
 import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../components/Selection.js';
 import { exportCsv } from '../lib/exportCsv.js';
 
 type Tab = 'tid' | 'status';
+
+// Tông màu luân phiên cho bộ đếm theo nhóm (không phải trạng thái hệ thống) — đồng bộ CustomersPage.
+const GROUP_TONES = ['bg-indigo-50 text-indigo-600', 'bg-emerald-50 text-emerald-600', 'bg-amber-50 text-amber-600', 'bg-sky-50 text-sky-600', 'bg-violet-50 text-violet-600', 'bg-rose-50 text-rose-600'];
 
 function IconBtn({ children, title, variant, onClick }: { children: JSX.Element; title: string; variant?: 'edit' | 'danger'; onClick: () => void }): JSX.Element {
   const tone = variant === 'danger' ? 'text-danger hover:bg-danger/10' : variant === 'edit' ? 'text-warning hover:bg-warning/10' : 'text-slate-400 hover:bg-brand-tint hover:text-brand';
@@ -83,6 +87,7 @@ export function StatusTab({ canManage }: { canManage: boolean }): JSX.Element {
           {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm trạng thái</Button>}
         </div>
       </div>
+      <StatBar items={[{ label: 'Tổng trạng thái', value: rows.length, tone: 'bg-brand-tint text-brand' }]} />
       {canManage && <SelectionBar count={sel.count} entityLabel="trạng thái" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">
@@ -208,6 +213,15 @@ function TidTab({ canManage }: { canManage: boolean }): JSX.Element {
       <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Tìm TID / tên HKD…"
         selects={[{ key: 'p', placeholder: 'Tất cả đối tác', value: fPartner, options: partners.map((p) => ({ value: String(p.id), label: p.name })), onChange: setFPartner }]}
         onApply={reload} onReset={() => { setSearch(''); setFPartner(''); setTimeout(reload, 0); }} />
+      {/* StatBar Cấu hình TID — tổng + đếm theo trạng thái TID cấu hình (configStatusName). */}
+      <StatBar
+        items={[
+          { label: 'Tổng TID cấu hình', value: rows.length, tone: 'bg-brand-tint text-brand' },
+          ...Array.from(new Set(rows.map((r) => r.configStatusName).filter((n): n is string => !!n)))
+            .map((name, i) => ({ label: name, value: rows.filter((r) => r.configStatusName === name).length, tone: GROUP_TONES[i % GROUP_TONES.length] })),
+          ...(rows.some((r) => !r.configStatusName) ? [{ label: 'Chưa đặt trạng thái', value: rows.filter((r) => !r.configStatusName).length, tone: 'bg-slate-100 text-slate-500' }] : [])
+        ]}
+      />
       {canManage && <SelectionBar count={sel.count} entityLabel="TID" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">

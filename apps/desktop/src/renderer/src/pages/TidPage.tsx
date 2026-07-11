@@ -231,6 +231,18 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
         </div>
       )}
 
+      {/* StatBar tab "TID chưa giao" — đếm CLIENT theo số ngày tồn (agingDays) từ tidUndelivered. */}
+      {tab === 'undelivered' && (
+        <StatBar
+          items={[
+            { label: 'Tổng chưa giao', value: undelivered.length, tone: 'bg-brand-tint text-brand' },
+            { label: 'Tồn ≥ 30 ngày', value: undelivered.filter((u) => u.agingDays >= 30).length, tone: 'bg-rose-50 text-rose-600' },
+            { label: 'Tồn 14–29 ngày', value: undelivered.filter((u) => u.agingDays >= 14 && u.agingDays < 30).length, tone: 'bg-amber-50 text-amber-600' },
+            { label: 'Tồn dưới 14 ngày', value: undelivered.filter((u) => u.agingDays < 14).length, tone: 'bg-emerald-50 text-emerald-600' }
+          ]}
+        />
+      )}
+
       {(tab === 'all' || tab === 'undelivered') && (
         <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
           <table className="w-full text-sm">
@@ -427,6 +439,16 @@ function RevenueRankingTab(): JSX.Element {
           <RefreshCw className="h-4 w-4" /> Làm mới
         </button>
       </div>
+
+      {/* StatBar tab "Xếp hạng doanh số" — đếm CLIENT từ kết quả kỳ đang xem. */}
+      <StatBar
+        items={[
+          { label: 'Tổng TID', value: rows.length, tone: 'bg-brand-tint text-brand' },
+          { label: 'Đang hoạt động', value: rows.filter((r) => r.active).length, tone: 'bg-emerald-50 text-emerald-600' },
+          { label: 'Ngừng', value: rows.filter((r) => !r.active).length, tone: 'bg-slate-100 text-slate-500' },
+          { label: 'Tổng doanh số', value: money(total), tone: 'bg-brand-tint text-brand' }
+        ]}
+      />
 
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">

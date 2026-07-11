@@ -6,6 +6,7 @@ import { useToast } from '../lib/toast.js';
 import { Modal } from '../components/Modal.js';
 import { Button } from '../components/Button.js';
 import { inputCls } from '../components/Field.js';
+import { StatBar } from '../components/StatBar.js';
 import { exportCsv } from '../lib/exportCsv.js';
 
 const ACTIONS = [
@@ -107,6 +108,17 @@ export function AuditPage(): JSX.Element {
         <h2 className="text-lg font-semibold text-slate-800">Nhật ký hệ thống</h2>
         <p className="text-sm text-slate-500">Chỉ đọc — không thể xóa log từ giao diện (R_AUDIT_001).</p>
       </div>
+
+      {/* Bộ đếm theo NHÓM hành động — đếm CLIENT từ danh sách đã tải (auditList giới hạn 300 bản
+          ghi gần nhất). Tông màu khớp badge từng dòng: tạo=xanh, khóa=vàng, xóa/lỗi=đỏ. */}
+      <StatBar
+        items={[
+          { label: 'Tổng bản ghi', value: rows.length, tone: 'bg-brand-tint text-brand', sub: 'tối đa 300 gần nhất' },
+          { label: 'Tạo mới / đăng nhập', value: rows.filter((r) => r.action.includes('CREATED') || r.action.includes('SUCCESS')).length, tone: 'bg-success/10 text-success' },
+          { label: 'Khóa', value: rows.filter((r) => r.action.includes('LOCKED')).length, tone: 'bg-warning/10 text-warning' },
+          { label: 'Xóa / lỗi / từ chối', value: rows.filter((r) => r.action.includes('DELETED') || r.action.includes('FAILED') || r.action.includes('DENIED')).length, tone: 'bg-danger/10 text-danger' }
+        ]}
+      />
 
       <div className="mb-3 flex flex-wrap gap-2">
         <div className="relative">

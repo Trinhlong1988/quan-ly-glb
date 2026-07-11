@@ -8,6 +8,7 @@ import { Modal } from '../components/Modal.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
+import { StatBar } from '../components/StatBar.js';
 import { Button } from '../components/Button.js';
 import { ImportButton } from '../components/ImportModal.js';
 import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../components/Selection.js';
@@ -98,6 +99,7 @@ function SourceTab({ canManage }: { canManage: boolean }): JSX.Element {
           {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm nguồn hồ sơ</Button>}
         </div>
       </div>
+      <StatBar items={[{ label: 'Tổng nguồn hồ sơ', value: rows.length, tone: 'bg-brand-tint text-brand' }]} />
       {canManage && <SelectionBar count={sel.count} entityLabel="nguồn" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">
@@ -230,6 +232,14 @@ function DossierTab({ canManage }: { canManage: boolean }): JSX.Element {
           { key: 'mst', placeholder: 'Tất cả trạng thái MST', value: fMstStatus, options: [{ value: 'ACTIVE', label: 'Hoạt động' }, { value: 'CLOSED', label: 'Đóng' }], onChange: setFMstStatus }
         ]}
         onApply={reload} onReset={() => { setSearch(''); setFSource(''); setFMstStatus(''); setTimeout(reload, 0); }} />
+      {/* StatBar Hồ sơ HKD — tổng + đếm theo trạng thái MST (Hoạt động / Đóng). */}
+      <StatBar
+        items={[
+          { label: 'Tổng hồ sơ', value: rows.length, tone: 'bg-brand-tint text-brand' },
+          { label: 'Hoạt động', value: rows.filter((r) => r.mstStatus === 'ACTIVE').length, tone: 'bg-success/10 text-success' },
+          { label: 'Đóng', value: rows.filter((r) => r.mstStatus === 'CLOSED').length, tone: 'bg-danger/10 text-danger' }
+        ]}
+      />
       {canManage && <SelectionBar count={sel.count} entityLabel="hồ sơ" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">

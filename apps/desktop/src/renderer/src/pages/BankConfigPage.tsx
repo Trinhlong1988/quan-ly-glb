@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2, Loader2, Landmark, CreditCard, Building2, Download, Link2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, Landmark, CreditCard, Building2, Download, Link2, Percent } from 'lucide-react';
+import { FeeConfigPage } from './FeeConfigPage.js';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate, fmtTime } from '@glb/shared';
 import type { BankDto, CardTypeDto, PartnerDto, PartnerBankMatrix } from '../../../preload/index.d';
@@ -19,7 +20,7 @@ function BankStatusBadge({ status }: { status: string }): JSX.Element {
   return <span className={'inline-flex rounded-full px-2 py-0.5 text-xs font-medium ' + (active ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-500')}>{active ? 'Đang hoạt động' : 'Không hoạt động'}</span>;
 }
 
-type Tab = 'bank' | 'cardtype' | 'partner';
+type Tab = 'bank' | 'cardtype' | 'partner' | 'fee';
 
 // Nút icon theo quy ước màu (R_BUTTON_SEMANTICS): sửa=vàng, xóa=đỏ.
 function IconBtn({ children, title, variant, onClick }: { children: JSX.Element; title: string; variant?: 'edit' | 'danger'; onClick: () => void }): JSX.Element {
@@ -43,22 +44,26 @@ function trailCells(row: { updatedByName: string | null; createdByName: string |
 }
 
 export function BankConfigPage({ user }: { user: AuthUser }): JSX.Element {
-  const [tab, setTab] = useState<Tab>('bank');
+  const canBank = hasPermission(user, 'CONFIG_BANK_VIEW');
+  const canFee = hasPermission(user, 'CONFIG_FEE_VIEW');
+  const [tab, setTab] = useState<Tab>(canBank ? 'bank' : 'fee');
   const canManage = hasPermission(user, 'CONFIG_BANK_MANAGE');
   return (
     <div>
       <div className="mb-4">
         <h2 className="text-lg font-semibold text-slate-800">Cấu hình ngân hàng</h2>
-        <p className="text-sm text-slate-500">Ngân hàng · Loại thẻ dùng trên máy POS · Đối tác và liên kết ngân hàng.</p>
+        <p className="text-sm text-slate-500">Ngân hàng · Loại thẻ dùng trên máy POS · Đối tác và liên kết ngân hàng · % phí POS.</p>
       </div>
       <div className="mb-3 flex items-center gap-1 border-b border-line">
-        <TabBtn active={tab === 'bank'} onClick={() => setTab('bank')} icon={<Landmark className="h-4 w-4" />}>Ngân hàng</TabBtn>
-        <TabBtn active={tab === 'cardtype'} onClick={() => setTab('cardtype')} icon={<CreditCard className="h-4 w-4" />}>Loại thẻ</TabBtn>
-        <TabBtn active={tab === 'partner'} onClick={() => setTab('partner')} icon={<Building2 className="h-4 w-4" />}>Đối tác</TabBtn>
+        {canBank && <TabBtn active={tab === 'bank'} onClick={() => setTab('bank')} icon={<Landmark className="h-4 w-4" />}>Ngân hàng</TabBtn>}
+        {canBank && <TabBtn active={tab === 'cardtype'} onClick={() => setTab('cardtype')} icon={<CreditCard className="h-4 w-4" />}>Loại thẻ</TabBtn>}
+        {canBank && <TabBtn active={tab === 'partner'} onClick={() => setTab('partner')} icon={<Building2 className="h-4 w-4" />}>Đối tác</TabBtn>}
+        {canFee && <TabBtn active={tab === 'fee'} onClick={() => setTab('fee')} icon={<Percent className="h-4 w-4" />}>% phí</TabBtn>}
       </div>
-      {tab === 'bank' && <BankTab canManage={canManage} />}
-      {tab === 'cardtype' && <CardTypeTab canManage={canManage} />}
-      {tab === 'partner' && <PartnerTab canManage={canManage} />}
+      {tab === 'bank' && canBank && <BankTab canManage={canManage} />}
+      {tab === 'cardtype' && canBank && <CardTypeTab canManage={canManage} />}
+      {tab === 'partner' && canBank && <PartnerTab canManage={canManage} />}
+      {tab === 'fee' && canFee && <FeeConfigPage user={user} />}
     </div>
   );
 }

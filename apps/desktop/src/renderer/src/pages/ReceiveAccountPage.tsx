@@ -9,11 +9,15 @@ import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
 import { Button } from '../components/Button.js';
+import { StatBar } from '../components/StatBar.js';
 import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../components/Selection.js';
 import { Thumb, AttachField } from '../components/Attach.js';
 import { exportCsv } from '../lib/exportCsv.js';
 
 type Tab = 'account' | 'source';
+
+// Tông màu luân phiên (palette design system) cho bộ đếm theo NGUỒN tài khoản — không phải trạng thái.
+const SOURCE_TONES = ['bg-indigo-50 text-indigo-600', 'bg-emerald-50 text-emerald-600', 'bg-amber-50 text-amber-600', 'bg-sky-50 text-sky-600', 'bg-violet-50 text-violet-600', 'bg-rose-50 text-rose-600'];
 
 function IconBtn({ children, title, variant, onClick }: { children: JSX.Element; title: string; variant?: 'edit' | 'danger'; onClick: () => void }): JSX.Element {
   const tone = variant === 'danger' ? 'text-danger hover:bg-danger/10' : variant === 'edit' ? 'text-warning hover:bg-warning/10' : 'text-slate-400 hover:bg-brand-tint hover:text-brand';
@@ -74,6 +78,9 @@ function SourceTab({ canManage }: { canManage: boolean }): JSX.Element {
 
   return (
     <div>
+      {/* Nguồn tài khoản không có trường trạng thái/loại → chỉ đếm TỔNG (bộ đếm trực quan dùng chung). */}
+      <StatBar items={[{ label: 'Tổng nguồn tài khoản', value: rows.length, tone: 'bg-brand-tint text-brand' }]} />
+
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} nguồn · <span className="text-slate-400">ví dụ: Khách hàng, Nội bộ</span></div>
         <div className="flex gap-2">
@@ -193,6 +200,23 @@ function AccountTab({ canManage }: { canManage: boolean }): JSX.Element {
 
   return (
     <div>
+      {/* Bộ đếm theo NGUỒN tài khoản (đếm CLIENT từ rcvAccountList) + tách Nội bộ (không gắn khách). */}
+      <StatBar
+        items={[
+          { label: 'Tổng tài khoản', value: rows.length, tone: 'bg-brand-tint text-brand' },
+          ...sources
+            .map((s, i) => ({
+              label: s.name,
+              value: rows.filter((r) => r.sourceId === s.id).length,
+              tone: SOURCE_TONES[i % SOURCE_TONES.length]
+            }))
+            .filter((it) => it.value > 0),
+          ...(rows.some((r) => r.customerId == null)
+            ? [{ label: 'Nội bộ (không gắn khách)', value: rows.filter((r) => r.customerId == null).length, tone: 'bg-slate-100 text-slate-500' }]
+            : [])
+        ]}
+      />
+
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{rows.length} tài khoản</div>
         <div className="flex gap-2">

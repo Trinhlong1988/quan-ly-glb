@@ -10,12 +10,16 @@ import { DateInput } from '../components/DateInput.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
+import { StatBar } from '../components/StatBar.js';
 import { Button } from '../components/Button.js';
 import { ImportButton } from '../components/ImportModal.js';
 import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../components/Selection.js';
 import { exportCsv } from '../lib/exportCsv.js';
 
 type Tab = 'supplier' | 'model' | 'intake' | 'status';
+
+// Tông màu luân phiên cho bộ đếm theo nhóm (đồng bộ CustomersPage).
+const GROUP_TONES = ['bg-indigo-50 text-indigo-600', 'bg-emerald-50 text-emerald-600', 'bg-amber-50 text-amber-600', 'bg-sky-50 text-sky-600', 'bg-violet-50 text-violet-600', 'bg-rose-50 text-rose-600'];
 
 /** Định dạng tiền VND (nhóm 3 chữ số bằng dấu chấm, kiểu Việt Nam) — không dùng toLocaleString. */
 function fmtVnd(n: number): string {
@@ -120,6 +124,7 @@ export function SupplierTab({ canManage }: { canManage: boolean }): JSX.Element 
         </div>
       </div>
       <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Tìm mã / tên / số điện thoại nhà cung cấp…" onApply={reload} onReset={() => { setSearch(''); setTimeout(reload, 0); }} />
+      <StatBar items={[{ label: 'Tổng nhà cung cấp', value: rows.length, tone: 'bg-brand-tint text-brand' }]} />
       {canManage && <SelectionBar count={sel.count} entityLabel="nhà cung cấp" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">
@@ -249,6 +254,7 @@ export function ModelTab({ canManage }: { canManage: boolean }): JSX.Element {
         </div>
       </div>
       <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Tìm mã / tên máy…" onApply={reload} onReset={() => { setSearch(''); setTimeout(reload, 0); }} />
+      <StatBar items={[{ label: 'Tổng chủng loại', value: rows.length, tone: 'bg-brand-tint text-brand' }]} />
       {canManage && <SelectionBar count={sel.count} entityLabel="chủng loại" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">
@@ -366,6 +372,7 @@ export function StatusTab({ canManage }: { canManage: boolean }): JSX.Element {
           {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => setForm({ mode: 'create' })}>Thêm trạng thái</Button>}
         </div>
       </div>
+      <StatBar items={[{ label: 'Tổng trạng thái', value: rows.length, tone: 'bg-brand-tint text-brand' }]} />
       {canManage && <SelectionBar count={sel.count} entityLabel="trạng thái" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">
@@ -507,6 +514,14 @@ export function IntakeTab({ canManage }: { canManage: boolean }): JSX.Element {
           { key: 'status', placeholder: 'Tất cả trạng thái', value: statusId, options: statuses.map((s) => ({ value: String(s.id), label: s.name })), onChange: setStatusId }
         ]}
         onApply={reload} onReset={() => { setSearch(''); setSupplierId(''); setModelId(''); setStatusId(''); setTimeout(reload, 0); }}
+      />
+      {/* StatBar Nhập kho — tổng + đếm theo trạng thái nhập máy (trên tập đã lọc client). */}
+      <StatBar
+        items={[
+          { label: 'Tổng máy trong kho', value: visibleRows.length, tone: 'bg-brand-tint text-brand' },
+          ...Array.from(new Set(visibleRows.map((r) => r.intakeStatusName).filter((n): n is string => !!n)))
+            .map((name, i) => ({ label: name, value: visibleRows.filter((r) => r.intakeStatusName === name).length, tone: GROUP_TONES[i % GROUP_TONES.length] }))
+        ]}
       />
       {canManage && <SelectionBar count={sel.count} entityLabel="máy POS" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">

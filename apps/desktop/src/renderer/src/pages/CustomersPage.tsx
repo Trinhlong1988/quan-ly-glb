@@ -16,6 +16,17 @@ import { exportCsv } from '../lib/exportCsv.js';
 // Tông màu luân phiên (palette design system) cho bộ đếm theo đại lý — không phải trạng thái.
 const AGENT_TONES = ['bg-indigo-50 text-indigo-600', 'bg-emerald-50 text-emerald-600', 'bg-amber-50 text-amber-600', 'bg-sky-50 text-sky-600', 'bg-violet-50 text-violet-600', 'bg-rose-50 text-rose-600'];
 
+/** Badge trạng thái khách hàng: ACTIVE=đang hoạt động, LOCKED=đã khóa, CANCELLED=đã hủy. */
+function CustomerStatusBadge({ status }: { status: string }): JSX.Element {
+  const map: Record<string, { label: string; cls: string }> = {
+    ACTIVE: { label: 'Đang hoạt động', cls: 'bg-emerald-50 text-emerald-600' },
+    LOCKED: { label: 'Đã khóa', cls: 'bg-amber-50 text-amber-600' },
+    CANCELLED: { label: 'Đã hủy', cls: 'bg-slate-100 text-slate-500' }
+  };
+  const m = map[status] ?? { label: status, cls: 'bg-slate-100 text-slate-500' };
+  return <span className={'inline-flex rounded-full px-2 py-0.5 text-xs font-medium ' + m.cls}>{m.label}</span>;
+}
+
 /** Khách hàng (§D): hiển thị `KH## · biệt danh (tên thật)` + Số điện thoại. Mã tự sinh, nickname bắt buộc. */
 export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
   const toast = useToast();
@@ -24,6 +35,7 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [agentId, setAgentId] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [creating, setCreating] = useState(false);
@@ -40,6 +52,7 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
     const res = await window.api.customerList({
       search: search || undefined,
       agentId: agentId ? Number(agentId) : undefined,
+      status: statusFilter || undefined,
       fromDate: fromDate || undefined,
       toDate: toDate || undefined
     });
@@ -56,6 +69,7 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
   function resetFilters(): void {
     setSearch('');
     setAgentId('');
+    setStatusFilter('');
     setFromDate('');
     setToDate('');
     setTimeout(reload, 0);
@@ -104,17 +118,30 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
             value: agentId,
             options: agents.map((a) => ({ value: String(a.id), label: a.name })),
             onChange: setAgentId
+          },
+          {
+            key: 'status',
+            placeholder: 'Tất cả trạng thái',
+            value: statusFilter,
+            options: [
+              { value: 'ACTIVE', label: 'Đang hoạt động' },
+              { value: 'LOCKED', label: 'Đã khóa' },
+              { value: 'CANCELLED', label: 'Đã hủy' }
+            ],
+            onChange: setStatusFilter
           }
         ]}
         onApply={reload}
         onReset={resetFilters}
       />
 
-      {/* Bộ đếm theo ĐẠI LÝ (đếm CLIENT từ customerList — trả full, không phân trang).
-          KH không có trường ACTIVE/INACTIVE → CHỈ tổng + theo đại lý (không bịa hoạt động/không). */}
+      {/* Dash bộ đếm (đếm CLIENT từ customerList): tổng + trạng thái (hoạt động/khóa/hủy) + theo đại lý. */}
       <StatBar
         items={[
           { label: 'Tổng khách', value: rows.length, tone: 'bg-brand-tint text-brand' },
+          { label: 'Đang hoạt động', value: rows.filter((c) => c.status === 'ACTIVE').length, tone: 'bg-emerald-50 text-emerald-600' },
+          ...(rows.some((c) => c.status === 'LOCKED') ? [{ label: 'Đã khóa', value: rows.filter((c) => c.status === 'LOCKED').length, tone: 'bg-amber-50 text-amber-600' }] : []),
+          ...(rows.some((c) => c.status === 'CANCELLED') ? [{ label: 'Đã hủy', value: rows.filter((c) => c.status === 'CANCELLED').length, tone: 'bg-slate-100 text-slate-500' }] : []),
           ...agents
             .map((a, i) => ({
               label: a.name,
@@ -134,6 +161,7 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
             <tr>
               <th className="px-4 py-3">Mã khách hàng</th>
               <th className="px-4 py-3">Khách hàng</th>
+              <th className="px-4 py-3">Trạng thái</th>
               <th className="px-4 py-3">Số điện thoại</th>
               <th className="px-4 py-3">Địa chỉ</th>
               <th className="px-4 py-3 text-right">Thao tác</th>
@@ -142,14 +170,14 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
           <tbody className="divide-y divide-line">
             {loading && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
                   <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                 </td>
               </tr>
             )}
             {!loading && rows.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-slate-400">
+                <td colSpan={6} className="px-4 py-10 text-center text-slate-400">
                   <UserRound className="mx-auto mb-2 h-6 w-6" />
                   Chưa có khách hàng.
                 </td>
@@ -163,6 +191,7 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
                     <div className="font-medium text-slate-800">{c.nickname}</div>
                     <div className="text-xs text-slate-400">{c.fullName}</div>
                   </td>
+                  <td className="px-4 py-3"><CustomerStatusBadge status={c.status} /></td>
                   <td className="px-4 py-3 text-slate-600">{c.phone ?? '—'}</td>
                   <td className="px-4 py-3 text-slate-500">{c.address ?? '—'}</td>
                   <td className="px-4 py-3">
@@ -257,6 +286,7 @@ function CustomerForm({ target, onClose, onSaved }: { target: CustomerDto | null
   const [email, setEmail] = useState(target?.email ?? '');
   const [address, setAddress] = useState(target?.address ?? '');
   const [note, setNote] = useState(target?.note ?? '');
+  const [status, setStatus] = useState(target?.status ?? 'ACTIVE');
   const [busy, setBusy] = useState(false);
 
   async function save(): Promise<void> {
@@ -269,7 +299,8 @@ function CustomerForm({ target, onClose, onSaved }: { target: CustomerDto | null
       phone: phone || null,
       email: email || null,
       address: address || null,
-      note: note || null
+      note: note || null,
+      status
     };
     const res = editing ? await window.api.customerUpdate(target!.id, payload) : await window.api.customerCreate(payload);
     setBusy(false);
@@ -307,6 +338,13 @@ function CustomerForm({ target, onClose, onSaved }: { target: CustomerDto | null
         </Field>
         <Field label="Ghi chú">
           <input className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} />
+        </Field>
+        <Field label="Trạng thái" hint="Đã khóa = chặn giao dịch mới · Đã hủy = ẩn khỏi danh sách">
+          <select className={inputCls} value={status} onChange={(e) => setStatus(e.target.value)}>
+            <option value="ACTIVE">Đang hoạt động</option>
+            <option value="LOCKED">Đã khóa</option>
+            <option value="CANCELLED">Đã hủy</option>
+          </select>
         </Field>
       </div>
       <div className="mt-6 flex justify-end gap-2">

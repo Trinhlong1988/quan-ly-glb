@@ -20,6 +20,7 @@ export interface CustomerDto {
   address: string | null;
   agentId: number | null;
   note: string | null;
+  status: string; // ACTIVE | LOCKED | CANCELLED
   /** `KH03 · Anh Thanh Hải Phòng (Nguyễn Văn Thanh)` (§D). */
   display: string;
   createdAt: string;
@@ -35,6 +36,7 @@ export interface MutationResult {
 export interface CustomerFilter {
   search?: string;
   agentId?: number;
+  status?: string; // ACTIVE | LOCKED | CANCELLED. Bỏ trống = ẩn CANCELLED (chỉ ACTIVE + LOCKED).
   /** ISO date bounds on createdAt (R_UX_FILTER). */
   fromDate?: string;
   toDate?: string;
@@ -63,6 +65,7 @@ function toDto(c: {
   address: string | null;
   agentId: number | null;
   note: string | null;
+  status: string;
   createdAt: Date;
 }): CustomerDto {
   return {
@@ -75,6 +78,7 @@ function toDto(c: {
     address: c.address,
     agentId: c.agentId,
     note: c.note,
+    status: c.status,
     display: `${c.code} · ${c.nickname} (${c.fullName})`,
     createdAt: c.createdAt.toISOString()
   };
@@ -89,6 +93,8 @@ export async function listCustomers(
   const rows = await g.db.customer.findMany({
     where: {
       deletedAt: null,
+      // Lọc trạng thái: chọn rõ → đúng trạng thái đó; bỏ trống → ẩn CANCELLED (đã hủy) khỏi list mặc định.
+      status: filter.status ? filter.status : { not: 'CANCELLED' },
       agentId: filter.agentId ?? undefined,
       createdAt: dateRange(filter.fromDate, filter.toDate),
       OR: filter.search
@@ -113,6 +119,12 @@ export interface CreateCustomerInput {
   address?: string | null;
   agentId?: number | null;
   note?: string | null;
+  status?: string;
+}
+
+const CUSTOMER_STATUSES = ['ACTIVE', 'LOCKED', 'CANCELLED'];
+function normCustomerStatus(s: string | undefined, fallback: string): string {
+  return s !== undefined && CUSTOMER_STATUSES.includes(s) ? s : fallback;
 }
 
 /** CUSTOMER_CREATE — auto KH## + mandatory nickname (§D) + audit CUSTOMER_CREATED. */
@@ -138,6 +150,7 @@ export async function createCustomer(input: CreateCustomerInput): Promise<Mutati
         address: input.address ?? null,
         agentId: input.agentId ?? null,
         note: input.note ?? null,
+        status: normCustomerStatus(input.status, 'ACTIVE'),
         createdBy: user.id
       }
     });
@@ -161,6 +174,7 @@ export interface UpdateCustomerInput {
   address?: string | null;
   agentId?: number | null;
   note?: string | null;
+  status?: string;
 }
 
 /** CUSTOMER_UPDATE — nickname stays mandatory; audit before/after (R_AUDIT_002). Code is immutable. */
@@ -186,7 +200,8 @@ export async function updateCustomer(id: number, input: UpdateCustomerInput): Pr
     email: row.email,
     address: row.address,
     agentId: row.agentId,
-    note: row.note
+    note: row.note,
+    status: row.status
   });
 
   const updated = await db.customer.update({
@@ -198,7 +213,8 @@ export async function updateCustomer(id: number, input: UpdateCustomerInput): Pr
       email: input.email !== undefined ? input.email || null : row.email,
       address: input.address !== undefined ? input.address : row.address,
       agentId: input.agentId !== undefined ? input.agentId : row.agentId,
-      note: input.note !== undefined ? input.note : row.note
+      note: input.note !== undefined ? input.note : row.note,
+      status: normCustomerStatus(input.status, row.status)
     }
   });
 
@@ -215,7 +231,8 @@ export async function updateCustomer(id: number, input: UpdateCustomerInput): Pr
       email: updated.email,
       address: updated.address,
       agentId: updated.agentId,
-      note: updated.note
+      note: updated.note,
+      status: updated.status
     })
   });
   return { ok: true, id };

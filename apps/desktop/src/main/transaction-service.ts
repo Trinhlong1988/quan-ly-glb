@@ -220,6 +220,14 @@ export async function createTransaction(input: CreateTransactionInput): Promise<
   const rev = computeRevenue(amount, fee.fee.partnerMarginMilli, fee.fee.sellMarginMilli);
   const customerId = input.customerId === undefined ? tid.customerId : input.customerId;
 
+  // R2: khách hàng "Đã khóa"/"Đã hủy" → CHẶN giao dịch mới (vẫn xem được lịch sử).
+  if (customerId != null) {
+    const cust = await db.customer.findUnique({ where: { id: customerId }, select: { status: true, deletedAt: true } });
+    if (cust && cust.deletedAt == null && (cust.status === 'LOCKED' || cust.status === 'CANCELLED')) {
+      return { ok: false, error: 'CUSTOMER_INACTIVE', message: `Khách hàng đang ở trạng thái "${cust.status === 'LOCKED' ? 'Đã khóa' : 'Đã hủy'}" — không thể tạo giao dịch mới.` };
+    }
+  }
+
   const created = await db.transaction.create({
     data: {
       tidId: tid.id,

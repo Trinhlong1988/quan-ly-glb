@@ -7,6 +7,7 @@ import { useToast } from '../lib/toast.js';
 import { Field, inputCls } from '../components/Field.js';
 import { Button } from '../components/Button.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
+import { StatBar } from '../components/StatBar.js';
 
 function bytes(n: number | null): string {
   if (n == null) return '—';
@@ -244,7 +245,19 @@ export function MaintenancePage({ user }: { user: AuthUser }): JSX.Element {
       )}
 
       {/* Lịch sử bảo trì */}
-      <div className="mt-4 rounded-xl border border-line bg-white shadow-sm">
+      <div className="mt-4">
+        {/* Bộ đếm theo kết quả — đếm CLIENT từ healthRuns (20 lần gần nhất). Tông màu khớp nhãn
+            trạng thái trong bảng: ổn định=xanh, cảnh báo=vàng, có lỗi=đỏ. */}
+        <StatBar
+          items={[
+            { label: 'Tổng lần bảo trì', value: runs.length, tone: 'bg-brand-tint text-brand', sub: '20 lần gần nhất' },
+            { label: 'Ổn định', value: runs.filter((r) => r.status === 'OK').length, tone: 'bg-emerald-50 text-emerald-600' },
+            { label: 'Cảnh báo', value: runs.filter((r) => r.status === 'WARN').length, tone: 'bg-amber-50 text-amber-600' },
+            { label: 'Có lỗi', value: runs.filter((r) => r.status === 'ERROR').length, tone: 'bg-danger/10 text-danger' }
+          ]}
+        />
+      </div>
+      <div className="rounded-xl border border-line bg-white shadow-sm">
         <div className="flex items-center gap-2 border-b border-line px-4 py-3 text-sm font-semibold text-slate-700"><Clock className="h-4 w-4 text-slate-500" /> Lịch sử bảo trì</div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
