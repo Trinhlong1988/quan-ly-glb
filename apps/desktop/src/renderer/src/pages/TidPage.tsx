@@ -13,6 +13,7 @@ import { FilterBar } from '../components/FilterBar.js';
 import { ImportButton } from '../components/ImportModal.js';
 import { exportCsv } from '../lib/exportCsv.js';
 import { StatusTab, FeePreview } from './TidConfigPage.js';
+import { TabBar, TabButton } from '../components/Tabs.js';
 
 const TID_STATUSES = ['UNASSIGNED', 'ACTIVE', 'DEAD', 'CLOSED', 'RECALLED'];
 type Tab = 'all' | 'undelivered' | 'status' | 'ranking';
@@ -147,24 +148,24 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
         </div>
       </div>
 
-      <div className="mb-3 flex items-center gap-1 border-b border-line">
-        <TabBtn active={tab === 'all'} onClick={() => setTab('all')}>
-          <CreditCard className="mr-1 h-4 w-4" /> Danh sách TID
-        </TabBtn>
-        <TabBtn active={tab === 'undelivered'} onClick={() => setTab('undelivered')}>
-          <PackageCheck className="mr-1 h-4 w-4" /> TID chưa giao {undelivered.length > 0 && <span className="ml-1 rounded-full bg-danger px-1.5 text-xs text-white">{undelivered.length}</span>}
-        </TabBtn>
+      <TabBar>
+        <TabButton active={tab === 'all'} onClick={() => setTab('all')} icon={<CreditCard className="h-4 w-4" />}>
+          Danh sách TID
+        </TabButton>
+        <TabButton active={tab === 'undelivered'} onClick={() => setTab('undelivered')} icon={<PackageCheck className="h-4 w-4" />}>
+          TID chưa giao {undelivered.length > 0 && <span className="ml-1 rounded-full bg-danger px-1.5 text-xs text-white">{undelivered.length}</span>}
+        </TabButton>
         {canRevenue && (
-          <TabBtn active={tab === 'ranking'} onClick={() => setTab('ranking')}>
-            <Trophy className="mr-1 h-4 w-4" /> Xếp hạng doanh số
-          </TabBtn>
+          <TabButton active={tab === 'ranking'} onClick={() => setTab('ranking')} icon={<Trophy className="h-4 w-4" />}>
+            Xếp hạng doanh số
+          </TabButton>
         )}
         {canConfigView && (
-          <TabBtn active={tab === 'status'} onClick={() => setTab('status')}>
-            <Tag className="mr-1 h-4 w-4" /> Trạng thái TID cấu hình
-          </TabBtn>
+          <TabButton active={tab === 'status'} onClick={() => setTab('status')} icon={<Tag className="h-4 w-4" />}>
+            Trạng thái TID cấu hình
+          </TabButton>
         )}
-      </div>
+      </TabBar>
 
       {tab === 'status' && <StatusTab canManage={canConfig} />}
       {tab === 'ranking' && <RevenueRankingTab />}
@@ -534,17 +535,6 @@ function DeliverCell({ t }: { t: TidDto }): JSX.Element {
     );
   }
   return <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500">Chưa giao</span>;
-}
-
-function TabBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }): JSX.Element {
-  return (
-    <button
-      onClick={onClick}
-      className={'flex items-center border-b-2 px-4 py-2 text-sm font-medium transition ' + (active ? 'border-brand text-brand' : 'border-transparent text-slate-500 hover:text-slate-700')}
-    >
-      {children}
-    </button>
-  );
 }
 
 // ── Form Thêm TID — chuỗi phụ thuộc HKD → đối tác → ngân hàng (PartnerBank) + chế độ gán/giao ──

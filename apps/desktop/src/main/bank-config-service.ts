@@ -6,6 +6,7 @@ import type { Db } from '@glb/database';
 import { requirePermission, verifyActorPassword } from './guard.js';
 import { writeAudit } from './audit.js';
 import { dateRange } from './customer-service.js';
+import { isValidStatus } from './status-catalog-service.js';
 
 export interface MutationResult {
   ok: boolean;
@@ -374,6 +375,7 @@ export interface PartnerDto extends AuditTrail {
   id: number;
   name: string;
   code: string;
+  status: string; // SIGNED | UNSIGNED | TERMINATED (mã tra StatusOption entity=PARTNER)
   address: string | null;
   phone: string | null;
   contactPerson: string | null;
@@ -381,12 +383,14 @@ export interface PartnerDto extends AuditTrail {
 }
 export interface PartnerFilter {
   search?: string;
+  status?: string;
   fromDate?: string;
   toDate?: string;
 }
 export interface CreatePartnerInput {
   name: string;
   code: string;
+  status?: string;
   address?: string | null;
   phone?: string | null;
   contactPerson?: string | null;
@@ -394,6 +398,7 @@ export interface CreatePartnerInput {
 export interface UpdatePartnerInput {
   name?: string;
   code?: string;
+  status?: string;
   address?: string | null;
   phone?: string | null;
   contactPerson?: string | null;
@@ -405,6 +410,7 @@ export async function listPartners(filter: PartnerFilter = {}): Promise<{ ok: bo
   const rows = await g.db.partner.findMany({
     where: {
       deletedAt: null,
+      status: filter.status || undefined,
       createdAt: dateRange(filter.fromDate, filter.toDate),
       OR: filter.search
         ? [
@@ -427,6 +433,7 @@ export async function listPartners(filter: PartnerFilter = {}): Promise<{ ok: bo
       id: r.id,
       name: r.name,
       code: r.code,
+      status: r.status,
       address: r.address,
       phone: r.phone,
       contactPerson: r.contactPerson,
@@ -445,6 +452,8 @@ export async function createPartner(input: CreatePartnerInput): Promise<Mutation
   const code = input.code?.trim().toUpperCase();
   if (!name) return { ok: false, error: 'VALIDATION', message: 'Tên đối tác bắt buộc.' };
   if (!code) return { ok: false, error: 'VALIDATION', message: 'Mã đối tác bắt buộc.' };
+  const status = input.status?.trim() || 'UNSIGNED';
+  if (!(await isValidStatus('PARTNER', status))) return { ok: false, error: 'VALIDATION', message: 'Trạng thái đối tác không hợp lệ.' };
 
   const dup = await db.partner.findFirst({ where: { code } });
   if (dup) {
@@ -459,6 +468,7 @@ export async function createPartner(input: CreatePartnerInput): Promise<Mutation
       data: {
         name,
         code,
+        status,
         address: input.address?.trim() || null,
         phone: input.phone?.trim() || null,
         contactPerson: input.contactPerson?.trim() || null,
@@ -491,6 +501,8 @@ export async function updatePartner(id: number, input: UpdatePartnerInput): Prom
   const code = input.code !== undefined ? input.code.trim().toUpperCase() : row.code;
   if (!name) return { ok: false, error: 'VALIDATION', message: 'Tên đối tác không được để trống.' };
   if (!code) return { ok: false, error: 'VALIDATION', message: 'Mã đối tác không được để trống.' };
+  const status = input.status !== undefined ? input.status.trim() || row.status : row.status;
+  if (input.status !== undefined && !(await isValidStatus('PARTNER', status))) return { ok: false, error: 'VALIDATION', message: 'Trạng thái đối tác không hợp lệ.' };
   if (code !== row.code) {
     const dup = await db.partner.findFirst({ where: { code, NOT: { id } } });
     if (dup) {
@@ -500,7 +512,7 @@ export async function updatePartner(id: number, input: UpdatePartnerInput): Prom
     }
   }
 
-  const before = auditSnapshot({ name: row.name, code: row.code, address: row.address, phone: row.phone, contactPerson: row.contactPerson });
+  const before = auditSnapshot({ name: row.name, code: row.code, status: row.status, address: row.address, phone: row.phone, contactPerson: row.contactPerson });
   let updated;
   try {
     updated = await db.partner.update({
@@ -508,6 +520,7 @@ export async function updatePartner(id: number, input: UpdatePartnerInput): Prom
       data: {
         name,
         code,
+        status,
         address: input.address !== undefined ? input.address?.trim() || null : row.address,
         phone: input.phone !== undefined ? input.phone?.trim() || null : row.phone,
         contactPerson: input.contactPerson !== undefined ? input.contactPerson?.trim() || null : row.contactPerson,
@@ -524,7 +537,7 @@ export async function updatePartner(id: number, input: UpdatePartnerInput): Prom
     targetType: 'Partner',
     targetId: String(id),
     before,
-    after: auditSnapshot({ name: updated.name, code: updated.code, address: updated.address, phone: updated.phone, contactPerson: updated.contactPerson })
+    after: auditSnapshot({ name: updated.name, code: updated.code, status: updated.status, address: updated.address, phone: updated.phone, contactPerson: updated.contactPerson })
   });
   return { ok: true, id };
 }

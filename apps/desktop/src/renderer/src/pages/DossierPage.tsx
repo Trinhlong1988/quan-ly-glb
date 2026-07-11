@@ -9,6 +9,8 @@ import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
 import { StatBar } from '../components/StatBar.js';
+import { StatusBadge, useStatusOptions, statusSelectOptions, toneCls } from '../components/StatusBadge.js';
+import { TabBar, TabButton } from '../components/Tabs.js';
 import { Button } from '../components/Button.js';
 import { ImportButton } from '../components/ImportModal.js';
 import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../components/Selection.js';
@@ -28,16 +30,6 @@ function fmtPct(v: number): string {
   return `${Number(v.toFixed(3))}%`;
 }
 
-// Trạng thái MST hồ sơ HKD (§10c): Hoạt động (xanh) / Đóng (xám-đỏ). Nhãn dùng chung cho badge + CSV + dropdown.
-const MST_STATUS_LABEL: Record<string, string> = { ACTIVE: 'Hoạt động', CLOSED: 'Đóng' };
-function mstStatusLabel(s: string): string {
-  return MST_STATUS_LABEL[s] ?? s;
-}
-function MstStatusBadge({ status }: { status: string }): JSX.Element {
-  const tone = status === 'CLOSED' ? 'bg-danger/10 text-danger' : 'bg-success/10 text-success';
-  return <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${tone}`}>{mstStatusLabel(status)}</span>;
-}
-
 export function DossierPage({ user }: { user: AuthUser }): JSX.Element {
   const [tab, setTab] = useState<Tab>('dossier');
   const canManage = hasPermission(user, 'CONFIG_DOSSIER_MANAGE');
@@ -47,10 +39,10 @@ export function DossierPage({ user }: { user: AuthUser }): JSX.Element {
         <h2 className="text-lg font-semibold text-slate-800">Quản Lý Hồ Sơ HKD</h2>
         <p className="text-sm text-slate-500">Hồ sơ Hộ Kinh Doanh (kèm ảnh ĐKKD + CCCD) · Nguồn hồ sơ (chính sách chiết khấu).</p>
       </div>
-      <div className="mb-3 flex items-center gap-1 border-b border-line">
-        <button onClick={() => setTab('dossier')} className={'flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition ' + (tab === 'dossier' ? 'border-brand text-brand' : 'border-transparent text-slate-500 hover:text-slate-700')}><FolderKanban className="h-4 w-4" /> Hồ sơ HKD</button>
-        <button onClick={() => setTab('source')} className={'flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition ' + (tab === 'source' ? 'border-brand text-brand' : 'border-transparent text-slate-500 hover:text-slate-700')}><Tag className="h-4 w-4" /> Nguồn hồ sơ</button>
-      </div>
+      <TabBar>
+        <TabButton active={tab === 'dossier'} onClick={() => setTab('dossier')} icon={<FolderKanban className="h-4 w-4" />}>Hồ sơ HKD</TabButton>
+        <TabButton active={tab === 'source'} onClick={() => setTab('source')} icon={<Tag className="h-4 w-4" />}>Nguồn hồ sơ</TabButton>
+      </TabBar>
       {tab === 'dossier' && <DossierTab canManage={canManage} />}
       {tab === 'source' && <SourceTab canManage={canManage} />}
     </div>
@@ -184,6 +176,9 @@ function DossierTab({ canManage }: { canManage: boolean }): JSX.Element {
   const [del, setDel] = useState<DossierDto | null>(null);
   const [bulkDel, setBulkDel] = useState(false);
   const sel = useRowSelection();
+  // R14 — danh mục trạng thái MST (entity HKD_MST) từ catalog tùy biến.
+  const { options: mstOptions, byCode: mstByCode } = useStatusOptions('HKD_MST');
+  const mstStatusLabel = (code: string): string => mstByCode.get(code)?.label ?? code;
 
   async function loadRefs(): Promise<void> {
     const s = await window.api.dossierSourceList();
@@ -226,15 +221,18 @@ function DossierTab({ canManage }: { canManage: boolean }): JSX.Element {
       <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Tìm tên HKD / chủ hộ / MST / CCCD…"
         selects={[
           { key: 's', placeholder: 'Tất cả nguồn hồ sơ', value: fSource, options: sources.map((s) => ({ value: String(s.id), label: s.code })), onChange: setFSource },
-          { key: 'mst', placeholder: 'Tất cả trạng thái MST', value: fMstStatus, options: [{ value: 'ACTIVE', label: 'Hoạt động' }, { value: 'CLOSED', label: 'Đóng' }], onChange: setFMstStatus }
+          { key: 'mst', placeholder: 'Tất cả trạng thái MST', value: fMstStatus, options: mstOptions.filter((o) => o.active).map((o) => ({ value: o.code, label: o.label })), onChange: setFMstStatus }
         ]}
         onApply={reload} onReset={() => { setSearch(''); setFSource(''); setFMstStatus(''); setTimeout(reload, 0); }} />
-      {/* StatBar Hồ sơ HKD — tổng + đếm theo trạng thái MST (Hoạt động / Đóng). */}
+      {/* StatBar Hồ sơ HKD — tổng + đếm theo trạng thái MST (danh mục HKD_MST tùy biến). */}
       <StatBar
         items={[
           { label: 'Tổng hồ sơ', value: rows.length, tone: 'bg-brand-tint text-brand' },
-          { label: 'Hoạt động', value: rows.filter((r) => r.mstStatus === 'ACTIVE').length, tone: 'bg-success/10 text-success' },
-          { label: 'Đóng', value: rows.filter((r) => r.mstStatus === 'CLOSED').length, tone: 'bg-danger/10 text-danger' }
+          ...mstOptions.filter((o) => o.active).map((o) => ({
+            label: o.label,
+            value: rows.filter((r) => r.mstStatus === o.code).length,
+            tone: toneCls(o.tone)
+          }))
         ]}
       />
       {canManage && <SelectionBar count={sel.count} entityLabel="hồ sơ" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
@@ -263,7 +261,7 @@ function DossierTab({ canManage }: { canManage: boolean }): JSX.Element {
                 <td className="px-4 py-3"><span className="rounded bg-brand-tint px-1.5 py-0.5 text-xs font-medium text-brand">{d.sourceCode ?? '—'}</span></td>
                 <td className="px-4 py-3 font-medium text-slate-800">{d.hkdName}</td>
                 <td className="px-4 py-3 font-mono text-xs text-slate-600">{d.taxCode ?? '—'}</td>
-                <td className="px-4 py-3"><MstStatusBadge status={d.mstStatus} /></td>
+                <td className="px-4 py-3"><StatusBadge entity="HKD_MST" code={d.mstStatus} /></td>
                 <td className="px-4 py-3 text-slate-600">{d.ownerName}</td>
                 <td className="px-4 py-3 font-mono text-xs text-slate-500">{d.cccdNumber ?? '—'}</td>
                 <td className="px-4 py-3"><div className="flex gap-1">
@@ -294,6 +292,8 @@ function DossierTab({ canManage }: { canManage: boolean }): JSX.Element {
 
 function DossierForm({ mode, row, sources, onClose, onSaved }: { mode: 'create' | 'edit'; row?: DossierDto; sources: DossierSourceDto[]; onClose: () => void; onSaved: () => void }): JSX.Element {
   const toast = useToast();
+  // R14 — trạng thái MST từ danh mục tùy biến (giữ giá trị hiện tại kể cả khi đã ẩn).
+  const { options: mstOptions } = useStatusOptions('HKD_MST');
   const [f, setF] = useState({
     sourceId: row?.sourceId ? String(row.sourceId) : '',
     hkdName: row?.hkdName ?? '',
@@ -358,7 +358,7 @@ function DossierForm({ mode, row, sources, onClose, onSaved }: { mode: 'create' 
       <div className="grid grid-cols-2 gap-4">
         <Field label="Nguồn hồ sơ" required><select className={inputCls} value={f.sourceId} onChange={set('sourceId')} autoFocus><option value="">— Chọn nguồn —</option>{sources.map((s) => <option key={s.id} value={s.id}>{s.code}</option>)}</select></Field>
         <Field label="Mã số Thuế / Mã số ĐK HKD"><input className={inputCls} value={f.taxCode} onChange={set('taxCode')} /></Field>
-        <Field label="Trạng thái MST"><select className={inputCls} value={f.mstStatus} onChange={set('mstStatus')}><option value="ACTIVE">Hoạt động</option><option value="CLOSED">Đóng</option></select></Field>
+        <Field label="Trạng thái MST"><select className={inputCls} value={f.mstStatus} onChange={set('mstStatus')}>{statusSelectOptions(mstOptions, f.mstStatus).map((o) => <option key={o.code} value={o.code}>{o.label}</option>)}</select></Field>
         <Field label="Tên Hộ Kinh Doanh" required><input className={inputCls} value={f.hkdName} onChange={set('hkdName')} /></Field>
         <Field label="Địa chỉ đăng ký HKD"><input className={inputCls} value={f.hkdAddress} onChange={set('hkdAddress')} /></Field>
         <Field label="Ngày cấp ĐKKD"><input type="date" className={inputCls} value={f.dkkdIssueDate} onChange={set('dkkdIssueDate')} /></Field>

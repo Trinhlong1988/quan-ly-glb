@@ -14,6 +14,7 @@ import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../com
 import { Thumb, AttachField } from '../components/Attach.js';
 import { exportCsv } from '../lib/exportCsv.js';
 import { AuditTrailHeadCells, AuditTrailCells, AUDIT_TRAIL_COLS } from '../components/AuditCells.js';
+import { TabBar, TabButton } from '../components/Tabs.js';
 
 type Tab = 'account' | 'source';
 
@@ -34,10 +35,10 @@ export function ReceiveAccountPage({ user }: { user: AuthUser }): JSX.Element {
         <h2 className="text-lg font-semibold text-slate-800">Quản Lý Tài Khoản Nhận Tiền</h2>
         <p className="text-sm text-slate-500">Tài khoản nhận tiền (kèm CCCD ủy quyền) · Nguồn tài khoản.</p>
       </div>
-      <div className="mb-3 flex items-center gap-1 border-b border-line">
-        <button onClick={() => setTab('account')} className={'flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition ' + (tab === 'account' ? 'border-brand text-brand' : 'border-transparent text-slate-500 hover:text-slate-700')}><Wallet className="h-4 w-4" /> Tài khoản nhận tiền</button>
-        <button onClick={() => setTab('source')} className={'flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition ' + (tab === 'source' ? 'border-brand text-brand' : 'border-transparent text-slate-500 hover:text-slate-700')}><Tag className="h-4 w-4" /> Nguồn tài khoản</button>
-      </div>
+      <TabBar>
+        <TabButton active={tab === 'account'} onClick={() => setTab('account')} icon={<Wallet className="h-4 w-4" />}>Tài khoản nhận tiền</TabButton>
+        <TabButton active={tab === 'source'} onClick={() => setTab('source')} icon={<Tag className="h-4 w-4" />}>Nguồn tài khoản</TabButton>
+      </TabBar>
       {tab === 'account' && <AccountTab canManage={canManage} />}
       {tab === 'source' && <SourceTab canManage={canManage} />}
     </div>

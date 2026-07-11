@@ -111,6 +111,34 @@ export async function listCustomers(
   return { ok: true, data: rows.map(toDto) };
 }
 
+/**
+ * CUSTOMER_VIEW — bộ đếm TOÀN CỤC (độc lập bộ lọc list): tổng + theo trạng thái + chưa gán đại lý + theo đại lý.
+ * Đếm trên `deletedAt: null` (chưa xóa). `total` = tất cả chưa xóa (gồm cả CANCELLED). Dùng cho dash StatBar
+ * để "Đã khóa"/"Đã hủy" LUÔN hiện đúng số, không bị lệch vì list mặc định ẩn CANCELLED.
+ */
+export async function countCustomers(): Promise<{
+  ok: boolean;
+  data?: { total: number; active: number; locked: number; cancelled: number; unassigned: number; byAgent: { agentId: number; count: number }[] };
+  error?: string;
+  message?: string;
+}> {
+  const g = await requirePermission('CUSTOMER_VIEW', { action: 'CUSTOMER_VIEW' });
+  if (!g.ok) return g;
+  const db = g.db;
+  const [total, active, locked, cancelled, unassigned, grouped] = await Promise.all([
+    db.customer.count({ where: { deletedAt: null } }),
+    db.customer.count({ where: { deletedAt: null, status: 'ACTIVE' } }),
+    db.customer.count({ where: { deletedAt: null, status: 'LOCKED' } }),
+    db.customer.count({ where: { deletedAt: null, status: 'CANCELLED' } }),
+    db.customer.count({ where: { deletedAt: null, agentId: null } }),
+    db.customer.groupBy({ by: ['agentId'], where: { deletedAt: null, agentId: { not: null } }, _count: { _all: true } })
+  ]);
+  const byAgent = grouped
+    .filter((row): row is typeof row & { agentId: number } => row.agentId !== null)
+    .map((row) => ({ agentId: row.agentId, count: row._count._all }));
+  return { ok: true, data: { total, active, locked, cancelled, unassigned, byAgent } };
+}
+
 export interface CreateCustomerInput {
   fullName: string;
   nickname: string;

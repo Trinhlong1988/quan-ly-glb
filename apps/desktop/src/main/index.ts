@@ -318,6 +318,12 @@ app.whenReady().then(async () => {
     app.exit(code);
     return;
   }
+  if (process.env['GLB_SELFTEST'] === '32') {
+    const { runStatusSelfTest } = await import('./selftest-status.js');
+    const code = await runStatusSelfTest();
+    app.exit(code);
+    return;
+  }
 
   await createWindow();
   startHousekeeping();

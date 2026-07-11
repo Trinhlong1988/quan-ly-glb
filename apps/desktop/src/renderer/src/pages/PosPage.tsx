@@ -7,15 +7,14 @@ import { useToast } from '../lib/toast.js';
 import { Modal } from '../components/Modal.js';
 import { Button } from '../components/Button.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
-import { StatusPill, statusLabel, statusTone } from '../components/StatusPill.js';
+import { StatusBadge, useStatusOptions, toneCls } from '../components/StatusBadge.js';
 import { StatBar } from '../components/StatBar.js';
 import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
+import { TabBar, TabButton } from '../components/Tabs.js';
 import { exportCsv } from '../lib/exportCsv.js';
 // PHASE K1 — hợp nhất: các tab cấu hình cung ứng POS dùng lại nguyên các panel của PosSupplyPage.
 import { SupplierTab, ModelTab, StatusTab, IntakeTab } from './PosSupplyPage.js';
-
-const POS_STATUSES = ['IN_STOCK', 'DEPLOYED', 'IN_REPAIR', 'DAMAGED', 'RETIRED'];
 
 /** Định dạng tiền VND (nhóm 3 chữ số kiểu Việt Nam) — không dùng toLocaleString. */
 function fmtVnd(n: number | null): string {
@@ -49,17 +48,13 @@ export function PosPage({ user }: { user: AuthUser }): JSX.Element {
         <h2 className="text-lg font-semibold text-slate-800">Quản Lý Máy POS</h2>
         <p className="text-sm text-slate-500">Danh sách máy (nguồn sự thật) · nhập kho · nhà cung cấp · chủng loại · trạng thái nhập.</p>
       </div>
-      <div className="mb-3 flex items-center gap-1 border-b border-line">
+      <TabBar>
         {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={'flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition ' + (tab === t.key ? 'border-brand text-brand' : 'border-transparent text-slate-500 hover:text-slate-700')}
-          >
-            {t.icon} {t.label}
-          </button>
+          <TabButton key={t.key} active={tab === t.key} onClick={() => setTab(t.key)} icon={t.icon}>
+            {t.label}
+          </TabButton>
         ))}
-      </div>
+      </TabBar>
       {tab === 'devices' && <DeviceListTab user={user} />}
       {tab === 'intake' && <IntakeTab canManage={canConfigManage} />}
       {tab === 'supplier' && <SupplierTab canManage={canConfigManage} />}
@@ -88,6 +83,9 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
   const [actionOf, setActionOf] = useState<{ device: PosDto; event: string } | null>(null);
 
   const canManage = hasPermission(user, 'POS_MANAGE');
+  // R14 — danh mục trạng thái máy POS (entity POS_DEVICE) từ catalog tùy biến.
+  const { options: posOptions, byCode: posByCode } = useStatusOptions('POS_DEVICE');
+  const posStatusLabel = (code: string): string => posByCode.get(code)?.label ?? code;
 
   async function reload(): Promise<void> {
     setLoading(true);
@@ -142,7 +140,7 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
               exportCsv(
                 'may_pos',
                 ['Serial', 'Chủng loại', 'Nhà cung cấp', 'Giá nhập', 'Ngày nhập', 'Trạng thái', 'TID hiện tại', 'Khách', 'Đại lý'],
-                filteredRows.map((d) => [d.serial, d.posModelName ?? '', d.supplierName ?? '', d.importPrice ?? '', d.importedAt ? fmtDate(d.importedAt) : '', statusLabel(d.status), d.currentTid ?? '', d.customerName ?? '', d.agentName ?? ''])
+                filteredRows.map((d) => [d.serial, d.posModelName ?? '', d.supplierName ?? '', d.importPrice ?? '', d.importedAt ? fmtDate(d.importedAt) : '', posStatusLabel(d.status), d.currentTid ?? '', d.customerName ?? '', d.agentName ?? ''])
               )
             }
           >
@@ -165,7 +163,7 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
         onFromDate={setFromDate}
         onToDate={setToDate}
         selects={[
-          { key: 'status', placeholder: 'Tất cả trạng thái', value: statusFilter, options: POS_STATUSES.map((s) => ({ value: s, label: statusLabel(s) })), onChange: setStatusFilter },
+          { key: 'status', placeholder: 'Tất cả trạng thái', value: statusFilter, options: posOptions.filter((o) => o.active).map((o) => ({ value: o.code, label: o.label })), onChange: setStatusFilter },
           { key: 'agent', placeholder: 'Tất cả đại lý', value: agentId, options: agents.map((a) => ({ value: String(a.id), label: a.name })), onChange: setAgentId },
           // Lọc chủng loại (client-side) — đổi giá trị là lọc ngay, không cần bấm "Lọc".
           { key: 'model', placeholder: 'Tất cả chủng loại', value: modelFilter, options: models.map((m) => ({ value: String(m.id), label: m.name })), onChange: setModelFilter }
@@ -178,10 +176,10 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
       <StatBar
         items={[
           { label: 'Tổng máy', value: filteredRows.length, tone: 'bg-brand-tint text-brand' },
-          ...POS_STATUSES.map((s) => ({
-            label: statusLabel(s),
-            value: filteredRows.filter((d) => d.status === s).length,
-            tone: statusTone(s)
+          ...posOptions.filter((o) => o.active).map((o) => ({
+            label: o.label,
+            value: filteredRows.filter((d) => d.status === o.code).length,
+            tone: toneCls(o.tone)
           }))
         ]}
       />
@@ -227,7 +225,7 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
                   <td className="px-4 py-3 text-right text-slate-700">{fmtVnd(d.importPrice)}</td>
                   <td className="px-4 py-3 text-xs text-slate-500">{d.importedAt ? fmtDate(d.importedAt) : '—'}</td>
                   <td className="px-4 py-3">
-                    <StatusPill status={d.status} />
+                    <StatusBadge entity="POS_DEVICE" code={d.status} />
                   </td>
                   <td className="px-4 py-3 font-mono text-xs text-slate-500">{d.currentTid ?? '—'}</td>
                   <td className="px-4 py-3 text-slate-600">{d.customerName ?? '—'}</td>
@@ -471,7 +469,7 @@ function TransitionModal({ device, event, onClose, onDone }: { device: PosDto; e
   return (
     <Modal title={`${EVENT_LABELS[event]} — ${device.serial}`} onClose={onClose} width="max-w-lg">
       <div className="mb-2 flex items-center gap-2 rounded-md bg-appbg px-3 py-2 text-sm text-slate-600">
-        <Wrench className="h-4 w-4 text-brand" /> Trạng thái hiện tại: <StatusPill status={device.status} />
+        <Wrench className="h-4 w-4 text-brand" /> Trạng thái hiện tại: <StatusBadge entity="POS_DEVICE" code={device.status} />
       </div>
       {event === 'recall' && device.currentTid && (
         <div className="mb-2 rounded-md bg-warning/10 px-3 py-2 text-xs text-warning">Thu hồi máy sẽ GỠ gán TID {device.currentTid} (TID về "chưa gán máy").</div>

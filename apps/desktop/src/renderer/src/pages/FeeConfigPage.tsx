@@ -12,6 +12,7 @@ import { Button } from '../components/Button.js';
 import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../components/Selection.js';
 import { AuditTrailHeadCells, AuditTrailCells } from '../components/AuditCells.js';
 import { exportCsv } from '../lib/exportCsv.js';
+import { TabBar, TabButton } from '../components/Tabs.js';
 
 type Tab = 'rate' | 'type';
 
@@ -37,13 +38,13 @@ export function FeeConfigPage({ user }: { user: AuthUser }): JSX.Element {
   return (
     <div>
       <div className="mb-4">
-        <h2 className="text-lg font-semibold text-slate-800">Cấu hình phí</h2>
+        <h2 className="text-lg font-semibold text-slate-800">Phí mua-cài máy-bán</h2>
         <p className="text-sm text-slate-500">Biểu phí % theo Đối tác × Loại thẻ · Danh mục loại phí bán.</p>
       </div>
-      <div className="mb-3 flex items-center gap-1 border-b border-line">
-        <button onClick={() => setTab('rate')} className={'flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition ' + (tab === 'rate' ? 'border-brand text-brand' : 'border-transparent text-slate-500 hover:text-slate-700')}><Percent className="h-4 w-4" /> Biểu phí %</button>
-        <button onClick={() => setTab('type')} className={'flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition ' + (tab === 'type' ? 'border-brand text-brand' : 'border-transparent text-slate-500 hover:text-slate-700')}><Tag className="h-4 w-4" /> Loại phí</button>
-      </div>
+      <TabBar>
+        <TabButton active={tab === 'rate'} onClick={() => setTab('rate')} icon={<Percent className="h-4 w-4" />}>Biểu phí %</TabButton>
+        <TabButton active={tab === 'type'} onClick={() => setTab('type')} icon={<Tag className="h-4 w-4" />}>Loại phí</TabButton>
+      </TabBar>
       {tab === 'rate' && <RateTab canManage={canManage} />}
       {tab === 'type' && <TypeTab canManage={canManage} />}
     </div>

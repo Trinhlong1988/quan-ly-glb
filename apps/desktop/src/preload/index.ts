@@ -60,6 +60,7 @@ const api = {
 
   // Customers (G-POS.1)
   customerList: (filter: unknown) => ipcRenderer.invoke('customer:list', filter),
+  customerCounts: () => ipcRenderer.invoke('customer:counts'),
   customerCreate: (input: unknown) => ipcRenderer.invoke('customer:create', input),
   customerUpdate: (id: number, input: unknown) => ipcRenderer.invoke('customer:update', { id, input }),
   customerDelete: (id: number, password: string) => ipcRenderer.invoke('customer:delete', { id, password }),
@@ -111,6 +112,12 @@ const api = {
   partnerDelete: (ids: number[], password: string) => ipcRenderer.invoke('partner:delete', { ids, password }),
   partnerBankMatrix: () => ipcRenderer.invoke('partnerBank:matrix'),
   partnerBankSet: (partnerId: number, bankIds: number[]) => ipcRenderer.invoke('partnerBank:set', { partnerId, bankIds }),
+  statusOptionList: (entity: string, includeInactive?: boolean) => ipcRenderer.invoke('statusOption:list', { entity, includeInactive }),
+  statusOptionListMany: (entities: string[]) => ipcRenderer.invoke('statusOption:listMany', entities),
+  statusOptionEntities: () => ipcRenderer.invoke('statusOption:entities'),
+  statusOptionCreate: (input: unknown) => ipcRenderer.invoke('statusOption:create', input),
+  statusOptionUpdate: (id: number, input: unknown) => ipcRenderer.invoke('statusOption:update', { id, input }),
+  statusOptionDelete: (id: number) => ipcRenderer.invoke('statusOption:delete', id),
 
   // Cấu hình cung ứng POS (G-CFG.2 §C6–C8)
   supplierList: (filter: unknown) => ipcRenderer.invoke('supplier:list', filter),

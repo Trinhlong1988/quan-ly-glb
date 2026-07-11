@@ -406,6 +406,7 @@ export interface PartnerDto extends AuditTrail {
   id: number;
   name: string;
   code: string;
+  status: string; // SIGNED | UNSIGNED | TERMINATED (tra StatusOption entity=PARTNER)
   address: string | null;
   phone: string | null;
   contactPerson: string | null;
@@ -413,12 +414,14 @@ export interface PartnerDto extends AuditTrail {
 }
 export interface PartnerFilter {
   search?: string;
+  status?: string;
   fromDate?: string;
   toDate?: string;
 }
 export interface CreatePartnerInput {
   name: string;
   code: string;
+  status?: string;
   address?: string | null;
   phone?: string | null;
   contactPerson?: string | null;
@@ -426,9 +429,38 @@ export interface CreatePartnerInput {
 export interface UpdatePartnerInput {
   name?: string;
   code?: string;
+  status?: string;
   address?: string | null;
   phone?: string | null;
   contactPerson?: string | null;
+}
+
+/** Danh mục trạng thái tùy biến dùng chung (R14). */
+export interface StatusOptionDto {
+  id: number;
+  entity: string;
+  code: string;
+  label: string;
+  tone: string;
+  isBuiltin: boolean;
+  sortOrder: number;
+  active: boolean;
+}
+export interface StatusEntityDto {
+  entity: string;
+  label: string;
+  allowAdd: boolean;
+}
+export interface CreateStatusOptionInput {
+  entity: string;
+  label: string;
+  tone?: string;
+}
+export interface UpdateStatusOptionInput {
+  label?: string;
+  tone?: string;
+  sortOrder?: number;
+  active?: boolean;
 }
 export interface PartnerBankMatrixRow {
   partnerId: number;
@@ -1125,6 +1157,7 @@ export interface GlbApi {
 
   // ── G-POS.1 ──
   customerList(filter: CustomerFilter): Promise<ListResult<CustomerDto>>;
+  customerCounts(): Promise<{ ok: boolean; data?: { total: number; active: number; locked: number; cancelled: number; unassigned: number; byAgent: { agentId: number; count: number }[] }; error?: string; message?: string }>;
   customerCreate(input: CreateCustomerInput): Promise<MutationOutcome>;
   customerUpdate(id: number, input: UpdateCustomerInput): Promise<MutationOutcome>;
   customerDelete(id: number, password: string): Promise<MutationOutcome>;
@@ -1173,6 +1206,12 @@ export interface GlbApi {
   partnerDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
   partnerBankMatrix(): Promise<{ ok: boolean; data?: PartnerBankMatrix; error?: string; message?: string }>;
   partnerBankSet(partnerId: number, bankIds: number[]): Promise<LinkOutcome>;
+  statusOptionList(entity: string, includeInactive?: boolean): Promise<ListResult<StatusOptionDto>>;
+  statusOptionListMany(entities: string[]): Promise<{ ok: boolean; data?: Record<string, StatusOptionDto[]>; error?: string; message?: string }>;
+  statusOptionEntities(): Promise<ListResult<StatusEntityDto>>;
+  statusOptionCreate(input: CreateStatusOptionInput): Promise<MutationOutcome>;
+  statusOptionUpdate(id: number, input: UpdateStatusOptionInput): Promise<MutationOutcome>;
+  statusOptionDelete(id: number): Promise<MutationOutcome>;
 
   // ── Cấu hình cung ứng POS (G-CFG.2 §C6–C8) ──
   supplierList(filter: SupplierFilter): Promise<ListResult<SupplierDto>>;

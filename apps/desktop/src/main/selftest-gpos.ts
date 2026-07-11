@@ -60,6 +60,26 @@ export async function runGposSelfTest(): Promise<number> {
   const c2 = await customerSvc.createCustomer({ fullName: 'Trần Thị B', nickname: 'Chị B Cầu Giấy' });
   assert('second customer code increments', c2.ok && num((await db.customer.findUnique({ where: { id: c2.id! } }))!.code) === num(c1row!.code) + 1);
 
+  // ── R8b: countCustomers — bộ đếm TOÀN CỤC (độc lập bộ lọc list), gồm cả CANCELLED + theo đại lý ──
+  // Đo theo DELTA so với baseline (c1/c2 đã tồn tại) để không phụ thuộc thứ tự chạy.
+  const before = await customerSvc.countCustomers();
+  assert('countCustomers ok', before.ok === true, before.error);
+  const b = before.data!;
+  const agentCC = await db.agent.create({ data: { name: 'Đại lý Count Test', region: 'HN' } });
+  const ccActive = await customerSvc.createCustomer({ fullName: 'CC Active', nickname: 'CC Active', agentId: agentCC.id });
+  const ccUnassigned = await customerSvc.createCustomer({ fullName: 'CC Unassigned', nickname: 'CC Unassigned' });
+  const ccLocked = await customerSvc.createCustomer({ fullName: 'CC Locked', nickname: 'CC Locked', status: 'LOCKED', agentId: agentCC.id });
+  const ccCancelled = await customerSvc.createCustomer({ fullName: 'CC Cancelled', nickname: 'CC Cancelled', status: 'CANCELLED' });
+  assert('4 count-test customers created', ccActive.ok && ccUnassigned.ok && ccLocked.ok && ccCancelled.ok, { ccActive: ccActive.error, ccUnassigned: ccUnassigned.error, ccLocked: ccLocked.error, ccCancelled: ccCancelled.error });
+  const after = await customerSvc.countCustomers();
+  const a = after.data!;
+  assert('countCustomers total +4 (gồm cả CANCELLED)', a.total === b.total + 4, { before: b.total, after: a.total });
+  assert('countCustomers active +2 (CC Active + CC Unassigned mặc định ACTIVE)', a.active === b.active + 2, { before: b.active, after: a.active });
+  assert('countCustomers locked +1', a.locked === b.locked + 1, { before: b.locked, after: a.locked });
+  assert('countCustomers cancelled +1', a.cancelled === b.cancelled + 1, { before: b.cancelled, after: a.cancelled });
+  assert('countCustomers unassigned +2 (Unassigned + Cancelled đều null đại lý)', a.unassigned === b.unassigned + 2, { before: b.unassigned, after: a.unassigned });
+  assert('countCustomers byAgent: đại lý test đúng 2 (Active + Locked, bỏ null)', a.byAgent.find((x) => x.agentId === agentCC.id)?.count === 2, { byAgent: a.byAgent });
+
   // ── §A: POS lifecycle produces asset_events with occurredAt ─────────────
   const serial = 'SN-SELFTEST-001';
   const posC = await posSvc.createPos({ serial, occurredAt: '2026-06-01T09:00:00Z' });

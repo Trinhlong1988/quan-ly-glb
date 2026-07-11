@@ -11,26 +11,21 @@ import { FilterBar } from '../components/FilterBar.js';
 import { StatBar } from '../components/StatBar.js';
 import { Button } from '../components/Button.js';
 import { ImportButton } from '../components/ImportModal.js';
+import { StatusBadge, useStatusOptions, statusSelectOptions, toneCls } from '../components/StatusBadge.js';
 import { exportCsv } from '../lib/exportCsv.js';
 
 // Tông màu luân phiên (palette design system) cho bộ đếm theo đại lý — không phải trạng thái.
 const AGENT_TONES = ['bg-indigo-50 text-indigo-600', 'bg-emerald-50 text-emerald-600', 'bg-amber-50 text-amber-600', 'bg-sky-50 text-sky-600', 'bg-violet-50 text-violet-600', 'bg-rose-50 text-rose-600'];
 
-/** Badge trạng thái khách hàng: ACTIVE=đang hoạt động, LOCKED=đã khóa, CANCELLED=đã hủy. */
-function CustomerStatusBadge({ status }: { status: string }): JSX.Element {
-  const map: Record<string, { label: string; cls: string }> = {
-    ACTIVE: { label: 'Đang hoạt động', cls: 'bg-emerald-50 text-emerald-600' },
-    LOCKED: { label: 'Đã khóa', cls: 'bg-amber-50 text-amber-600' },
-    CANCELLED: { label: 'Đã hủy', cls: 'bg-slate-100 text-slate-500' }
-  };
-  const m = map[status] ?? { label: status, cls: 'bg-slate-100 text-slate-500' };
-  return <span className={'inline-flex rounded-full px-2 py-0.5 text-xs font-medium ' + m.cls}>{m.label}</span>;
-}
+// Bộ đếm TOÀN CỤC (độc lập bộ lọc list) cho dash StatBar — khớp shape countCustomers ở main.
+type CustomerCounts = { total: number; active: number; locked: number; cancelled: number; unassigned: number; byAgent: { agentId: number; count: number }[] };
 
 /** Khách hàng (§D): hiển thị `KH## · biệt danh (tên thật)` + Số điện thoại. Mã tự sinh, nickname bắt buộc. */
 export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
   const toast = useToast();
+  const { options: statusOptions } = useStatusOptions('CUSTOMER');
   const [rows, setRows] = useState<CustomerDto[]>([]);
+  const [counts, setCounts] = useState<CustomerCounts | null>(null);
   const [agents, setAgents] = useState<AgentDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -58,10 +53,14 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
     });
     if (res.ok && res.data) setRows(res.data);
     else if (res.message) toast.alert(res.message);
+    // Bộ đếm TOÀN CỤC — nạp độc lập bộ lọc để "Đã khóa"/"Đã hủy"/đại lý luôn đúng số.
+    const cres = await window.api.customerCounts();
+    if (cres.ok && cres.data) setCounts(cres.data);
     setLoading(false);
   }
   useEffect(() => {
     void reload();
+    void window.api.customerCounts().then((r) => r.ok && r.data && setCounts(r.data));
     window.api.agentList().then((r) => r.ok && r.data && setAgents(r.data));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -123,11 +122,7 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
             key: 'status',
             placeholder: 'Tất cả trạng thái',
             value: statusFilter,
-            options: [
-              { value: 'ACTIVE', label: 'Đang hoạt động' },
-              { value: 'LOCKED', label: 'Đã khóa' },
-              { value: 'CANCELLED', label: 'Đã hủy' }
-            ],
+            options: statusOptions.filter((o) => o.active).map((o) => ({ value: o.code, label: o.label })),
             onChange: setStatusFilter
           }
         ]}
@@ -135,22 +130,34 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
         onReset={resetFilters}
       />
 
-      {/* Dash bộ đếm (đếm CLIENT từ customerList): tổng + trạng thái (hoạt động/khóa/hủy) + theo đại lý. */}
+      {/* Dash bộ đếm TOÀN CỤC (countCustomers ở main, độc lập bộ lọc): tổng + trạng thái (hoạt động/khóa/hủy) + theo đại lý.
+          "Đã khóa"/"Đã hủy" LUÔN hiện (kể cả =0) — Mr.Long yêu cầu không được ẩn. */}
       <StatBar
         items={[
-          { label: 'Tổng khách', value: rows.length, tone: 'bg-brand-tint text-brand' },
-          { label: 'Đang hoạt động', value: rows.filter((c) => c.status === 'ACTIVE').length, tone: 'bg-emerald-50 text-emerald-600' },
-          ...(rows.some((c) => c.status === 'LOCKED') ? [{ label: 'Đã khóa', value: rows.filter((c) => c.status === 'LOCKED').length, tone: 'bg-amber-50 text-amber-600' }] : []),
-          ...(rows.some((c) => c.status === 'CANCELLED') ? [{ label: 'Đã hủy', value: rows.filter((c) => c.status === 'CANCELLED').length, tone: 'bg-slate-100 text-slate-500' }] : []),
+          { label: 'Tổng khách', value: counts?.total ?? rows.length, tone: 'bg-brand-tint text-brand' },
+          ...statusOptions
+            .filter((o) => o.active)
+            .map((o) => {
+              // Đếm TOÀN CỤC cho 3 builtin từ counts; trạng thái tùy chỉnh mới → đếm client theo rows.
+              const value =
+                o.code === 'ACTIVE'
+                  ? counts?.active ?? 0
+                  : o.code === 'LOCKED'
+                    ? counts?.locked ?? 0
+                    : o.code === 'CANCELLED'
+                      ? counts?.cancelled ?? 0
+                      : rows.filter((c) => c.status === o.code).length;
+              return { label: o.label, value, tone: toneCls(o.tone) };
+            }),
           ...agents
             .map((a, i) => ({
               label: a.name,
-              value: rows.filter((c) => c.agentId === a.id).length,
+              value: counts?.byAgent.find((x) => x.agentId === a.id)?.count ?? 0,
               tone: AGENT_TONES[i % AGENT_TONES.length]
             }))
             .filter((it) => it.value > 0),
-          ...(rows.some((c) => c.agentId == null)
-            ? [{ label: 'Chưa gán đại lý', value: rows.filter((c) => c.agentId == null).length, tone: 'bg-slate-100 text-slate-500' }]
+          ...((counts?.unassigned ?? 0) > 0
+            ? [{ label: 'Chưa gán đại lý', value: counts?.unassigned ?? 0, tone: 'bg-slate-100 text-slate-500' }]
             : [])
         ]}
       />
@@ -191,7 +198,7 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
                     <div className="font-medium text-slate-800">{c.nickname}</div>
                     <div className="text-xs text-slate-400">{c.fullName}</div>
                   </td>
-                  <td className="px-4 py-3"><CustomerStatusBadge status={c.status} /></td>
+                  <td className="px-4 py-3"><StatusBadge entity="CUSTOMER" code={c.status} /></td>
                   <td className="px-4 py-3 text-slate-600">{c.phone ?? '—'}</td>
                   <td className="px-4 py-3 text-slate-500">{c.address ?? '—'}</td>
                   <td className="px-4 py-3">
@@ -225,6 +232,7 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
       {(creating || editing) && (
         <CustomerForm
           target={editing}
+          agents={agents}
           onClose={() => {
             setCreating(false);
             setEditing(null);
@@ -277,8 +285,9 @@ function IconBtn({ children, title, variant, onClick }: { children: JSX.Element;
   );
 }
 
-function CustomerForm({ target, onClose, onSaved }: { target: CustomerDto | null; onClose: () => void; onSaved: () => void }): JSX.Element {
+function CustomerForm({ target, agents, onClose, onSaved }: { target: CustomerDto | null; agents: AgentDto[]; onClose: () => void; onSaved: () => void }): JSX.Element {
   const toast = useToast();
+  const { options: statusOptions } = useStatusOptions('CUSTOMER');
   const editing = !!target;
   const [fullName, setFullName] = useState(target?.fullName ?? '');
   const [nickname, setNickname] = useState(target?.nickname ?? '');
@@ -286,6 +295,7 @@ function CustomerForm({ target, onClose, onSaved }: { target: CustomerDto | null
   const [email, setEmail] = useState(target?.email ?? '');
   const [address, setAddress] = useState(target?.address ?? '');
   const [note, setNote] = useState(target?.note ?? '');
+  const [agentId, setAgentId] = useState(target?.agentId ? String(target.agentId) : '');
   const [status, setStatus] = useState(target?.status ?? 'ACTIVE');
   const [busy, setBusy] = useState(false);
 
@@ -299,6 +309,7 @@ function CustomerForm({ target, onClose, onSaved }: { target: CustomerDto | null
       phone: phone || null,
       email: email || null,
       address: address || null,
+      agentId: agentId ? Number(agentId) : null,
       note: note || null,
       status
     };
@@ -336,14 +347,22 @@ function CustomerForm({ target, onClose, onSaved }: { target: CustomerDto | null
         <Field label="Địa chỉ">
           <input className={inputCls} value={address} onChange={(e) => setAddress(e.target.value)} />
         </Field>
+        <Field label="Đại lý" hint="Đại lý phụ trách khách hàng này (có thể để trống).">
+          <select className={inputCls} value={agentId} onChange={(e) => setAgentId(e.target.value)}>
+            <option value="">— Không gán đại lý —</option>
+            {agents.map((a) => (
+              <option key={a.id} value={String(a.id)}>{a.name}</option>
+            ))}
+          </select>
+        </Field>
         <Field label="Ghi chú">
           <input className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} />
         </Field>
         <Field label="Trạng thái" hint="Đã khóa = chặn giao dịch mới · Đã hủy = ẩn khỏi danh sách">
           <select className={inputCls} value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="ACTIVE">Đang hoạt động</option>
-            <option value="LOCKED">Đã khóa</option>
-            <option value="CANCELLED">Đã hủy</option>
+            {statusSelectOptions(statusOptions, target?.status).map((o) => (
+              <option key={o.code} value={o.code}>{o.label}</option>
+            ))}
           </select>
         </Field>
       </div>

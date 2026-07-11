@@ -12,6 +12,7 @@ import * as posSvc from './pos-service.js';
 import * as tidSvc from './tid-service.js';
 import * as notifySvc from './notification-service.js';
 import * as bankCfgSvc from './bank-config-service.js';
+import * as statusSvc from './status-catalog-service.js';
 import * as posSupplySvc from './pos-supply-service.js';
 import * as feeCfgSvc from './fee-config-service.js';
 import * as rcvAcctSvc from './receive-account-service.js';
@@ -130,6 +131,7 @@ export function registerIpc(): void {
 
   // ---- Customers (G-POS.1 §A/§D) ----------------------------------------
   ipcMain.handle('customer:list', async (_e, filter: customerSvc.CustomerFilter) => customerSvc.listCustomers(filter));
+  ipcMain.handle('customer:counts', async () => customerSvc.countCustomers());
   ipcMain.handle('customer:create', async (_e, input: customerSvc.CreateCustomerInput) => customerSvc.createCustomer(input));
   ipcMain.handle('customer:update', async (_e, args: { id: number; input: customerSvc.UpdateCustomerInput }) =>
     customerSvc.updateCustomer(args.id, args.input)
@@ -192,6 +194,14 @@ export function registerIpc(): void {
   ipcMain.handle('partner:delete', async (_e, args: { ids: number[]; password: string }) => bankCfgSvc.deletePartners(args.ids, args.password));
   ipcMain.handle('partnerBank:matrix', async () => bankCfgSvc.getPartnerBankMatrix());
   ipcMain.handle('partnerBank:set', async (_e, args: { partnerId: number; bankIds: number[] }) => bankCfgSvc.setPartnerBanks(args.partnerId, args.bankIds));
+
+  // ── R14 Danh mục trạng thái tùy biến dùng chung ──
+  ipcMain.handle('statusOption:list', async (_e, args: { entity: string; includeInactive?: boolean }) => statusSvc.listStatusOptions(args.entity, { includeInactive: args.includeInactive }));
+  ipcMain.handle('statusOption:listMany', async (_e, entities: string[]) => statusSvc.listStatusOptionsMany(entities));
+  ipcMain.handle('statusOption:entities', async () => statusSvc.listStatusEntities());
+  ipcMain.handle('statusOption:create', async (_e, input: statusSvc.CreateStatusOptionInput) => statusSvc.createStatusOption(input));
+  ipcMain.handle('statusOption:update', async (_e, args: { id: number; input: statusSvc.UpdateStatusOptionInput }) => statusSvc.updateStatusOption(args.id, args.input));
+  ipcMain.handle('statusOption:delete', async (_e, id: number) => statusSvc.deleteStatusOption(id));
 
   // ── G-CFG.2 Cấu hình cung ứng POS (§C6–C8) ──
   ipcMain.handle('supplier:list', async (_e, filter: posSupplySvc.SupplierFilter) => posSupplySvc.listSuppliers(filter));

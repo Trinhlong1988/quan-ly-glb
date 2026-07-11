@@ -459,6 +459,7 @@ model Partner {
   id            Int       @id @default(autoincrement())
   name          String
   code          String    @unique
+  status        String    @default("UNSIGNED") // trạng thái hợp đồng hợp tác: SIGNED | UNSIGNED | TERMINATED (mã tra trong StatusOption entity=PARTNER)
   address       String?
   phone         String?
   contactPerson String?   @map("contact_person")
@@ -488,6 +489,31 @@ model PartnerBank {
   @@index([partnerId])
   @@index([bankId])
   @@map("partner_banks")
+}
+
+// Danh mục trạng thái tùy biến dùng chung (R14). Mỗi thực thể (entity) có bộ trạng thái riêng.
+// - isBuiltin=true: trạng thái mặc định hệ thống seed — KHÔNG xóa, KHÔNG đổi `code` (chỉ đổi label/tone/sortOrder/active).
+// - Nhóm được phép "thêm mới" điều khiển bằng map cứng ENTITY_ALLOW_ADD trong status-catalog-service (master-data mới cho thêm).
+// Cột `status` của các bảng (Bank/Customer/Partner…) lưu `code` tra ở đây theo entity.
+model StatusOption {
+  id        Int       @id @default(autoincrement())
+  entity    String    // BANK | CUSTOMER | PARTNER | POS_DEVICE | HKD_MST | ...
+  code      String    // ACTIVE, INACTIVE, LOCKED, SIGNED, ... hoặc custom (CUSTOM_<n>)
+  label     String    // nhãn hiển thị: "Đang hoạt động"
+  tone      String    @default("slate") // emerald|amber|slate|rose|sky|indigo|violet|brand
+  isBuiltin Boolean   @default(false) @map("is_builtin")
+  sortOrder Int       @default(0) @map("sort_order")
+  active    Boolean   @default(true) // ẩn/hiện trong dropdown chọn (builtin đã gán vẫn hiển thị badge)
+  createdBy Int?      @map("created_by")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedBy Int?      @map("updated_by")
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
+  deletedBy Int?      @map("deleted_by")
+
+  @@unique([entity, code])
+  @@index([entity])
+  @@map("status_options")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

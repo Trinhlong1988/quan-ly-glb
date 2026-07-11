@@ -13,6 +13,7 @@ import { Button } from '../components/Button.js';
 import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../components/Selection.js';
 import { AuditTrailHeadCells, AuditTrailCells } from '../components/AuditCells.js';
 import { exportCsv } from '../lib/exportCsv.js';
+import { TabBar, TabButton } from '../components/Tabs.js';
 
 type Tab = 'tid' | 'status';
 
@@ -34,10 +35,10 @@ export function TidConfigPage({ user }: { user: AuthUser }): JSX.Element {
         <h2 className="text-lg font-semibold text-slate-800">Cấu hình TID</h2>
         <p className="text-sm text-slate-500">Cấu hình TID (ngân hàng · đối tác · biểu phí · HKD · tài khoản nhận tiền · nguồn hồ sơ) · Trạng thái TID.</p>
       </div>
-      <div className="mb-3 flex items-center gap-1 border-b border-line">
-        <button onClick={() => setTab('tid')} className={'flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition ' + (tab === 'tid' ? 'border-brand text-brand' : 'border-transparent text-slate-500 hover:text-slate-700')}><CreditCard className="h-4 w-4" /> Cấu hình TID</button>
-        <button onClick={() => setTab('status')} className={'flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition ' + (tab === 'status' ? 'border-brand text-brand' : 'border-transparent text-slate-500 hover:text-slate-700')}><Tag className="h-4 w-4" /> Trạng thái TID</button>
-      </div>
+      <TabBar>
+        <TabButton active={tab === 'tid'} onClick={() => setTab('tid')} icon={<CreditCard className="h-4 w-4" />}>Cấu hình TID</TabButton>
+        <TabButton active={tab === 'status'} onClick={() => setTab('status')} icon={<Tag className="h-4 w-4" />}>Trạng thái TID</TabButton>
+      </TabBar>
       {tab === 'tid' && <TidTab canManage={canManage} />}
       {tab === 'status' && <StatusTab canManage={canManage} />}
     </div>

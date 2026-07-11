@@ -22,7 +22,6 @@ import {
   Coins,
   Wrench,
   ClipboardCheck,
-  Tags,
   Receipt,
   PiggyBank,
   Loader2,
@@ -45,7 +44,6 @@ import { TrashPage } from './TrashPage.js';
 import { BankConfigPage } from './BankConfigPage.js';
 import { ReceiveAccountPage } from './ReceiveAccountPage.js';
 import { DossierPage } from './DossierPage.js';
-import { IndustryConfigPage } from './IndustryConfigPage.js';
 import { CashCategoryConfigPage } from './CashCategoryConfigPage.js';
 import { FundPage } from './FundPage.js';
 import { CashEntryPage } from './CashEntryPage.js';
@@ -77,13 +75,12 @@ const MENU: MenuItem[] = [
   // PHASE K1 — gộp "Cấu hình máy POS" vào "Quản Lý Máy POS" (1 trang nhiều tab). Menu hiện với AI có
   // POS_VIEW HOẶC CONFIG_POS_SUPPLY_VIEW (hasAnyPermission) — không mất quyền của user chỉ-cấu-hình.
   { key: 'pos', label: 'Quản Lý Máy POS', icon: <HardDrive className="h-[18px] w-[18px]" />, perms: ['POS_VIEW', 'CONFIG_POS_SUPPLY_VIEW'] },
-  // R3: "Cấu hình ngân hàng" nay gồm tab "% phí" (gộp Cấu hình % phí POS cũ) → menu hiện với CONFIG_BANK_VIEW HOẶC CONFIG_FEE_VIEW.
-  { key: 'bankcfg', label: 'Cấu hình ngân hàng', icon: <Landmark className="h-[18px] w-[18px]" />, perms: ['CONFIG_BANK_VIEW', 'CONFIG_FEE_VIEW'] },
+  // R3: "Cấu hình ngân hàng" nay gồm tab "Phí mua-cài máy-bán" (gộp Cấu hình % phí POS cũ) + tab "Ngành nghề" → menu hiện với CONFIG_BANK_VIEW HOẶC CONFIG_FEE_VIEW HOẶC CONFIG_INDUSTRY_VIEW.
+  { key: 'bankcfg', label: 'Cấu hình ngân hàng', icon: <Landmark className="h-[18px] w-[18px]" />, perms: ['CONFIG_BANK_VIEW', 'CONFIG_FEE_VIEW', 'CONFIG_INDUSTRY_VIEW'] },
   { key: 'revenue', label: 'Quản Lý Doanh Thu', icon: <TrendingUp className="h-[18px] w-[18px]" />, perms: ['REVENUE_VIEW'] },
   { key: 'debt', label: 'Quản Lý Công Nợ', icon: <Coins className="h-[18px] w-[18px]" />, perms: ['DEBT_VIEW'] },
   { key: 'rcvacct', label: 'Quản Lý Tài Khoản Nhận Tiền', icon: <Wallet className="h-[18px] w-[18px]" />, perms: ['CONFIG_RCV_ACCT_VIEW'] },
   { key: 'dossier', label: 'Quản Lý Hồ Sơ HKD', icon: <FolderKanban className="h-[18px] w-[18px]" />, perms: ['CONFIG_DOSSIER_VIEW'] },
-  { key: 'industrycfg', label: 'Cấu hình ngành nghề', icon: <Tags className="h-[18px] w-[18px]" />, perms: ['CONFIG_INDUSTRY_VIEW'] },
   { key: 'cashcatcfg', label: 'Cấu hình thu – chi', icon: <Wallet className="h-[18px] w-[18px]" />, perms: ['CASHCAT_VIEW'] },
   { key: 'fund', label: 'Quỹ', icon: <PiggyBank className="h-[18px] w-[18px]" />, perms: ['FUND_VIEW'] },
   { key: 'cashthu', label: 'Phiếu thu', icon: <Receipt className="h-[18px] w-[18px]" />, perms: ['CASHENTRY_VIEW'] },
@@ -308,7 +305,6 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
           {activeItem?.key === 'bankcfg' && <BankConfigPage user={user} />}
           {activeItem?.key === 'rcvacct' && <ReceiveAccountPage user={user} />}
           {activeItem?.key === 'dossier' && <DossierPage user={user} />}
-          {activeItem?.key === 'industrycfg' && <IndustryConfigPage user={user} />}
           {activeItem?.key === 'cashcatcfg' && <CashCategoryConfigPage user={user} />}
           {activeItem?.key === 'fund' && <FundPage user={user} />}
           {activeItem?.key === 'cashthu' && <CashEntryPage user={user} kind="THU" />}
