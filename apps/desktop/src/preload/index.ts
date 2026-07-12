@@ -99,6 +99,11 @@ const api = {
   notifyPushUndelivered: () => ipcRenderer.invoke('notify:pushUndelivered'),
 
   // Cấu hình ngân hàng (G-CFG.1)
+  warehouseList: (filter: unknown) => ipcRenderer.invoke('warehouse:list', filter),
+  warehouseLite: () => ipcRenderer.invoke('warehouse:lite'),
+  warehouseCreate: (input: unknown) => ipcRenderer.invoke('warehouse:create', input),
+  warehouseUpdate: (id: number, input: unknown) => ipcRenderer.invoke('warehouse:update', { id, input }),
+  warehouseDelete: (ids: number[], password: string) => ipcRenderer.invoke('warehouse:delete', { ids, password }),
   bankList: (filter: unknown) => ipcRenderer.invoke('bank:list', filter),
   bankLite: () => ipcRenderer.invoke('bank:lite'),
   bankCreate: (input: unknown) => ipcRenderer.invoke('bank:create', input),

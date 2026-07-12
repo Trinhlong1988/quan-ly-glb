@@ -41,6 +41,10 @@ export interface TimelineEventDto {
   actorUserId: number | null;
   occurredAt: string;
   note: string | null;
+  tid: string | null;
+  fromWarehouseId: number | null; // R27 — kho xuất (giao/đổi-khách)
+  warehouseName: string | null; // "MÃ · Tên" kho
+  deliveryAddress: string | null; // địa chỉ giao (snapshot theo kho lúc giao)
 }
 
 export interface MutationResult {
@@ -153,6 +157,11 @@ export async function getDeviceTimeline(
     where: { deviceSerial: serial },
     orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }]
   });
+  // Resolve tên kho (join tại service layer — resilient soft-delete).
+  const whIds = [...new Set(events.map((e) => e.fromWarehouseId).filter((x): x is number => x != null))];
+  const whMap = new Map(
+    (await g.db.warehouse.findMany({ where: { id: { in: whIds } }, select: { id: true, code: true, name: true } })).map((w) => [w.id, `${w.code} · ${w.name}`])
+  );
   return {
     ok: true,
     data: events.map((e) => ({
@@ -165,7 +174,11 @@ export async function getDeviceTimeline(
       customerId: e.customerId,
       actorUserId: e.actorUserId,
       occurredAt: e.occurredAt.toISOString(),
-      note: e.note
+      note: e.note,
+      tid: e.tid,
+      fromWarehouseId: e.fromWarehouseId,
+      warehouseName: e.fromWarehouseId != null ? whMap.get(e.fromWarehouseId) ?? null : null,
+      deliveryAddress: e.deliveryAddress
     }))
   };
 }
@@ -231,6 +244,7 @@ export interface TransitionInput {
   note?: string | null;
   agentId?: number | null; // deploy / transferAgent target
   customerId?: number | null; // deploy target
+  fromWarehouseId?: number | null; // R27 (§4) — giao/đổi-khách: kho xuất (địa chỉ snapshot theo kho)
 }
 
 /** Vietnamese label for a rejected transition reason (R_UX_WARN). */
@@ -408,6 +422,8 @@ async function applyTransition(serial: string, event: PosEvent, input: Transitio
       let toAgentId: number | null = null;
       let customerId: number | null = null;
       let eventTid: string | null = null; // TID ghi kèm sự kiện (đổi-khách: TID đi theo máy)
+      let eventWarehouseId: number | null = null; // R27 — kho xuất (giao/đổi-khách)
+      let eventDeliveryAddress: string | null = null; // R27 — SNAPSHOT địa chỉ kho lúc giao
       if (event === 'deploy') {
         patch.currentCustomerId = input.customerId ?? null;
         patch.currentAgentId = input.agentId ?? dev.currentAgentId;
@@ -444,6 +460,14 @@ async function applyTransition(serial: string, event: PosEvent, input: Transitio
       }
       // Q-P6: reportDamage / sendRepair / receiveRepaired / transferAgent → GIỮ currentTid (không đụng).
 
+      // R27 (§4): giao/đổi-khách ghi KHO XUẤT + SNAPSHOT địa chỉ kho (chọn kho → địa chỉ theo kho).
+      if ((event === 'deploy' || event === 'changeCustomer') && input.fromWarehouseId != null) {
+        const wh = await tx.warehouse.findFirst({ where: { id: input.fromWarehouseId, deletedAt: null }, select: { id: true, address: true } });
+        if (!wh) throw new TransitionAbort({ ok: false, error: 'NOT_FOUND', message: 'Kho xuất đã chọn không tồn tại (hoặc đã bị xóa).' });
+        eventWarehouseId = wh.id;
+        eventDeliveryAddress = wh.address;
+      }
+
       await tx.posDevice.update({ where: { id: dev.id }, data: patch });
       await tx.assetEvent.create({
         data: {
@@ -455,6 +479,8 @@ async function applyTransition(serial: string, event: PosEvent, input: Transitio
           fromAgentId: dev.currentAgentId,
           toAgentId,
           customerId,
+          fromWarehouseId: eventWarehouseId,
+          deliveryAddress: eventDeliveryAddress,
           actorUserId: user.id,
           occurredAt,
           note: input.note ?? null,

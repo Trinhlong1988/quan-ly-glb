@@ -15,6 +15,7 @@ import * as posSvc from './pos-service.js';
 import * as tidSvc from './tid-service.js';
 import * as notifySvc from './notification-service.js';
 import * as bankCfgSvc from './bank-config-service.js';
+import * as whSvc from './warehouse-service.js';
 import * as statusSvc from './status-catalog-service.js';
 import * as posSupplySvc from './pos-supply-service.js';
 import * as feeCfgSvc from './fee-config-service.js';
@@ -187,6 +188,12 @@ export function registerIpc(): void {
   ipcMain.handle('notify:pushUndelivered', async () => notifySvc.pushUndeliveredZalo());
 
   // ---- Cấu hình ngân hàng (G-CFG.1 §C1–C4) ------------------------------
+  ipcMain.handle('warehouse:list', async (_e, filter: whSvc.WarehouseFilter) => whSvc.listWarehouses(filter));
+  ipcMain.handle('warehouse:lite', async () => whSvc.listWarehousesLite());
+  ipcMain.handle('warehouse:create', async (_e, input: whSvc.CreateWarehouseInput) => whSvc.createWarehouse(input));
+  ipcMain.handle('warehouse:update', async (_e, args: { id: number; input: whSvc.UpdateWarehouseInput }) => whSvc.updateWarehouse(args.id, args.input));
+  ipcMain.handle('warehouse:delete', async (_e, args: { ids: number[]; password: string }) => whSvc.deleteWarehouses(args.ids, args.password));
+
   ipcMain.handle('bank:list', async (_e, filter: bankCfgSvc.BankFilter) => bankCfgSvc.listBanks(filter));
   ipcMain.handle('bank:lite', async () => bankCfgSvc.listBanksLite());
   ipcMain.handle('bank:create', async (_e, input: bankCfgSvc.CreateBankInput) => bankCfgSvc.createBank(input));

@@ -30,6 +30,7 @@ const ACTION_LABEL: Record<AuditAction, string> = {
   TID_CREATED: 'Tạo TID', TID_UPDATED: 'Sửa TID', TID_ASSIGNED: 'Gắn TID vào máy', TID_REPLACED: 'Thay TID', TID_RECALLED: 'Thu hồi TID', TID_DELIVERED: 'Giao máy cho khách',
   ASSET_EXPORTED: 'Xuất dữ liệu tài sản',
   BANK_CREATED: 'Tạo ngân hàng', BANK_UPDATED: 'Sửa ngân hàng', BANK_DELETED: 'Xóa ngân hàng',
+  WAREHOUSE_CREATED: 'Tạo kho', WAREHOUSE_UPDATED: 'Sửa kho', WAREHOUSE_DELETED: 'Xóa kho', WAREHOUSE_PERMS_GRANTED: 'Cấp quyền danh mục kho',
   CARD_TYPE_CREATED: 'Tạo loại thẻ', CARD_TYPE_UPDATED: 'Sửa loại thẻ', CARD_TYPE_DELETED: 'Xóa loại thẻ',
   PARTNER_CREATED: 'Tạo đối tác', PARTNER_UPDATED: 'Sửa đối tác', PARTNER_DELETED: 'Xóa đối tác',
   PARTNER_BANK_LINKED: 'Liên kết đối tác ↔ ngân hàng', PARTNER_BANK_UNLINKED: 'Hủy liên kết đối tác ↔ ngân hàng',

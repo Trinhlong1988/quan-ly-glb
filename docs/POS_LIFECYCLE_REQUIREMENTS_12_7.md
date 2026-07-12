@@ -52,10 +52,16 @@
   (ghi kèm TID) + audit — tất cả trong 1 transaction, khóa tids→pos_devices. UI: menu "Đổi khách giữ máy"
   ở máy DEPLOYED + banner ngữ cảnh (khách đang giữ / TID theo khách). Chặn: đổi trùng khách / thiếu khách /
   khách không tồn tại / máy không DEPLOYED. Selftest #39.
+- [x] **#5 — Trường giao đủ (§4) qua Danh mục Kho (R27):** dựng entity `Warehouse` (mã/tên/địa chỉ/trạng thái,
+  CRUD + optlock + soft-delete + phân quyền `CONFIG_WAREHOUSE_*` + DB-evolution grant cho role cũ). Giao máy
+  (deploy) + đổi khách (changeCustomer) có dropdown **"Từ kho"** → chọn kho → **hiện địa chỉ**; AssetEvent ghi
+  `fromWarehouseId` + **SNAPSHOT** `deliveryAddress` (lịch sử không đổi khi kho sửa địa chỉ). Timeline hiện kho +
+  địa chỉ. Selftest #40 (CRUD/optlock/DB-evolution/wire giao máy/snapshot). *"Ai giao"* = actorUserId, *"ngày/giờ"*
+  = occurredAt (đã có sẵn). Menu "Danh mục kho" mới.
 
-## 8. CÒN LẠI (chưa duyệt build — chờ Mr.Long)
-- #3 **BÁN máy** (sold outright) — cần trạng thái/sự kiện riêng? Chờ Mr.Long xác nhận GLB có bán đứt máy không.
-- #4 **Thu-về-sửa giữ khách/TID:** máy DEPLOYED→(reportDamage/sendRepair) hiện GIỮ currentTid nhưng vẫn còn
-  currentCustomerId — cần rà: khi máy đi sửa có nên tạm "treo" khách? (spec §1.8-1.10).
-- #5 **Trường giao đủ (§4):** từ kho nào + địa chỉ giao — hiện deploy/changeCustomer chưa ghi kho nguồn + địa chỉ.
-- #6 **Hủy khách giữ máy** (§1.6) — gỡ khách nhưng máy vẫn ở khách? cần định nghĩa.
+## 8. CÒN LẠI (chưa duyệt build — chờ Mr.Long chốt A/B)
+- #3 **BÁN máy** (Mr.Long xác nhận "có bán"): chờ chốt **BÁN-TID** (gỡ TID trước / kèm TID) + **BÁN-GIÁ**
+  (chỉ lưu nhật ký / vào doanh thu) — đã hỏi, chờ trả lời.
+- #4 **Thu-về-sửa:** Mr.Long chốt **giữ nguyên tên khách** (không treo) = đúng hành vi hiện tại → KHÔNG đổi gì.
+- #6 **Hủy khách giữ máy** (§1.6): Mr.Long xác nhận "có tình huống này" — chờ chốt định nghĩa (đề xuất: gỡ khách,
+  máy vẫn DEPLOYED chưa về kho, TID giữ nguyên, ghi `CANCEL_CUSTOMER`).

@@ -397,6 +397,10 @@ model AssetEvent {
   actorUserId  Int?     @map("actor_user_id")
   occurredAt   DateTime @map("occurred_at") @db.Timestamptz(3) // thời gian thao tác thực (≠ createdAt)
   note         String?
+  // R27 (§4 giao đủ trường): giao/đổi-khách ghi KHO XUẤT + ĐỊA CHỈ GIAO. fromWarehouseId trỏ danh mục
+  // Kho; deliveryAddress = SNAPSHOT địa chỉ lúc giao (lưu bản sao để lịch sử không đổi khi kho sửa địa chỉ).
+  fromWarehouseId Int?  @map("from_warehouse_id")
+  deliveryAddress String? @map("delivery_address")
   beforeJson   String?  @map("before_json")
   afterJson    String?  @map("after_json")
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -404,6 +408,26 @@ model AssetEvent {
   @@index([deviceSerial])
   @@index([tid])
   @@map("asset_events")
+}
+
+// R27 (Mr.Long 12/7) — DANH MỤC KHO: mỗi kho có địa chỉ. Giao máy chọn "Từ kho" → địa chỉ tự hiện.
+// Master-data chuẩn (mã/tên/địa chỉ/trạng thái + audit + soft-delete), khuôn theo Bank/Partner.
+model Warehouse {
+  id        Int       @id @default(autoincrement())
+  code      String    @unique // Mã kho (uppercase, unique toàn cục kể cả đã xóa)
+  name      String // Tên kho
+  address   String? // Địa chỉ kho (nguồn để "chọn kho → hiện địa chỉ")
+  phone     String?
+  note      String?
+  status    String    @default("ACTIVE") // ACTIVE | INACTIVE (kho ngừng dùng — vẫn giữ, không gợi ý khi giao)
+  createdBy Int?      @map("created_by")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedBy Int?      @map("updated_by")
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
+  deletedBy Int?      @map("deleted_by")
+
+  @@map("warehouses")
 }
 
 // Gắn POS↔TID theo thời gian (§A2) — giữ lịch sử bind/unbind.

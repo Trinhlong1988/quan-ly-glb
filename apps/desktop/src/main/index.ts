@@ -386,6 +386,12 @@ app.whenReady().then(async () => {
     app.exit(code);
     return;
   }
+  if (process.env['GLB_SELFTEST'] === '40') {
+    const { runWarehouseSelfTest } = await import('./selftest-warehouse.js');
+    const code = await runWarehouseSelfTest();
+    app.exit(code);
+    return;
+  }
 
   await createWindow();
   startHousekeeping();

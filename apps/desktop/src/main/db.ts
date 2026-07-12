@@ -59,6 +59,41 @@ export async function grantIndustryPermsToExistingRoles(db: Db): Promise<number>
   return granted;
 }
 
+// ── R27 (§C kho) — Danh mục Kho: bug class "DB tiến hóa" (H7) ─────────────────
+// Quyền kho MỚI (CONFIG_WAREHOUSE_*) phải cấp cho role ĐÃ TỒN TẠI trên DB cũ. Cùng khuôn ngành nghề:
+// ADMIN tự đồng bộ đủ mỗi boot; MANAGER + WAREHOUSE cấp CẢ view+manage 1 lần; D_MANAGER chỉ view.
+// Idempotent, guard bằng cờ AppSetting để KHÔNG cấp lại quyền admin đã CHỦ ĐỘNG gỡ về sau.
+const WAREHOUSE_FULL_CODES = ['CONFIG_WAREHOUSE_VIEW', 'CONFIG_WAREHOUSE_MANAGE'];
+const WAREHOUSE_FULL_ROLES = ['MANAGER', 'WAREHOUSE'];
+const WAREHOUSE_VIEW_ROLES = ['D_MANAGER'];
+const WAREHOUSE_GRANT_FLAG = 'seed.warehousePermsGrantedV1';
+
+/**
+ * Cấp (idempotent) quyền danh mục kho cho role đã có sẵn trên DB (db-evolution).
+ * MANAGER + WAREHOUSE nhận view+manage; D_MANAGER chỉ view. Trả về số (role×quyền) vừa thêm mới.
+ * Không guard cờ ở đây (để selftest gọi trực tiếp mô phỏng DB tiến hóa); cờ guard nằm ở seedIfEmpty.
+ */
+export async function grantWarehousePermsToExistingRoles(db: Db): Promise<number> {
+  const allPerms = await db.permission.findMany({ where: { code: { in: WAREHOUSE_FULL_CODES } }, select: { id: true, code: true } });
+  const viewPerm = allPerms.filter((p) => p.code === 'CONFIG_WAREHOUSE_VIEW');
+  let granted = 0;
+  const grantSet = async (roleCode: string, perms: { id: number }[]): Promise<void> => {
+    const role = await db.role.findUnique({ where: { code: roleCode }, select: { id: true } });
+    if (!role) return;
+    for (const perm of perms) {
+      const existing = await db.rolePermission.findUnique({
+        where: { roleId_permissionId: { roleId: role.id, permissionId: perm.id } }
+      });
+      if (existing) continue;
+      await db.rolePermission.create({ data: { roleId: role.id, permissionId: perm.id } });
+      granted++;
+    }
+  };
+  for (const roleCode of WAREHOUSE_FULL_ROLES) await grantSet(roleCode, allPerms);
+  for (const roleCode of WAREHOUSE_VIEW_ROLES) await grantSet(roleCode, viewPerm);
+  return granted;
+}
+
 // ── PHASE H1 — Thu–Chi: bug class "DB tiến hóa" (H7) ──────────────────────────
 // Quyền thu-chi MỚI (CASHCAT_*) phải cấp cho role ĐÃ TỒN TẠI trên DB cũ (không chỉ role tạo mới).
 // Cùng khuôn với ngành nghề: ADMIN tự đồng bộ mỗi boot (R_ADMIN_SUPERUSER); MANAGER cấp 1 LẦN
@@ -477,6 +512,28 @@ export async function seedIfEmpty(db: Db): Promise<void> {
           action: 'INDUSTRY_PERMS_GRANTED',
           targetType: 'System',
           after: { granted, roles: INDUSTRY_PERM_TARGET_ROLES, perms: INDUSTRY_PERM_CODES }
+        });
+      }
+    }
+  }
+
+  // db-evolution (R27 kho): cấp quyền danh mục kho (CONFIG_WAREHOUSE_*) cho role CŨ 1 lần/DB (cờ
+  // AppSetting). DB mới → role vừa tạo đã có quyền qua DEFAULT_ROLE_PERMISSIONS → grant=0 (no-op an toàn).
+  {
+    const flag = await db.appSetting.findUnique({ where: { key: WAREHOUSE_GRANT_FLAG } });
+    if (!flag) {
+      const granted = await grantWarehousePermsToExistingRoles(db);
+      await db.appSetting.upsert({
+        where: { key: WAREHOUSE_GRANT_FLAG },
+        update: {},
+        create: { key: WAREHOUSE_GRANT_FLAG, value: new Date().toISOString() }
+      });
+      if (granted > 0) {
+        await writeAudit(db, {
+          actorUserId: null,
+          action: 'WAREHOUSE_PERMS_GRANTED',
+          targetType: 'System',
+          after: { granted, fullRoles: WAREHOUSE_FULL_ROLES, viewRoles: WAREHOUSE_VIEW_ROLES, perms: WAREHOUSE_FULL_CODES }
         });
       }
     }

@@ -171,6 +171,10 @@ export interface TimelineEventDto {
   actorUserId: number | null;
   occurredAt: string;
   note: string | null;
+  tid: string | null;
+  fromWarehouseId: number | null;
+  warehouseName: string | null;
+  deliveryAddress: string | null;
 }
 export interface TidDto {
   id: number;
@@ -299,6 +303,7 @@ export interface TransitionInput {
   note?: string | null;
   agentId?: number | null;
   customerId?: number | null;
+  fromWarehouseId?: number | null;
 }
 export interface TidFilter {
   search?: string;
@@ -388,6 +393,44 @@ export interface AuditTrail {
   updatedBy: number | null;
   updatedByName: string | null;
   updatedAt: string;
+}
+export interface WarehouseDto extends AuditTrail {
+  id: number;
+  code: string;
+  name: string;
+  address: string | null;
+  phone: string | null;
+  note: string | null;
+  status: string;
+}
+export interface WarehouseLite {
+  id: number;
+  code: string;
+  name: string;
+  address: string | null;
+}
+export interface WarehouseFilter {
+  search?: string;
+  status?: string;
+  fromDate?: string;
+  toDate?: string;
+}
+export interface CreateWarehouseInput {
+  code: string;
+  name: string;
+  address?: string | null;
+  phone?: string | null;
+  note?: string | null;
+  status?: string;
+}
+export interface UpdateWarehouseInput {
+  code?: string;
+  name?: string;
+  address?: string | null;
+  phone?: string | null;
+  note?: string | null;
+  status?: string;
+  expectedUpdatedAt?: string | null;
 }
 export interface BankDto extends AuditTrail {
   id: number;
@@ -1271,6 +1314,13 @@ export interface GlbApi {
 
   notifyUndeliveredSummary(): Promise<{ ok: boolean; data?: UndeliveredSummary; error?: string; message?: string }>;
   notifyPushUndelivered(): Promise<{ ok: boolean; stub: true; message?: string; error?: string }>;
+
+  // ── Danh mục Kho (R27) ──
+  warehouseList(filter: WarehouseFilter): Promise<ListResult<WarehouseDto>>;
+  warehouseLite(): Promise<ListResult<WarehouseLite>>;
+  warehouseCreate(input: CreateWarehouseInput): Promise<MutationOutcome>;
+  warehouseUpdate(id: number, input: UpdateWarehouseInput): Promise<MutationOutcome>;
+  warehouseDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
 
   // ── Cấu hình ngân hàng (G-CFG.1 §C1–C4) ──
   bankList(filter: BankFilter): Promise<ListResult<BankDto>>;

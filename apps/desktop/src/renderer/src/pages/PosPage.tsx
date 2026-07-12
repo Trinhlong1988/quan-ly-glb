@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Loader2, HardDrive, History, Wrench, Download, List, PackagePlus, Building2, Cpu, Tag, Trash2 } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate, fmtTimeSec } from '@glb/shared';
-import type { PosDto, TimelineEventDto, CustomerDto, LiteRef } from '../../../preload/index.d';
+import type { PosDto, TimelineEventDto, CustomerDto, LiteRef, WarehouseLite } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
 import { Modal } from '../components/Modal.js';
 import { Button } from '../components/Button.js';
@@ -335,6 +335,9 @@ function TimelineModal({ device, onClose }: { device: PosDto; onClose: () => voi
                 )}
               </div>
               <div className="mt-1 text-xs text-slate-500">{fmtDate(e.occurredAt)} {fmtTimeSec(e.occurredAt)}</div>
+              {e.warehouseName && (
+                <div className="mt-0.5 text-xs text-slate-500">Từ kho: <span className="font-medium text-slate-700">{e.warehouseName}</span>{e.deliveryAddress ? ` — ${e.deliveryAddress}` : ''}</div>
+              )}
               {e.note && <div className="mt-0.5 text-sm text-slate-600">{e.note}</div>}
             </li>
           ))}
@@ -358,16 +361,22 @@ function TransitionModal({ device, event, onClose, onDone }: { device: PosDto; e
   const toast = useToast();
   const [customers, setCustomers] = useState<CustomerDto[]>([]);
   const [customerId, setCustomerId] = useState('');
+  const [warehouses, setWarehouses] = useState<WarehouseLite[]>([]);
+  const [warehouseId, setWarehouseId] = useState('');
   const [occurredAt, setOccurredAt] = useState('');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [confirmRetire, setConfirmRetire] = useState(false);
 
   const needCustomer = event === 'deploy' || event === 'changeCustomer';
+  // R27: giao / đổi-khách ghi "Từ kho" (chọn kho → hiện địa chỉ).
+  const needWarehouse = event === 'deploy' || event === 'changeCustomer';
+  const selectedWarehouse = warehouses.find((w) => String(w.id) === warehouseId);
 
   useEffect(() => {
     if (needCustomer) window.api.customerList({}).then((r) => r.ok && r.data && setCustomers(r.data));
-  }, [needCustomer]);
+    if (needWarehouse) window.api.warehouseLite().then((r) => r.ok && r.data && setWarehouses(r.data));
+  }, [needCustomer, needWarehouse]);
 
   async function run(password?: string): Promise<void> {
     if (needCustomer && !customerId) return toast.alert(event === 'changeCustomer' ? 'Phải chọn khách hàng mới.' : 'Phải chọn khách hàng nhận máy.');
@@ -376,7 +385,8 @@ function TransitionModal({ device, event, onClose, onDone }: { device: PosDto; e
       occurredAt: occurredAt ? new Date(occurredAt).toISOString() : null,
       note: note || null,
       customerId: customerId ? Number(customerId) : null,
-      agentId: null
+      agentId: null,
+      fromWarehouseId: needWarehouse && warehouseId ? Number(warehouseId) : null
     };
     let res;
     switch (event) {
@@ -438,6 +448,24 @@ function TransitionModal({ device, event, onClose, onDone }: { device: PosDto; e
                 </option>
               ))}
             </select>
+          </Field>
+        )}
+        {needWarehouse && (
+          <Field label="Từ kho" hint="Chọn kho xuất — địa chỉ kho sẽ hiện bên dưới">
+            <select className={inputCls} value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
+              <option value="">— Không chọn kho —</option>
+              {warehouses.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.code} · {w.name}
+                </option>
+              ))}
+            </select>
+            {selectedWarehouse && (
+              <div className="mt-1.5 rounded-md bg-appbg px-3 py-2 text-xs text-slate-600">
+                <span className="text-slate-400">Địa chỉ giao: </span>
+                {selectedWarehouse.address || <span className="italic text-slate-400">kho chưa có địa chỉ</span>}
+              </div>
+            )}
           </Field>
         )}
         <Field label="Thời gian thao tác" hint="Bỏ trống = thời điểm hiện tại">

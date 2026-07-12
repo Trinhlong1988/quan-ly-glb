@@ -56,6 +56,9 @@ export const PERMISSIONS: PermissionDef[] = [
   // ── G-CFG.6 (§9) — Cấu hình TID ──
   { code: 'CONFIG_TID_VIEW', name: 'Xem cấu hình TID (trạng thái + TID)', group: 'Cấu hình TID' },
   { code: 'CONFIG_TID_MANAGE', name: 'Quản lý cấu hình TID (trạng thái + TID)', group: 'Cấu hình TID' },
+  // ── R27 (§C kho) — Danh mục Kho ──
+  { code: 'CONFIG_WAREHOUSE_VIEW', name: 'Xem danh mục kho', group: 'Danh mục kho' },
+  { code: 'CONFIG_WAREHOUSE_MANAGE', name: 'Quản lý danh mục kho (thêm/sửa/xóa)', group: 'Danh mục kho' },
   // ── G-CFG.7 (§11 Pha I1) — Cấu hình ngành nghề (master) ──
   { code: 'CONFIG_INDUSTRY_VIEW', name: 'Xem cấu hình ngành nghề', group: 'Cấu hình ngành nghề' },
   { code: 'CONFIG_INDUSTRY_CREATE', name: 'Tạo ngành nghề', group: 'Cấu hình ngành nghề' },
@@ -164,6 +167,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'CONFIG_INDUSTRY_CREATE',
     'CONFIG_INDUSTRY_UPDATE',
     'CONFIG_INDUSTRY_DELETE',
+    // R27: managers quản lý danh mục kho.
+    'CONFIG_WAREHOUSE_VIEW',
+    'CONFIG_WAREHOUSE_MANAGE',
     // PHASE H1: managers quản lý danh mục thu – chi.
     'CASHCAT_VIEW',
     'CASHCAT_CREATE',
@@ -208,13 +214,15 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'STORAGE_VIEW',
     'STORAGE_CLEANUP'
   ],
-  D_MANAGER: ['DASHBOARD_VIEW', 'USER_READ', 'ROLE_READ', 'CUSTOMER_VIEW', 'POS_VIEW', 'TID_VIEW', 'CONFIG_BANK_VIEW'],
+  D_MANAGER: ['DASHBOARD_VIEW', 'USER_READ', 'ROLE_READ', 'CUSTOMER_VIEW', 'POS_VIEW', 'TID_VIEW', 'CONFIG_BANK_VIEW', 'CONFIG_WAREHOUSE_VIEW'],
   ACCOUNTANT: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW', 'CONFIG_BANK_VIEW', 'CONFIG_FEE_VIEW', 'CONFIG_FEE_MANAGE', 'CONFIG_RCV_ACCT_VIEW', 'CONFIG_RCV_ACCT_MANAGE', 'CONFIG_DOSSIER_VIEW', 'CONFIG_DOSSIER_MANAGE', 'REVENUE_VIEW', 'REVENUE_MANAGE', 'DEBT_VIEW', 'DEBT_SETTLE', 'DEBT_CLASSIFY', 'BILL_CANCEL_REQUEST',
     // PHASE H2-core: kế toán = vai chính thu-chi (quỹ + phiếu thu/chi + báo cáo dòng tiền).
     'FUND_VIEW', 'FUND_CREATE', 'FUND_UPDATE', 'FUND_DELETE', 'CASHENTRY_VIEW', 'CASHENTRY_CREATE', 'CASHENTRY_CANCEL'],
   TECHNICIAN: ['DASHBOARD_VIEW', 'POS_VIEW'],
   SUPPORT: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW'],
   WAREHOUSE: ['DASHBOARD_VIEW', 'POS_VIEW', 'TID_VIEW', 'CONFIG_POS_SUPPLY_VIEW', 'CONFIG_POS_SUPPLY_MANAGE', 'CONFIG_TID_VIEW', 'CONFIG_TID_MANAGE',
+    // R27: kho vận quản lý danh mục kho.
+    'CONFIG_WAREHOUSE_VIEW', 'CONFIG_WAREHOUSE_MANAGE',
     // R34: kho vận hành TID/POS → được TẠO yêu cầu hủy (duyệt vẫn do Admin/Manager).
     'TID_CANCEL_REQUEST', 'POS_CANCEL_REQUEST'],
   SALES: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW', 'CUSTOMER_CREATE'],
