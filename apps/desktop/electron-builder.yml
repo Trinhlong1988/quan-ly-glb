@@ -48,9 +48,13 @@ nsis:
   installerHeader: build/installerHeader.bmp
   installerSidebar: build/installerSidebar.bmp
   uninstallerSidebar: build/installerSidebar.bmp
+  # R42 fix (Mr.Long 12/7): NSIS wizard chrome (Back/Next/Install/Completing) VẪN tiếng Anh vì
+  # electron-builder khi multiLanguageInstaller:false ÉP langs=["en_US"] (bỏ qua installerLanguages —
+  # xem app-builder-lib/out/targets/nsis/nsisLang.js:17-28). Để bộ cài TIẾNG VIỆT: multiLanguageInstaller=true
+  # với DUY NHẤT 1 ngôn ngữ vi_VN → MUI_LANGUAGE "Vietnamese"; chỉ 1 ngôn ngữ nên NSIS KHÔNG hiện hộp chọn.
   installerLanguages:
     - vi_VN
-  multiLanguageInstaller: false
+  multiLanguageInstaller: true
   runAfterFinish: true
   createDesktopShortcut: true
   createStartMenuShortcut: true

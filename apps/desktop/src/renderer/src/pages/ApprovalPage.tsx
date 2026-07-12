@@ -176,13 +176,25 @@ export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
       )}
 
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
-        <table className="w-full text-sm">
+        {/* Mr.Long 12/7 — table-fixed + colgroup: cột trước "Lý do hủy" (chọn+Mã bill+Số tiền = 21rem) khớp
+            đúng cột trước của bảng "Yêu cầu hủy dữ liệu" (Loại+Đối tượng = 21rem) → 4 cột chung THẲNG HÀNG 2 bảng.
+            Số tiền cạnh Mã bill (không xa), có khoảng cách với Lý do hủy (không sát). */}
+        <table className="w-full table-fixed text-sm">
+          <colgroup>
+            <col className="w-12" />
+            <col className="w-32" />
+            <col className="w-40" />
+            <col />
+            <col className="w-44" />
+            <col className="w-40" />
+            <col className="w-24" />
+          </colgroup>
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>
               <SelectAllCell ids={rows.map((r) => r.id)} sel={sel} />
               <th className="px-3 py-3">Mã bill</th>
               <th className="px-3 py-3 text-right">Số tiền</th>
-              <th className="px-3 py-3">Lý do hủy</th>
+              <th className="px-3 py-3 pl-5">Lý do hủy</th>
               <th className="px-3 py-3">Người tạo yêu cầu</th>
               <th className="px-3 py-3">Thời gian</th>
               <th className="px-3 py-3 text-right">Thao tác</th>
@@ -198,7 +210,7 @@ export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
                 <SelectCell id={r.id} sel={sel} />
                 <td className="px-3 py-3 font-mono text-xs font-medium text-slate-700 whitespace-nowrap">{r.billCode ?? `#${r.transactionId}`}</td>
                 <td className="px-3 py-3 text-right tabular-nums text-slate-800 whitespace-nowrap">{money(r.amount)}</td>
-                <td className="px-3 py-3 text-slate-600">{r.reason}</td>
+                <td className="px-3 py-3 pl-5 text-slate-600">{r.reason}</td>
                 <td className="px-3 py-3 text-slate-600">{r.requestedByName ?? `#${r.requestedBy}`}</td>
                 <td className="px-3 py-3 text-xs text-slate-500">{fmtDate(r.requestedAt)}</td>
                 <td className="px-3 py-3">
@@ -220,12 +232,22 @@ export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
         <div className={canBill ? 'mt-6' : ''}>
           <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Yêu cầu hủy dữ liệu (TID · Máy POS · Khách hàng · Nhân sự)</div>
           <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
-            <table className="w-full text-sm">
+            {/* Mr.Long 12/7 — colgroup KHỚP bảng hủy bill: Loại(6rem)+Đối tượng(15rem)=21rem = chọn+Mã bill+Số tiền
+                → 4 cột chung (Lý do hủy·Người tạo·Thời gian·Thao tác) THẲNG HÀNG với bảng trên. */}
+            <table className="w-full table-fixed text-sm">
+              <colgroup>
+                <col className="w-24" />
+                <col className="w-60" />
+                <col />
+                <col className="w-44" />
+                <col className="w-40" />
+                <col className="w-24" />
+              </colgroup>
               <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
                 <tr>
                   <th className="px-3 py-3">Loại</th>
                   <th className="px-3 py-3">Đối tượng</th>
-                  <th className="px-3 py-3">Lý do hủy</th>
+                  <th className="px-3 py-3 pl-5">Lý do hủy</th>
                   <th className="px-3 py-3">Người tạo yêu cầu</th>
                   <th className="px-3 py-3">Thời gian</th>
                   <th className="px-3 py-3 text-right">Thao tác</th>
@@ -240,7 +262,7 @@ export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
                   <tr key={`${r.entityType}-${r.id}`} className="hover:bg-appbg/60">
                     <td className="px-3 py-3"><span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">{r.entityTypeLabel}</span></td>
                     <td className="px-3 py-3 text-slate-700">{r.entityLabel ?? `#${r.entityId}`}</td>
-                    <td className="px-3 py-3 text-slate-600">{r.reason}</td>
+                    <td className="px-3 py-3 pl-5 text-slate-600">{r.reason}</td>
                     <td className="px-3 py-3 text-slate-600">{r.requestedByName ?? `#${r.requestedBy}`}</td>
                     <td className="px-3 py-3 text-xs text-slate-500">{fmtDate(r.requestedAt)}</td>
                     <td className="px-3 py-3">
