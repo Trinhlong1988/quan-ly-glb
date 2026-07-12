@@ -115,6 +115,16 @@ export async function setTidSellFees(input: SetTidSellFeesInput): Promise<Mutati
       return { ok: false, error: 'CARD_BANK_MISMATCH', message: `Loại thẻ "${c.name}" không thuộc ngân hàng của TID này.` };
     if (e.phiBan != null && (!Number.isFinite(e.phiBan) || e.phiBan < 0 || e.phiBan > 100))
       return { ok: false, error: 'VALIDATION', message: 'Phí bán phải trong khoảng 0–100%.' };
+    // R48 Pha 3 — phí bán thực tế cũng KHÔNG được < phí cài máy (chênh bán âm → doanh thu âm).
+    if (e.phiBan != null && tid.partnerId != null) {
+      const rates = await db.feeRate.findMany({ where: { partnerId: tid.partnerId, cardTypeId: e.cardTypeId, deletedAt: null } });
+      const rate = pickEffectiveRate(rates, new Date());
+      if (rate) {
+        const phiCaiMayPct = milliToPct(rate.phiCaiMay);
+        if (e.phiBan < phiCaiMayPct)
+          return { ok: false, error: 'VALIDATION', message: `Phí bán (${e.phiBan}%) phải ≥ phí cài máy (${phiCaiMayPct}%) — chênh bán không được âm.` };
+      }
+    }
   }
 
   const now = new Date();

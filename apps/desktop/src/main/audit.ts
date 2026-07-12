@@ -14,7 +14,11 @@ export interface AuditInput {
 
 const DEVICE_INFO = `${os.hostname()} (${os.platform()} ${os.release()})`;
 
-export async function writeAudit(db: Db, input: AuditInput): Promise<void> {
+// R48 Pha 3 — nhận CẢ Db đầy đủ LẪN client trong $transaction (chỉ cần .auditLog): cho phép ghi audit
+// TRONG cùng transaction với thao tác tiền → tiền + log commit/rollback ATOMIC (không mất log nếu crash giữa chừng).
+type AuditDb = Pick<Db, 'auditLog'>;
+
+export async function writeAudit(db: AuditDb, input: AuditInput): Promise<void> {
   try {
     await db.auditLog.create({
       data: {

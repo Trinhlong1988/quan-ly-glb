@@ -28,9 +28,6 @@ export interface MutationResult {
   id?: number;
 }
 
-function isUniqueViolation(e: unknown): boolean {
-  return typeof e === 'object' && e !== null && (e as { code?: string }).code === 'P2002';
-}
 async function resolveUserNames(db: Db, ids: (number | null | undefined)[]): Promise<Map<number, string>> {
   const uniq = [...new Set(ids.filter((x): x is number => typeof x === 'number'))];
   const map = new Map<number, string>();
@@ -238,34 +235,35 @@ export async function createTransaction(input: CreateTransactionInput): Promise<
     }
   }
 
-  const created = await db.transaction.create({
-    data: {
-      tidId: tid.id,
-      customerId: customerId ?? null,
-      cardTypeId: input.cardTypeId,
-      amount,
-      partnerMarginMilli: fee.fee.partnerMarginMilli,
-      sellMarginMilli: fee.fee.sellMarginMilli,
-      revenuePartner: rev.revenuePartner,
-      revenueSell: rev.revenueSell,
-      revenueAmount: rev.revenueAmount,
-      txnDate,
-      note: input.note?.trim() || null,
-      createdBy: user.id
-    }
-  });
-  const code = 'GD' + String(created.id).padStart(5, '0');
-  try {
-    await db.transaction.update({ where: { id: created.id }, data: { code } });
-  } catch (e) {
-    if (!isUniqueViolation(e)) throw e;
-  }
-  await writeAudit(db, {
-    actorUserId: user.id,
-    action: 'TRANSACTION_CREATED',
-    targetType: 'Transaction',
-    targetId: String(created.id),
-    after: auditSnapshot({ code, tidId: tid.id, cardTypeId: input.cardTypeId, amount, revenueAmount: rev.revenueAmount })
+  // R48 Pha 3 — create + gán mã + audit ATOMIC trong 1 transaction (không còn cửa sổ: GD tạo xong mà chưa có
+  // mã / chưa có audit nếu crash giữa chừng). Mã vẫn = GD + id (giữ định dạng cũ; id unique → mã unique).
+  const created = await db.$transaction(async (tx) => {
+    const c = await tx.transaction.create({
+      data: {
+        tidId: tid.id,
+        customerId: customerId ?? null,
+        cardTypeId: input.cardTypeId,
+        amount,
+        partnerMarginMilli: fee.fee.partnerMarginMilli,
+        sellMarginMilli: fee.fee.sellMarginMilli,
+        revenuePartner: rev.revenuePartner,
+        revenueSell: rev.revenueSell,
+        revenueAmount: rev.revenueAmount,
+        txnDate,
+        note: input.note?.trim() || null,
+        createdBy: user.id
+      }
+    });
+    const code = 'GD' + String(c.id).padStart(5, '0');
+    await tx.transaction.update({ where: { id: c.id }, data: { code } });
+    await writeAudit(tx, {
+      actorUserId: user.id,
+      action: 'TRANSACTION_CREATED',
+      targetType: 'Transaction',
+      targetId: String(c.id),
+      after: auditSnapshot({ code, tidId: tid.id, cardTypeId: input.cardTypeId, amount, revenueAmount: rev.revenueAmount })
+    });
+    return c;
   });
   return { ok: true, id: created.id };
 }
@@ -776,19 +774,19 @@ export async function writeOffBadDebt(transactionId: number, actorPassword: stri
           note: `Ghi giảm nợ xấu GD #${transactionId} (nợ còn lại net ${net.total}đ)`, status: 'POSTED', createdBy: user.id
         }
       });
+      // R48 Pha 3 — GHI AUDIT TRONG transaction: tiền (write-off + phiếu chi) và log commit/rollback ATOMIC.
+      await writeAudit(tx, {
+        actorUserId: user.id,
+        action: 'DEBT_WRITTEN_OFF',
+        targetType: 'Transaction',
+        targetId: String(transactionId),
+        after: auditSnapshot({ cashEntryId: entry.id, amountNet: net.total, partner: net.partner, sell: net.sell, categoryId: badCat.id })
+      });
       return { entryId: entry.id, net };
     });
   } catch (e) {
     if (e instanceof TxGuardError) return { ok: false, error: e.code, message: e.userMessage };
     throw e;
   }
-
-  await writeAudit(db, {
-    actorUserId: user.id,
-    action: 'DEBT_WRITTEN_OFF',
-    targetType: 'Transaction',
-    targetId: String(transactionId),
-    after: auditSnapshot({ cashEntryId: result.entryId, amountNet: result.net.total, partner: result.net.partner, sell: result.net.sell, categoryId: badCat.id })
-  });
   return { ok: true, id: result.entryId };
 }

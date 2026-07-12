@@ -278,6 +278,9 @@ export async function setFeeRate(input: SetFeeRateInput): Promise<MutationResult
   if (phiMua === null) return { ok: false, error: 'VALIDATION', message: 'Phí mua không hợp lệ (≥0, tối đa 3 số thập phân).' };
   if (phiCaiMay === null) return { ok: false, error: 'VALIDATION', message: 'Phí cài máy không hợp lệ (≥0, tối đa 3 số thập phân).' };
   if (phiBan === null) return { ok: false, error: 'VALIDATION', message: 'Phí bán không hợp lệ (≥0, tối đa 3 số thập phân).' };
+  // R48 Pha 3 — chặn chênh ÂM (doanh thu âm + công nợ lệch): CL_NCC = phiMua−phiCaiMay ≥ 0, CL_KH = phiBan−phiCaiMay ≥ 0.
+  if (phiMua < phiCaiMay) return { ok: false, error: 'VALIDATION', message: 'Phí mua phải ≥ phí cài máy (chênh đối tác không được âm).' };
+  if (phiBan < phiCaiMay) return { ok: false, error: 'VALIDATION', message: 'Phí bán phải ≥ phí cài máy (chênh bán không được âm).' };
   const effRaw = input.effectiveFrom !== undefined ? parseDate(input.effectiveFrom) : new Date();
   if (!effRaw) return { ok: false, error: 'VALIDATION', message: 'Ngày hiệu lực không hợp lệ.' };
   const effectiveFrom = startOfDayLocal(effRaw);

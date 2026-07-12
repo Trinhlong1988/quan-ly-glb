@@ -341,7 +341,7 @@ export async function createCashEntry(input: CreateCashEntryInput): Promise<Muta
   const prefix = kind === 'THU' ? 'PT' : 'PC';
   const created = await db.$transaction(async (tx) => {
     const code = await nextCode(prefix, tx);
-    return tx.cashEntry.create({
+    const c = await tx.cashEntry.create({
       data: {
         code,
         kind,
@@ -359,13 +359,15 @@ export async function createCashEntry(input: CreateCashEntryInput): Promise<Muta
         createdBy: user.id
       }
     });
-  });
-  await writeAudit(db, {
-    actorUserId: user.id,
-    action: 'CASH_ENTRY_CREATED',
-    targetType: 'CashEntry',
-    targetId: String(created.id),
-    after: auditSnapshot({ code: created.code, kind, categoryId: input.categoryId, fundId: input.fundId, amount, method, entryDate: entryDate.toISOString(), status: 'POSTED' })
+    // R48 Pha 3 — audit TRONG transaction (tiền + log atomic).
+    await writeAudit(tx, {
+      actorUserId: user.id,
+      action: 'CASH_ENTRY_CREATED',
+      targetType: 'CashEntry',
+      targetId: String(c.id),
+      after: auditSnapshot({ code: c.code, kind, categoryId: input.categoryId, fundId: input.fundId, amount, method, entryDate: entryDate.toISOString(), status: 'POSTED' })
+    });
+    return c;
   });
   return { ok: true, id: created.id };
 }
@@ -536,20 +538,20 @@ export async function createDebtReceipt(input: CreateDebtReceiptInput): Promise<
           await tx.transaction.update({ where: { id: txnId }, data: { settled: fullySettled, settledAt: fullySettled ? new Date() : null, updatedBy: user.id } });
         }
       }
+      // R48 Pha 3 — audit TRONG transaction (phiếu thu công nợ + đối soát + log atomic).
+      await writeAudit(tx, {
+        actorUserId: user.id,
+        action: 'CASH_DEBT_RECEIPT_CREATED',
+        targetType: 'CashEntry',
+        targetId: String(entry.id),
+        after: auditSnapshot({ code: entry.code, amount: total, categoryId: input.categoryId, fundId: input.fundId, method, entryDate: entryDate.toISOString(), customerId: input.customerId ?? null, partnerId: input.partnerId ?? null, lines: lines.length, transactions: txnIds })
+      });
       return entry;
     });
   } catch (e) {
     if (e instanceof TxGuardError) return { ok: false, error: e.code, message: e.userMessage };
     throw e;
   }
-
-  await writeAudit(db, {
-    actorUserId: user.id,
-    action: 'CASH_DEBT_RECEIPT_CREATED',
-    targetType: 'CashEntry',
-    targetId: String(created.id),
-    after: auditSnapshot({ code: created.code, amount: total, categoryId: input.categoryId, fundId: input.fundId, method, entryDate: entryDate.toISOString(), customerId: input.customerId ?? null, partnerId: input.partnerId ?? null, lines: lines.length, transactions: txnIds })
-  });
   return { ok: true, id: created.id };
 }
 
@@ -612,18 +614,19 @@ export async function cancelCashEntry(id: number, reason: string, password: stri
           }
         }
       }
+      // R48 Pha 3 — audit TRONG transaction (hủy phiếu + hoàn đối soát + log atomic).
+      await writeAudit(txc, {
+        actorUserId: user.id,
+        action: 'CASH_ENTRY_CANCELLED',
+        targetType: 'CashEntry',
+        targetId: String(id),
+        before: auditSnapshot({ code: row.code, kind: row.kind, amount: row.amount, status: row.status }),
+        after: auditSnapshot({ status: 'CANCELLED', cancelReason: r })
+      });
     });
   } catch (e) {
     if (e instanceof TxGuardError) return { ok: false, error: e.code, message: e.userMessage };
     throw e;
   }
-  await writeAudit(db, {
-    actorUserId: user.id,
-    action: 'CASH_ENTRY_CANCELLED',
-    targetType: 'CashEntry',
-    targetId: String(id),
-    before: auditSnapshot({ code: row.code, kind: row.kind, amount: row.amount, status: row.status }),
-    after: auditSnapshot({ status: 'CANCELLED', cancelReason: r })
-  });
   return { ok: true, id };
 }
