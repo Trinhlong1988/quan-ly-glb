@@ -2,7 +2,7 @@
 // (sandbox must be off so the preload can use ipcRenderer via require in electron-vite CJS preload).
 import './bigint-json.js'; // R48 — PHẢI import ĐẦU TIÊN: dạy JSON.stringify serialize BigInt (cột tiền int8).
 import { join } from 'node:path';
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, screen, shell } from 'electron';
 import { initDb } from './db.js';
 import { registerIpc } from './ipc.js';
 import * as auth from './auth-service.js';
@@ -13,12 +13,16 @@ const isDev = !app.isPackaged;
 // `win` cục bộ trong createWindow không gửi được từ nơi khác.
 let mainWindow: BrowserWindow | null = null;
 
+// Mr.Long 12/7 — "mở app bị bé": cửa sổ +20% (1180×760 → 1416×912) + zoom chữ 1.15 (to đều, không lệch design).
+// Chống tràn màn nhỏ: kẹp theo vùng làm việc màn chính (trừ ~48px cho taskbar/viền).
+const BASE_ZOOM = 1.15;
 async function createWindow(): Promise<void> {
+  const wa = screen.getPrimaryDisplay().workAreaSize;
   const win = new BrowserWindow({
-    width: 1180,
-    height: 760,
-    minWidth: 960,
-    minHeight: 640,
+    width: Math.min(1416, wa.width - 48),
+    height: Math.min(912, wa.height - 48),
+    minWidth: Math.min(1120, wa.width - 48),
+    minHeight: Math.min(720, wa.height - 48),
     show: false,
     autoHideMenuBar: true,
     backgroundColor: '#F4F6FA',
@@ -37,6 +41,8 @@ async function createWindow(): Promise<void> {
   });
 
   win.once('ready-to-show', () => win.show());
+  // Zoom chữ +15% đồng đều (áp sau mỗi lần tải xong để dính chắc, kể cả reload SPA).
+  win.webContents.on('did-finish-load', () => win.webContents.setZoomFactor(BASE_ZOOM));
 
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
