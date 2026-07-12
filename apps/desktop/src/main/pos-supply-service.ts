@@ -8,6 +8,7 @@ import type { Db } from '@glb/database';
 import { requirePermission, verifyActorPassword } from './guard.js';
 import { writeAudit } from './audit.js';
 import { dateRange } from './customer-service.js';
+import { staleGuard } from './optimistic-lock.js';
 
 const VIEW = 'CONFIG_POS_SUPPLY_VIEW';
 const MANAGE = 'CONFIG_POS_SUPPLY_MANAGE';
@@ -90,6 +91,7 @@ export interface UpdateSupplierInput {
   address?: string | null;
   phone?: string | null;
   contactPerson?: string | null;
+  expectedUpdatedAt?: string | null; // R48 #2 optimistic-lock — mốc updatedAt client giữ lúc mở form
 }
 
 export async function listSuppliers(filter: SupplierFilter = {}): Promise<{ ok: boolean; data?: SupplierDto[]; error?: string; message?: string }> {
@@ -148,6 +150,8 @@ export async function updateSupplier(id: number, input: UpdateSupplierInput): Pr
   const { db, user } = g;
   const row = await db.supplier.findUnique({ where: { id } });
   if (!row || row.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Nhà cung cấp không tồn tại.' };
+  const stale = staleGuard(row.updatedAt, input.expectedUpdatedAt);
+  if (stale) return stale;
   const name = input.name !== undefined ? input.name.trim() : row.name;
   const code = input.code !== undefined ? input.code.trim().toUpperCase() : row.code;
   if (!name) return { ok: false, error: 'VALIDATION', message: 'Tên nhà cung cấp không được để trống.' };
@@ -218,6 +222,7 @@ export interface CreatePosModelInput {
 export interface UpdatePosModelInput {
   code?: string;
   name?: string;
+  expectedUpdatedAt?: string | null; // R48 #2 optimistic-lock — mốc updatedAt client giữ lúc mở form
 }
 
 export async function listPosModels(filter: PosModelFilter = {}): Promise<{ ok: boolean; data?: PosModelDto[]; error?: string; message?: string }> {
@@ -269,6 +274,8 @@ export async function updatePosModel(id: number, input: UpdatePosModelInput): Pr
   const { db, user } = g;
   const row = await db.posModel.findUnique({ where: { id } });
   if (!row || row.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Chủng loại máy POS không tồn tại.' };
+  const stale = staleGuard(row.updatedAt, input.expectedUpdatedAt);
+  if (stale) return stale;
   const code = input.code !== undefined ? input.code.trim().toUpperCase() : row.code;
   const name = input.name !== undefined ? input.name.trim() : row.name;
   if (!code) return { ok: false, error: 'VALIDATION', message: 'Mã máy POS không được để trống.' };
@@ -321,6 +328,7 @@ export interface CreateIntakeStatusInput {
 }
 export interface UpdateIntakeStatusInput {
   name?: string;
+  expectedUpdatedAt?: string | null; // R48 #2 optimistic-lock — mốc updatedAt client giữ lúc mở form
 }
 
 export async function listIntakeStatuses(): Promise<{ ok: boolean; data?: IntakeStatusDto[]; error?: string; message?: string }> {
@@ -356,6 +364,8 @@ export async function updateIntakeStatus(id: number, input: UpdateIntakeStatusIn
   const { db, user } = g;
   const row = await db.posIntakeStatus.findUnique({ where: { id } });
   if (!row || row.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Trạng thái nhập máy không tồn tại.' };
+  const stale = staleGuard(row.updatedAt, input.expectedUpdatedAt);
+  if (stale) return stale;
   const name = input.name !== undefined ? input.name.trim() : row.name;
   if (!name) return { ok: false, error: 'VALIDATION', message: 'Tên trạng thái không được để trống.' };
   if (name !== row.name) {
@@ -437,6 +447,7 @@ export interface UpdatePosIntakeInput {
   importPrice?: number;
   importedAt?: string;
   note?: string | null;
+  expectedUpdatedAt?: string | null; // R48 #2 optimistic-lock — mốc updatedAt client giữ lúc mở form
 }
 
 /** Kiểm tra giá nhập: số nguyên ≥ 0 (VND đồng). */
@@ -577,6 +588,8 @@ export async function updatePosIntake(id: number, input: UpdatePosIntakeInput): 
   const { db, user } = g;
   const row = await db.posIntake.findUnique({ where: { id } });
   if (!row || row.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Máy POS nhập kho không tồn tại.' };
+  const stale = staleGuard(row.updatedAt, input.expectedUpdatedAt);
+  if (stale) return stale;
   const posModelId = input.posModelId ?? row.posModelId;
   const intakeStatusId = input.intakeStatusId ?? row.intakeStatusId;
   const supplierId = input.supplierId ?? row.supplierId; // cho phép chuyển NCC (§C8 b2)

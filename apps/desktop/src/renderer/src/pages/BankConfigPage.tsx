@@ -7,6 +7,7 @@ import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate, fmtTime } from '@glb/shared';
 import type { BankDto, CardTypeDto, PartnerDto, PartnerBankMatrix } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
+import { isStaleWrite, STALE_TITLE } from '../lib/optlock.js';
 import { Modal } from '../components/Modal.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { Field, inputCls } from '../components/Field.js';
@@ -175,9 +176,10 @@ function BankForm({ mode, row, onClose, onSaved }: { mode: 'create' | 'edit'; ro
     if (!name.trim()) return toast.alert('Tên ngân hàng bắt buộc.', 'Thiếu thông tin');
     if (!code.trim()) return toast.alert('Mã ngân hàng bắt buộc.', 'Thiếu thông tin');
     setBusy(true);
-    const res = mode === 'edit' && row ? await window.api.bankUpdate(row.id, { name: name.trim(), code: code.trim(), status }) : await window.api.bankCreate({ name: name.trim(), code: code.trim(), status });
+    const res = mode === 'edit' && row ? await window.api.bankUpdate(row.id, { name: name.trim(), code: code.trim(), status, expectedUpdatedAt: row.updatedAt }) : await window.api.bankCreate({ name: name.trim(), code: code.trim(), status });
     setBusy(false);
     if (res.ok) { toast.success(mode === 'edit' ? 'Đã cập nhật ngân hàng' : `Đã thêm ngân hàng ${code}`); onSaved(); }
+    else if (isStaleWrite(res)) { toast.alert(res.message ?? 'Bản ghi đã được người khác cập nhật, vui lòng mở lại.', STALE_TITLE); onSaved(); }
     else toast.alert(res.message ?? 'Lưu ngân hàng thất bại', 'Không lưu được');
   }
   return (
@@ -302,9 +304,10 @@ function CardTypeForm({ mode, row, banks, onClose, onSaved }: { mode: 'create' |
     if (!code.trim()) return toast.alert('Mã loại thẻ bắt buộc.', 'Thiếu thông tin');
     setBusy(true);
     const payload = { bankId: Number(bankId), name: name.trim(), code: code.trim() };
-    const res = mode === 'edit' && row ? await window.api.cardTypeUpdate(row.id, payload) : await window.api.cardTypeCreate(payload);
+    const res = mode === 'edit' && row ? await window.api.cardTypeUpdate(row.id, { ...payload, expectedUpdatedAt: row.updatedAt }) : await window.api.cardTypeCreate(payload);
     setBusy(false);
     if (res.ok) { toast.success(mode === 'edit' ? 'Đã cập nhật loại thẻ' : `Đã thêm loại thẻ ${code}`); onSaved(); }
+    else if (isStaleWrite(res)) { toast.alert(res.message ?? 'Bản ghi đã được người khác cập nhật, vui lòng mở lại.', STALE_TITLE); onSaved(); }
     else toast.alert(res.message ?? 'Lưu loại thẻ thất bại', 'Không lưu được');
   }
   return (
@@ -460,8 +463,12 @@ function PartnerForm({ mode, row, banks, onClose, onSaved }: { mode: 'create' | 
     if (!code.trim()) return toast.alert('Mã đối tác bắt buộc.', 'Thiếu thông tin');
     setBusy(true);
     const payload = { name: name.trim(), code: code.trim(), status, address: address || null, phone: phone || null, email: email || null, contactPerson: contactPerson || null };
-    const res = mode === 'edit' && row ? await window.api.partnerUpdate(row.id, payload) : await window.api.partnerCreate(payload);
-    if (!res.ok) { setBusy(false); return toast.alert(res.message ?? 'Lưu đối tác thất bại', 'Không lưu được'); }
+    const res = mode === 'edit' && row ? await window.api.partnerUpdate(row.id, { ...payload, expectedUpdatedAt: row.updatedAt }) : await window.api.partnerCreate(payload);
+    if (!res.ok) {
+      setBusy(false);
+      if (isStaleWrite(res)) { toast.alert(res.message ?? 'Bản ghi đã được người khác cập nhật, vui lòng mở lại.', STALE_TITLE); onSaved(); return; }
+      return toast.alert(res.message ?? 'Lưu đối tác thất bại', 'Không lưu được');
+    }
     // Cập nhật liên kết ngân hàng ngay sau khi lưu đối tác (dùng id trả về khi tạo mới).
     const pid = mode === 'edit' && row ? row.id : res.id;
     if (pid) {

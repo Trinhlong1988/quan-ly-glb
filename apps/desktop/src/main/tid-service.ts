@@ -91,6 +91,10 @@ export interface TidFilter {
   /** #14 "Kỳ giao" — lọc theo deliveredAt trong khoảng [deliveredFrom, deliveredTo] (ngầm = đã giao). */
   deliveredFrom?: string;
   deliveredTo?: string;
+  /** Mr.Long 12/7 — lọc theo KHÁCH HÀNG ĐANG GIỮ (đã giao & còn sống): customerId của khách giữ máy. */
+  holdingCustomerId?: number;
+  /** Mr.Long 12/7 — lọc theo NGUỒN HỒ SƠ (dossierSourceId). */
+  dossierSourceId?: number;
 }
 
 interface TidRow {
@@ -206,17 +210,24 @@ export async function listTids(filter: TidFilter = {}): Promise<{ ok: boolean; d
   else if (delRange) deliveredAtWhere = delRange;
   else if (filter.delivered === true) deliveredAtWhere = { not: null };
   else deliveredAtWhere = undefined;
+  // Mr.Long 12/7 — "khách hàng giữ": chỉ tính TID ĐÃ GIAO & CÒN SỐNG (không CLOSED/RECALLED) của đúng khách đó
+  //   (khớp đúng định nghĩa holdingCustomerName ở toDto). Khi bật lọc này, deliveredAt/status lấy theo ngữ nghĩa
+  //   "đang giữ" (ghi đè bộ lọc trạng thái/đã-giao rời rạc để tránh mâu thuẫn).
+  const holding = filter.holdingCustomerId != null;
   const rows = await g.db.tid.findMany({
     where: {
       deletedAt: null,
       bank: filter.bank || undefined,
-      status: filter.status || undefined,
       openedAt: dateRange(filter.fromDate, filter.toDate),
       // LANE A (#11): lọc TID theo ngành nghề (AND với các bộ lọc khác).
       industryId: filter.industryId ?? undefined,
+      // Mr.Long 12/7 — lọc theo nguồn hồ sơ (AND).
+      dossierSourceId: filter.dossierSourceId ?? undefined,
       // 2 chiều độc lập (Q-T2): lọc theo posSerial / deliveredAt null / not-null (AND).
       posSerial: filter.deviceAssigned === undefined ? undefined : filter.deviceAssigned ? { not: null } : null,
-      deliveredAt: deliveredAtWhere,
+      ...(holding
+        ? { customerId: filter.holdingCustomerId, deliveredAt: { not: null }, status: { notIn: ['CLOSED', 'RECALLED'] } }
+        : { status: filter.status || undefined, deliveredAt: deliveredAtWhere }),
       OR: filter.search
         ? [{ tid: { contains: filter.search, mode: 'insensitive' } }, { mid: { contains: filter.search, mode: 'insensitive' } }, { hkdName: { contains: filter.search, mode: 'insensitive' } }]
         : undefined

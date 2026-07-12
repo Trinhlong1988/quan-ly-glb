@@ -72,6 +72,11 @@ export async function runReceiveAccountSelfTest(): Promise<number> {
   ok('lọc theo ngân hàng VCB = 30', (await rcv.listAccounts({ bankId: vcb.id })).data?.length === 30);
   ok('tìm theo STK "0070001005" = 1', (await rcv.listAccounts({ search: '0070001005' })).data?.length === 1);
   ok('lọc theo khách hàng = 15', (await rcv.listAccounts({ customerId: cus.id })).data?.length === 15);
+  // Mr.Long 12/7 — tìm kiếm khớp MÃ khách / TÊN khách / biệt danh (15 TK gắn KH01) — không đụng accountName.
+  ok('tìm theo MÃ khách "KH01" = 15', (await rcv.listAccounts({ search: 'KH01' })).data?.length === 15);
+  ok('tìm theo TÊN thật "Nguyễn Văn A" = 15', (await rcv.listAccounts({ search: 'Nguyễn Văn A' })).data?.length === 15);
+  ok('tìm theo biệt danh "Anh A" = 15', (await rcv.listAccounts({ search: 'Anh A' })).data?.length === 15);
+  ok('tìm mã khách không tồn tại "KH99" = 0', (await rcv.listAccounts({ search: 'KH99' })).data?.length === 0);
 
   // (3) đính kèm CCCD mặt trước — tạo TK có ảnh, kiểm tra tên file chuẩn + đọc lại (4)
   const withFront = await rcv.createAccount({ sourceId: srcIds[0], accountName: 'Trần Thị B', accountNumber: '0070002001', bankId: vcb.id, cccdFrontSrc: frontSrc });

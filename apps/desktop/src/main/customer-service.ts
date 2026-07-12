@@ -8,6 +8,7 @@ import { requirePermission, verifyActorPassword } from './guard.js';
 import { me } from './auth-service.js';
 import { getDb } from './db.js';
 import { writeAudit } from './audit.js';
+import { staleGuard } from './optimistic-lock.js';
 import { nextCode } from './code-service.js';
 
 export interface CustomerDto {
@@ -24,6 +25,7 @@ export interface CustomerDto {
   /** `KH03 · Anh Thanh Hải Phòng (Nguyễn Văn Thanh)` (§D). */
   display: string;
   createdAt: string;
+  updatedAt: string; // R48 #2 optimistic-lock — client echo lại khi Lưu để chống sửa đè
 }
 
 export interface MutationResult {
@@ -67,6 +69,7 @@ function toDto(c: {
   note: string | null;
   status: string;
   createdAt: Date;
+  updatedAt: Date;
 }): CustomerDto {
   return {
     id: c.id,
@@ -80,7 +83,8 @@ function toDto(c: {
     note: c.note,
     status: c.status,
     display: `${c.code} · ${c.nickname} (${c.fullName})`,
-    createdAt: c.createdAt.toISOString()
+    createdAt: c.createdAt.toISOString(),
+    updatedAt: c.updatedAt.toISOString()
   };
 }
 
@@ -203,6 +207,7 @@ export interface UpdateCustomerInput {
   agentId?: number | null;
   note?: string | null;
   status?: string;
+  expectedUpdatedAt?: string | null; // R48 #2 optimistic-lock — mốc updatedAt client giữ lúc mở form
 }
 
 /** CUSTOMER_UPDATE — nickname stays mandatory; audit before/after (R_AUDIT_002). Code is immutable. */
@@ -213,6 +218,8 @@ export async function updateCustomer(id: number, input: UpdateCustomerInput): Pr
 
   const row = await db.customer.findUnique({ where: { id } });
   if (!row || row.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Khách hàng không tồn tại.' };
+  const stale = staleGuard(row.updatedAt, input.expectedUpdatedAt);
+  if (stale) return stale;
 
   if (input.fullName !== undefined && !input.fullName.trim()) {
     return { ok: false, error: 'VALIDATION', message: 'Tên thật khách hàng không được để trống.' };

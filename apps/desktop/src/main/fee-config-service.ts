@@ -6,6 +6,7 @@ import { auditSnapshot, pickEffectiveRate } from '@glb/business-rules';
 import type { Db } from '@glb/database';
 import { requirePermission, verifyActorPassword } from './guard.js';
 import { writeAudit } from './audit.js';
+import { staleGuard } from './optimistic-lock.js';
 
 const VIEW = 'CONFIG_FEE_VIEW';
 const MANAGE = 'CONFIG_FEE_MANAGE';
@@ -87,6 +88,7 @@ export interface CreateFeeTypeInput {
 }
 export interface UpdateFeeTypeInput {
   name?: string;
+  expectedUpdatedAt?: string | null; // R48 #2 optimistic-lock — mốc updatedAt client giữ lúc mở form
 }
 
 export async function listFeeTypes(): Promise<{ ok: boolean; data?: FeeTypeDto[]; error?: string; message?: string }> {
@@ -126,6 +128,8 @@ export async function updateFeeType(id: number, input: UpdateFeeTypeInput): Prom
   const { db, user } = g;
   const row = await db.feeType.findUnique({ where: { id } });
   if (!row || row.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Loại phí không tồn tại.' };
+  const stale = staleGuard(row.updatedAt, input.expectedUpdatedAt);
+  if (stale) return stale;
   const name = input.name !== undefined ? input.name.trim() : row.name;
   if (!name) return { ok: false, error: 'VALIDATION', message: 'Tên loại phí không được để trống.' };
   if (name !== row.name) {

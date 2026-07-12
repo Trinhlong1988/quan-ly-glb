@@ -6,6 +6,7 @@ import { requirePermission, verifyActorPassword } from './guard.js';
 import { writeAudit } from './audit.js';
 import { dateRange } from './customer-service.js';
 import { storeAttachment, trashAttachment, type AttachSide } from './file-store.js';
+import { staleGuard } from './optimistic-lock.js';
 
 const VIEW = 'CONFIG_RCV_ACCT_VIEW';
 const MANAGE = 'CONFIG_RCV_ACCT_MANAGE';
@@ -65,6 +66,7 @@ export interface CreateRcvSourceInput {
 }
 export interface UpdateRcvSourceInput {
   name?: string;
+  expectedUpdatedAt?: string | null; // R48 #2 optimistic-lock — mốc updatedAt client giữ lúc mở form
 }
 
 export async function listSources(): Promise<{ ok: boolean; data?: RcvSourceDto[]; error?: string; message?: string }> {
@@ -104,6 +106,8 @@ export async function updateSource(id: number, input: UpdateRcvSourceInput): Pro
   const { db, user } = g;
   const row = await db.receiveAccountSource.findUnique({ where: { id } });
   if (!row || row.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Nguồn tài khoản không tồn tại.' };
+  const stale = staleGuard(row.updatedAt, input.expectedUpdatedAt);
+  if (stale) return stale;
   const name = input.name !== undefined ? input.name.trim() : row.name;
   if (!name) return { ok: false, error: 'VALIDATION', message: 'Tên nguồn không được để trống.' };
   if (name !== row.name) {
@@ -197,12 +201,25 @@ export interface RcvAccountInput {
   // Đính kèm: đường dẫn file nguồn (từ dialog) — undefined = không đổi, null = gỡ ảnh.
   cccdFrontSrc?: string | null;
   cccdBackSrc?: string | null;
+  expectedUpdatedAt?: string | null; // R48 #2 optimistic-lock — mốc updatedAt client giữ lúc mở form (chỉ dùng ở updateAccount)
 }
 
 export async function listAccounts(filter: RcvAccountFilter = {}): Promise<{ ok: boolean; data?: RcvAccountDto[]; error?: string; message?: string }> {
   const g = await requirePermission(VIEW, { action: VIEW });
   if (!g.ok) return g;
   const db = g.db;
+  // Tìm kiếm cũng khớp KHÁCH HÀNG gắn với TK (mã KH / biệt danh / tên thật): tra id khách khớp trước rồi lọc
+  // theo customerId — ReceiveAccount chỉ có cột customerId (không có quan hệ Prisma) nên không lọc quan hệ trực tiếp được.
+  let custMatchIds: number[] = [];
+  if (filter.search) {
+    const s = filter.search;
+    custMatchIds = (
+      await db.customer.findMany({
+        where: { deletedAt: null, OR: [{ code: { contains: s, mode: 'insensitive' } }, { nickname: { contains: s, mode: 'insensitive' } }, { fullName: { contains: s, mode: 'insensitive' } }] },
+        select: { id: true }
+      })
+    ).map((c) => c.id);
+  }
   const rows = await db.receiveAccount.findMany({
     where: {
       deletedAt: null,
@@ -210,7 +227,15 @@ export async function listAccounts(filter: RcvAccountFilter = {}): Promise<{ ok:
       bankId: filter.bankId ?? undefined,
       customerId: filter.customerId ?? undefined,
       createdAt: dateRange(filter.fromDate, filter.toDate),
-      OR: filter.search ? [{ accountName: { contains: filter.search, mode: 'insensitive' } }, { accountNumber: { contains: filter.search, mode: 'insensitive' } }, { cccdNumber: { contains: filter.search, mode: 'insensitive' } }, { phone: { contains: filter.search, mode: 'insensitive' } }] : undefined
+      OR: filter.search
+        ? [
+            { accountName: { contains: filter.search, mode: 'insensitive' } },
+            { accountNumber: { contains: filter.search, mode: 'insensitive' } },
+            { cccdNumber: { contains: filter.search, mode: 'insensitive' } },
+            { phone: { contains: filter.search, mode: 'insensitive' } },
+            ...(custMatchIds.length ? [{ customerId: { in: custMatchIds } }] : [])
+          ]
+        : undefined
     },
     orderBy: { id: 'asc' }
   });
@@ -303,6 +328,8 @@ export async function updateAccount(id: number, input: RcvAccountInput): Promise
   const { db, user } = g;
   const row = await db.receiveAccount.findUnique({ where: { id } });
   if (!row || row.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Tài khoản không tồn tại.' };
+  const stale = staleGuard(row.updatedAt, input.expectedUpdatedAt);
+  if (stale) return stale;
   const accountName = input.accountName !== undefined ? input.accountName.trim() : row.accountName;
   const accountNumber = input.accountNumber !== undefined ? input.accountNumber.trim() : row.accountNumber;
   const sourceId = input.sourceId ?? row.sourceId;

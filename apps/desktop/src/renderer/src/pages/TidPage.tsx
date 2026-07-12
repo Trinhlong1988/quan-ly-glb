@@ -45,6 +45,10 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
   const [deliverFilter, setDeliverFilter] = useState('');
   const [industryFilter, setIndustryFilter] = useState(''); // LANE A (#11) — lọc theo ngành nghề (industryId)
   const [industries, setIndustries] = useState<{ id: number; code: string; name: string }[]>([]);
+  const [holdingCustomerFilter, setHoldingCustomerFilter] = useState(''); // Mr.Long 12/7 — lọc theo khách hàng đang giữ
+  const [dossierSourceFilter, setDossierSourceFilter] = useState(''); // Mr.Long 12/7 — lọc theo nguồn hồ sơ
+  const [custOpts, setCustOpts] = useState<{ id: number; label: string }[]>([]);
+  const [dossierSourceOpts, setDossierSourceOpts] = useState<{ id: number; label: string }[]>([]);
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [deliveredFrom, setDeliveredFrom] = useState(''); // #14 "Kỳ giao" (deliveredAt) từ ngày
@@ -68,6 +72,8 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
         deviceAssigned: assignFilter ? assignFilter === 'yes' : undefined,
         delivered: deliverFilter ? deliverFilter === 'yes' : undefined,
         industryId: industryFilter ? Number(industryFilter) : undefined,
+        holdingCustomerId: holdingCustomerFilter ? Number(holdingCustomerFilter) : undefined,
+        dossierSourceId: dossierSourceFilter ? Number(dossierSourceFilter) : undefined,
         fromDate: fromDate || undefined,
         toDate: toDate || undefined,
         deliveredFrom: deliveredFrom || undefined,
@@ -81,11 +87,18 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
   useEffect(() => {
     if (tab !== 'status' && tab !== 'ranking') void reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, statusFilter, assignFilter, deliverFilter, industryFilter, deliveredFrom, deliveredTo]);
+  }, [tab, statusFilter, assignFilter, deliverFilter, industryFilter, holdingCustomerFilter, dossierSourceFilter, deliveredFrom, deliveredTo]);
 
   // LANE A (#11): nạp danh sách ngành nghề (active) cho bộ lọc — dùng tidRefs (không cần quyền ngành nghề).
   useEffect(() => {
     if (canView) window.api.tidRefs().then((r) => r.ok && r.data && setIndustries(r.data.industries));
+  }, [canView]);
+
+  // Mr.Long 12/7 — nạp khách hàng (đang giữ) + nguồn hồ sơ cho 2 bộ lọc mới (rỗng nếu thiếu quyền — graceful).
+  useEffect(() => {
+    if (!canView) return;
+    window.api.customerList({}).then((r) => r.ok && r.data && setCustOpts(r.data.map((c) => ({ id: c.id, label: `${c.code} · ${c.nickname}` }))));
+    window.api.dossierSourceList().then((r) => r.ok && r.data && setDossierSourceOpts(r.data.map((s) => ({ id: s.id, label: s.code }))));
   }, [canView]);
 
   function resetFilters(): void {
@@ -94,6 +107,8 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
     setAssignFilter('');
     setDeliverFilter('');
     setIndustryFilter('');
+    setHoldingCustomerFilter('');
+    setDossierSourceFilter('');
     setFromDate('');
     setToDate('');
     setDeliveredFrom('');
@@ -207,6 +222,8 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
             { key: 'assign', placeholder: 'Gán máy POS (tất cả)', value: assignFilter, options: [{ value: 'yes', label: 'Đã gán máy' }, { value: 'no', label: 'Chưa gán máy' }], onChange: setAssignFilter },
             { key: 'deliver', placeholder: 'Giao cho khách (tất cả)', value: deliverFilter, options: [{ value: 'yes', label: 'Đã giao' }, { value: 'no', label: 'Chưa giao' }], onChange: setDeliverFilter },
             { key: 'industry', placeholder: 'Ngành nghề (tất cả)', value: industryFilter, options: industries.map((i) => ({ value: String(i.id), label: `${i.code} · ${i.name}` })), onChange: setIndustryFilter },
+            { key: 'holding', placeholder: 'Khách hàng giữ (tất cả)', value: holdingCustomerFilter, options: custOpts.map((c) => ({ value: String(c.id), label: c.label })), onChange: setHoldingCustomerFilter },
+            { key: 'dsource', placeholder: 'Nguồn hồ sơ (tất cả)', value: dossierSourceFilter, options: dossierSourceOpts.map((s) => ({ value: String(s.id), label: s.label })), onChange: setDossierSourceFilter },
             { key: 'status', placeholder: 'Tất cả trạng thái', value: statusFilter, options: TID_STATUSES.map((s) => ({ value: s, label: statusLabel(s) })), onChange: setStatusFilter }
           ]}
           onApply={reload}

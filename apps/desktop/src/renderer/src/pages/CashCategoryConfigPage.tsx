@@ -8,6 +8,7 @@ import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate, fmtTime } from '@glb/shared';
 import type { CashCategoryDto, CreateCashCategoryInput, UpdateCashCategoryInput } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
+import { isStaleWrite, STALE_TITLE } from '../lib/optlock.js';
 import { Modal } from '../components/Modal.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { Field, inputCls } from '../components/Field.js';
@@ -205,10 +206,11 @@ function CashCategoryForm({ mode, row, onClose, onSaved }: { mode: 'create' | 'e
     setBusy(true);
     const effectivePnl = pnlLocked ? false : affectsPnl;
     const res = mode === 'edit' && row
-      ? await window.api.cashCategoryUpdate(row.id, { name: name.trim(), unit: unit.trim() || null, sourceKind, affectsPnl: effectivePnl, active } satisfies UpdateCashCategoryInput)
+      ? await window.api.cashCategoryUpdate(row.id, { name: name.trim(), unit: unit.trim() || null, sourceKind, affectsPnl: effectivePnl, active, expectedUpdatedAt: row.updatedAt } satisfies UpdateCashCategoryInput)
       : await window.api.cashCategoryCreate({ kind, name: name.trim(), unit: unit.trim() || null, sourceKind, affectsPnl: effectivePnl, active } satisfies CreateCashCategoryInput);
     setBusy(false);
     if (res.ok) { toast.success(mode === 'edit' ? 'Đã cập nhật danh mục' : `Đã thêm danh mục ${name}`); onSaved(); }
+    else if (isStaleWrite(res)) { toast.alert(res.message ?? 'Bản ghi đã được người khác cập nhật, vui lòng mở lại.', STALE_TITLE); onSaved(); }
     else toast.alert(res.message ?? 'Lưu thất bại', 'Không lưu được');
   }
 

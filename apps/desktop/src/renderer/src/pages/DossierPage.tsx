@@ -4,6 +4,7 @@ import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate, fmtTime } from '@glb/shared';
 import type { DossierSourceDto, DossierDto, DossierInput } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
+import { isStaleWrite, STALE_TITLE } from '../lib/optlock.js';
 import { Modal } from '../components/Modal.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { Field, inputCls } from '../components/Field.js';
@@ -143,10 +144,11 @@ function SourceForm({ mode, row, onClose, onSaved }: { mode: 'create' | 'edit'; 
     if (!Number.isFinite(d) || d < 0) return toast.alert('Chính sách chiết khấu phải là số ≥ 0.', 'Sai định dạng');
     setBusy(true);
     const res = mode === 'edit' && row
-      ? await window.api.dossierSourceUpdate(row.id, { code: code.trim(), discountRate: d })
+      ? await window.api.dossierSourceUpdate(row.id, { code: code.trim(), discountRate: d, expectedUpdatedAt: row.updatedAt })
       : await window.api.dossierSourceCreate({ code: code.trim(), discountRate: d });
     setBusy(false);
     if (res.ok) { toast.success(mode === 'edit' ? 'Đã cập nhật nguồn hồ sơ' : `Đã thêm nguồn hồ sơ ${code}`); onSaved(); }
+    else if (isStaleWrite(res)) { toast.alert(res.message ?? 'Bản ghi đã được người khác cập nhật, vui lòng mở lại.', STALE_TITLE); onSaved(); }
     else toast.alert(res.message ?? 'Lưu nguồn thất bại', 'Không lưu được');
   }
   return (
@@ -348,9 +350,10 @@ function DossierForm({ mode, row, sources, onClose, onSaved }: { mode: 'create' 
     if (dkkdBack !== undefined) input.dkkdBackSrc = dkkdBack;
     if (cccdFront !== undefined) input.cccdFrontSrc = cccdFront;
     if (cccdBack !== undefined) input.cccdBackSrc = cccdBack;
-    const res = mode === 'edit' && row ? await window.api.dossierUpdate(row.id, input) : await window.api.dossierCreate(input);
+    const res = mode === 'edit' && row ? await window.api.dossierUpdate(row.id, { ...input, expectedUpdatedAt: row.updatedAt }) : await window.api.dossierCreate(input);
     setBusy(false);
     if (res.ok) { toast.success(mode === 'edit' ? 'Đã cập nhật hồ sơ' : `Đã thêm hồ sơ ${f.hkdName}`); onSaved(); }
+    else if (isStaleWrite(res)) { toast.alert(res.message ?? 'Bản ghi đã được người khác cập nhật, vui lòng mở lại.', STALE_TITLE); onSaved(); }
     else toast.alert(res.message ?? 'Lưu hồ sơ thất bại', 'Không lưu được');
   }
 

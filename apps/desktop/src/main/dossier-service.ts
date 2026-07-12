@@ -7,6 +7,7 @@ import { requirePermission, verifyActorPassword } from './guard.js';
 import { writeAudit } from './audit.js';
 import { dateRange } from './customer-service.js';
 import { storeAttachment, trashAttachment, type AttachSide } from './file-store.js';
+import { staleGuard } from './optimistic-lock.js';
 
 const VIEW = 'CONFIG_DOSSIER_VIEW';
 const MANAGE = 'CONFIG_DOSSIER_MANAGE';
@@ -86,6 +87,7 @@ export interface CreateDossierSourceInput {
 export interface UpdateDossierSourceInput {
   code?: string;
   discountRate?: number;
+  expectedUpdatedAt?: string | null; // R48 #2 optimistic-lock — mốc updatedAt client giữ lúc mở form
 }
 
 export async function listSources(): Promise<{ ok: boolean; data?: DossierSourceDto[]; error?: string; message?: string }> {
@@ -127,6 +129,8 @@ export async function updateSource(id: number, input: UpdateDossierSourceInput):
   const { db, user } = g;
   const row = await db.dossierSource.findUnique({ where: { id } });
   if (!row || row.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Nguồn hồ sơ không tồn tại.' };
+  const stale = staleGuard(row.updatedAt, input.expectedUpdatedAt);
+  if (stale) return stale;
   const code = input.code !== undefined ? input.code.trim() : row.code;
   if (!code) return { ok: false, error: 'VALIDATION', message: 'Mã nguồn hồ sơ không được để trống.' };
   let milli = row.discountRate;
@@ -239,6 +243,7 @@ export interface DossierInput {
   dkkdBackSrc?: string | null;
   cccdFrontSrc?: string | null;
   cccdBackSrc?: string | null;
+  expectedUpdatedAt?: string | null; // R48 #2 optimistic-lock — mốc updatedAt client giữ lúc mở form (chỉ dùng ở updateDossier)
 }
 
 export async function listDossiers(filter: DossierFilter = {}): Promise<{ ok: boolean; data?: DossierDto[]; error?: string; message?: string }> {
@@ -349,6 +354,8 @@ export async function updateDossier(id: number, input: DossierInput): Promise<Mu
   const { db, user } = g;
   const row = await db.dossier.findUnique({ where: { id } });
   if (!row || row.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Hồ sơ không tồn tại.' };
+  const stale = staleGuard(row.updatedAt, input.expectedUpdatedAt);
+  if (stale) return stale;
   const hkdName = input.hkdName !== undefined ? input.hkdName.trim() : row.hkdName;
   const ownerName = input.ownerName !== undefined ? input.ownerName.trim() : row.ownerName;
   const sourceId = input.sourceId ?? row.sourceId;

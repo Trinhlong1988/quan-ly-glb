@@ -12,6 +12,7 @@ import type { Db } from '@glb/database';
 import { requirePermission, verifyActorPassword } from './guard.js';
 import { writeAudit } from './audit.js';
 import { dateRange } from './customer-service.js';
+import { staleGuard } from './optimistic-lock.js';
 
 export interface MutationResult {
   ok: boolean;
@@ -68,6 +69,7 @@ export interface UpdateCashCategoryInput {
   sourceKind?: string; // KHÔNG đổi được với danh mục hệ thống
   affectsPnl?: boolean;
   active?: boolean;
+  expectedUpdatedAt?: string | null; // R48 #2 optimistic-lock — mốc updatedAt client giữ lúc mở form
 }
 
 // ── Miền giá trị hợp lệ (khớp §2.1) ──
@@ -234,6 +236,8 @@ export async function updateCashCategory(id: number, input: UpdateCashCategoryIn
 
   const row = await db.cashCategory.findUnique({ where: { id } });
   if (!row || row.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Danh mục không tồn tại.' };
+  const stale = staleGuard(row.updatedAt, input.expectedUpdatedAt);
+  if (stale) return stale;
 
   const name = input.name !== undefined ? input.name.trim().replace(/\s+/g, ' ') : row.name;
   if (!name) return { ok: false, error: 'VALIDATION', message: 'Tên danh mục không được để trống.' };

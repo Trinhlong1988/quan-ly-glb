@@ -5,6 +5,7 @@ import type { AuthUser } from '@glb/shared';
 import { hasPermission, roleLabel, ROLES } from '@glb/shared';
 import type { UserDto, RoleDto } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
+import { isStaleWrite, STALE_TITLE } from '../lib/optlock.js';
 import { Modal } from '../components/Modal.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { RequestCancelModal, type RequestCancelTarget } from '../components/RequestCancelModal.js';
@@ -390,7 +391,8 @@ function StaffForm({
         address: address || null,
         joinDate: joinDate || null,
         status,
-        roleCodes: [...selectedRoles]
+        roleCodes: [...selectedRoles],
+        expectedUpdatedAt: target!.updatedAt
       });
     } else {
       res = await window.api.userCreate({
@@ -411,6 +413,9 @@ function StaffForm({
     setPendingConfirm(false);
     if (res.ok) {
       toast.success(editing ? `Đã cập nhật ${fullName}` : `Đã tạo nhân sự ${fullName}`);
+      onSaved();
+    } else if (isStaleWrite(res)) {
+      toast.alert(res.message ?? 'Bản ghi đã được người khác cập nhật, vui lòng mở lại.', STALE_TITLE);
       onSaved();
     } else {
       toast.alert(res.message ?? 'Lưu nhân sự thất bại');

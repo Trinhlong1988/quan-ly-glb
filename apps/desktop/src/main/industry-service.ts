@@ -8,6 +8,7 @@ import { requirePermission, verifyActorPassword } from './guard.js';
 import { writeAudit } from './audit.js';
 import { nextCode } from './code-service.js';
 import { dateRange } from './customer-service.js';
+import { staleGuard } from './optimistic-lock.js';
 
 /** Prefix mã ngành nghề (CodeCounter). Hợp CODE_PREFIX_REGEX /^[A-Z]{2,4}$/ (3 chữ). */
 const INDUSTRY_CODE_PREFIX = 'NGH';
@@ -55,6 +56,7 @@ export interface UpdateIndustryInput {
   name?: string;
   active?: boolean;
   note?: string | null;
+  expectedUpdatedAt?: string | null; // R48 #2 optimistic-lock — mốc updatedAt client giữ lúc mở form
 }
 
 // P2002 (mã trùng ở DB) — mã tự sinh nên gần như không xảy ra, nhưng vẫn map an toàn (bài học B05).
@@ -159,6 +161,8 @@ export async function updateIndustry(id: number, input: UpdateIndustryInput): Pr
 
   const row = await db.industry.findUnique({ where: { id } });
   if (!row || row.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Ngành nghề không tồn tại.' };
+  const stale = staleGuard(row.updatedAt, input.expectedUpdatedAt);
+  if (stale) return stale;
 
   const name = input.name !== undefined ? input.name.trim().replace(/\s+/g, ' ') : row.name;
   if (!name) return { ok: false, error: 'VALIDATION', message: 'Tên ngành nghề không được để trống.' };

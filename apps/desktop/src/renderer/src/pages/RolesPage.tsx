@@ -4,6 +4,7 @@ import type { AuthUser } from '@glb/shared';
 import { hasPermission } from '@glb/shared';
 import type { RoleDto, PermissionDto } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
+import { isStaleWrite, STALE_TITLE } from '../lib/optlock.js';
 import { Modal } from '../components/Modal.js';
 import { Button } from '../components/Button.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
@@ -286,11 +287,14 @@ function RoleForm({
       status,
       permissionCodes: [...selected]
     };
-    const res = editing ? await window.api.roleUpdate(role!.id, input) : await window.api.roleCreate(input);
+    const res = editing ? await window.api.roleUpdate(role!.id, { ...input, expectedUpdatedAt: role!.updatedAt }) : await window.api.roleCreate(input);
     setBusy(false);
     setPendingConfirm(false);
     if (res.ok) {
       toast.success(editing ? `Đã cập nhật vai trò ${name}` : `Đã tạo vai trò ${name}`);
+      onSaved();
+    } else if (isStaleWrite(res)) {
+      toast.alert(res.message ?? 'Bản ghi đã được người khác cập nhật, vui lòng mở lại.', STALE_TITLE);
       onSaved();
     } else {
       toast.alert(res.message ?? 'Lưu vai trò thất bại');

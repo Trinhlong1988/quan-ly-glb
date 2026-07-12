@@ -5,6 +5,7 @@ import { hasPermission, fmtDate, fmtTime, groupDigits, parseVndInput, prereqMess
 import type { PrereqDef } from '@glb/shared';
 import type { SupplierDto, PosModelDto, IntakeStatusDto, PosIntakeDto, LiteRef } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
+import { isStaleWrite, STALE_TITLE } from '../lib/optlock.js';
 import { Modal } from '../components/Modal.js';
 import { DateInput } from '../components/DateInput.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
@@ -174,9 +175,10 @@ function SupplierForm({ mode, row, onClose, onSaved }: { mode: 'create' | 'edit'
     if (!code.trim()) return toast.alert('Mã nhà cung cấp bắt buộc.', 'Thiếu thông tin');
     setBusy(true);
     const payload = { name: name.trim(), code: code.trim(), address: address || null, phone: phone || null, contactPerson: contactPerson || null };
-    const res = mode === 'edit' && row ? await window.api.supplierUpdate(row.id, payload) : await window.api.supplierCreate(payload);
+    const res = mode === 'edit' && row ? await window.api.supplierUpdate(row.id, { ...payload, expectedUpdatedAt: row.updatedAt }) : await window.api.supplierCreate(payload);
     setBusy(false);
     if (res.ok) { toast.success(mode === 'edit' ? 'Đã cập nhật nhà cung cấp' : `Đã thêm nhà cung cấp ${code}`); onSaved(); }
+    else if (isStaleWrite(res)) { toast.alert(res.message ?? 'Bản ghi đã được người khác cập nhật, vui lòng mở lại.', STALE_TITLE); onSaved(); }
     else toast.alert(res.message ?? 'Lưu nhà cung cấp thất bại', 'Không lưu được');
   }
   return (
@@ -294,9 +296,10 @@ function ModelForm({ mode, row, onClose, onSaved }: { mode: 'create' | 'edit'; r
     if (!code.trim()) return toast.alert('Mã máy POS bắt buộc.', 'Thiếu thông tin');
     if (!name.trim()) return toast.alert('Tên máy POS bắt buộc.', 'Thiếu thông tin');
     setBusy(true);
-    const res = mode === 'edit' && row ? await window.api.posModelUpdate(row.id, { code: code.trim(), name: name.trim() }) : await window.api.posModelCreate({ code: code.trim(), name: name.trim() });
+    const res = mode === 'edit' && row ? await window.api.posModelUpdate(row.id, { code: code.trim(), name: name.trim(), expectedUpdatedAt: row.updatedAt }) : await window.api.posModelCreate({ code: code.trim(), name: name.trim() });
     setBusy(false);
     if (res.ok) { toast.success(mode === 'edit' ? 'Đã cập nhật chủng loại' : `Đã thêm chủng loại ${code}`); onSaved(); }
+    else if (isStaleWrite(res)) { toast.alert(res.message ?? 'Bản ghi đã được người khác cập nhật, vui lòng mở lại.', STALE_TITLE); onSaved(); }
     else toast.alert(res.message ?? 'Lưu chủng loại thất bại', 'Không lưu được');
   }
   return (
@@ -406,9 +409,10 @@ function StatusForm({ mode, row, onClose, onSaved }: { mode: 'create' | 'edit'; 
   async function save(): Promise<void> {
     if (!name.trim()) return toast.alert('Tên trạng thái bắt buộc.', 'Thiếu thông tin');
     setBusy(true);
-    const res = mode === 'edit' && row ? await window.api.intakeStatusUpdate(row.id, { name: name.trim() }) : await window.api.intakeStatusCreate({ name: name.trim() });
+    const res = mode === 'edit' && row ? await window.api.intakeStatusUpdate(row.id, { name: name.trim(), expectedUpdatedAt: row.updatedAt }) : await window.api.intakeStatusCreate({ name: name.trim() });
     setBusy(false);
     if (res.ok) { toast.success(mode === 'edit' ? 'Đã cập nhật trạng thái' : `Đã thêm trạng thái ${name}`); onSaved(); }
+    else if (isStaleWrite(res)) { toast.alert(res.message ?? 'Bản ghi đã được người khác cập nhật, vui lòng mở lại.', STALE_TITLE); onSaved(); }
     else toast.alert(res.message ?? 'Lưu trạng thái thất bại', 'Không lưu được');
   }
   return (
@@ -578,9 +582,10 @@ function IntakeForm({ mode, row, models, suppliers, statuses, onClose, onSaved }
     if (!importedAt) return toast.alert('Vui lòng nhập đủ ngày/tháng/năm nhập.', 'Thiếu ngày nhập');
     setBusy(true);
     const payload = { posModelId: Number(posModelId), serial: serial.trim(), intakeStatusId: Number(intakeStatusId), supplierId: Number(supplierId), importPrice: priceNum, importedAt, note: note || null };
-    const res = mode === 'edit' && row ? await window.api.posIntakeUpdate(row.id, payload) : await window.api.posIntakeCreate(payload);
+    const res = mode === 'edit' && row ? await window.api.posIntakeUpdate(row.id, { ...payload, expectedUpdatedAt: row.updatedAt }) : await window.api.posIntakeCreate(payload);
     setBusy(false);
     if (res.ok) { toast.success(mode === 'edit' ? 'Đã cập nhật máy POS' : `Đã nhập kho máy ${serial}`); onSaved(); }
+    else if (isStaleWrite(res)) { toast.alert(res.message ?? 'Bản ghi đã được người khác cập nhật, vui lòng mở lại.', STALE_TITLE); onSaved(); }
     else toast.alert(res.message ?? 'Lưu máy POS thất bại', 'Không lưu được');
   }
 

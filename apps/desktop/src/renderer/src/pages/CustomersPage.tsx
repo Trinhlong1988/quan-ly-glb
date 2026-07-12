@@ -4,6 +4,7 @@ import type { AuthUser } from '@glb/shared';
 import { hasPermission } from '@glb/shared';
 import type { CustomerDto } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
+import { isStaleWrite, STALE_TITLE } from '../lib/optlock.js';
 import { Modal } from '../components/Modal.js';
 import { RequestCancelModal, type RequestCancelTarget } from '../components/RequestCancelModal.js';
 import { Field, inputCls } from '../components/Field.js';
@@ -266,12 +267,17 @@ function CustomerForm({ target, onClose, onSaved }: { target: CustomerDto | null
       email: email || null,
       address: address || null,
       note: note || null,
-      status
+      status,
+      expectedUpdatedAt: target?.updatedAt // R48 #2 optimistic-lock: mốc lúc mở form (undefined khi Thêm mới → bỏ qua)
     };
     const res = editing ? await window.api.customerUpdate(target!.id, payload) : await window.api.customerCreate(payload);
     setBusy(false);
     if (res.ok) {
       toast.success(editing ? `Đã cập nhật ${nickname}` : `Đã tạo khách hàng ${nickname}`);
+      onSaved();
+    } else if (isStaleWrite(res)) {
+      // R48 #2 — người khác vừa sửa bản ghi này → báo + đóng form, tải lại để lấy bản mới nhất.
+      toast.alert(res.message ?? 'Bản ghi đã được người khác cập nhật, vui lòng mở lại.', STALE_TITLE);
       onSaved();
     } else {
       // Thao tác sai (trùng mã/Số điện thoại, dữ liệu đã tồn tại…) → dialog TO, RÕ.

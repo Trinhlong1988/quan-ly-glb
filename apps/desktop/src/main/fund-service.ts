@@ -12,6 +12,7 @@ import type { Db } from '@glb/database';
 import { requirePermission, verifyActorPassword } from './guard.js';
 import { writeAudit } from './audit.js';
 import { nextCode } from './code-service.js';
+import { staleGuard } from './optimistic-lock.js';
 
 /** Prefix mã quỹ (CodeCounter). 2 ký tự → hợp CODE_PREFIX_REGEX (H6: Q 1 ký tự vi phạm). */
 const FUND_CODE_PREFIX = 'QU';
@@ -71,6 +72,7 @@ export interface UpdateFundInput {
   openingBalance?: number;
   active?: boolean;
   note?: string | null;
+  expectedUpdatedAt?: string | null; // R48 #2 optimistic-lock — mốc updatedAt client giữ lúc mở form
 }
 
 /** Số dư đầu kỳ VND: số nguyên ≥ 0, không tràn. null nếu sai. */
@@ -253,6 +255,8 @@ export async function updateFund(id: number, input: UpdateFundInput): Promise<Mu
 
   const row = await db.fund.findUnique({ where: { id } });
   if (!row || row.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Quỹ không tồn tại.' };
+  const stale = staleGuard(row.updatedAt, input.expectedUpdatedAt);
+  if (stale) return stale;
 
   const name = input.name !== undefined ? input.name.trim().replace(/\s+/g, ' ') : row.name;
   if (!name) return { ok: false, error: 'VALIDATION', message: 'Tên quỹ không được để trống.' };

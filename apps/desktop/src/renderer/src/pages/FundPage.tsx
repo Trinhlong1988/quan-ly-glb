@@ -7,6 +7,7 @@ import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate } from '@glb/shared';
 import type { FundDto, CashflowUserLite, CreateFundInput, UpdateFundInput } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
+import { isStaleWrite, STALE_TITLE } from '../lib/optlock.js';
 import { Modal } from '../components/Modal.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { Field, inputCls } from '../components/Field.js';
@@ -181,10 +182,11 @@ function FundForm({ mode, row, users, onClose, onSaved }: { mode: 'create' | 'ed
     setBusy(true);
     const base = { name: name.trim(), type, keeperUserId: keeperUserId ? Number(keeperUserId) : null, openingBalance: openingNum, active, note: note.trim() || null };
     const res = mode === 'edit' && row
-      ? await window.api.fundUpdate(row.id, base satisfies UpdateFundInput)
+      ? await window.api.fundUpdate(row.id, { ...base, expectedUpdatedAt: row.updatedAt } satisfies UpdateFundInput)
       : await window.api.fundCreate(base satisfies CreateFundInput);
     setBusy(false);
     if (res.ok) { toast.success(mode === 'edit' ? 'Đã cập nhật quỹ' : `Đã thêm quỹ ${name}`); onSaved(); }
+    else if (isStaleWrite(res)) { toast.alert(res.message ?? 'Bản ghi đã được người khác cập nhật, vui lòng mở lại.', STALE_TITLE); onSaved(); }
     else toast.alert(res.message ?? 'Lưu thất bại', 'Không lưu được');
   }
 

@@ -316,6 +316,17 @@ export async function runTidUnifySelfTest(): Promise<number> {
   const hrAfter = await tidSvc.listTids({ search: 'TID-K2-HR' });
   assert('#14: TID_HR sau RECALLED → holding trống (khách đã trả)', hrAfter.data?.[0]?.holdingCustomerName === null && hrAfter.data?.[0]?.status === 'RECALLED', { h: hrAfter.data?.[0]?.holdingCustomerName, s: hrAfter.data?.[0]?.status });
 
+  // ── Mr.Long 12/7 — bộ lọc "Khách hàng giữ" (holdingCustomerId) + "Nguồn hồ sơ" (dossierSourceId) ──
+  const fHold = await tidSvc.listTids({ holdingCustomerId: customerId });
+  const holdSet = new Set((fHold.data ?? []).map((t) => t.tid));
+  // Khách đang giữ = TID đã giao & còn sống của khách đó → DEL1/DEL2 (+ A, D đã giao trước đó) lọt; HR đã RECALLED,
+  // HOLD0/C chưa giao → KHÔNG lọt. Mọi dòng trả về PHẢI có holdingCustomerName (đúng ngữ nghĩa đang giữ).
+  assert('lọc Khách giữ: DEL1+DEL2 lọt; HR (thu hồi) + HOLD0 (chưa giao) KHÔNG lọt', holdSet.has('TID-K2-DEL1') && holdSet.has('TID-K2-DEL2') && !holdSet.has('TID-K2-HR') && !holdSet.has('TID-K2-HOLD0'), { rows: [...holdSet] });
+  assert('lọc Khách giữ: mọi dòng đều đang giữ thật (holdingCustomerName != null, >0 dòng)', (fHold.data ?? []).length > 0 && (fHold.data ?? []).every((t) => t.holdingCustomerName != null), { n: fHold.data?.length });
+  // Nguồn hồ sơ: id không tồn tại → 0 dòng (chứng minh where dossierSourceId được áp AND, không bị bỏ qua).
+  const fDsrcNone = await tidSvc.listTids({ dossierSourceId: 999999 });
+  assert('lọc Nguồn hồ sơ id lạ (999999) → 0 dòng (filter được áp)', (fDsrcNone.data ?? []).length === 0, { n: fDsrcNone.data?.length });
+
   // ── (9) quyền vai ──────────────────────────────────────────────────────
   await userSvc.createUser({ fullName: 'Kho K2', username: 'whk2user', password: 'Ware@123456', roleCodes: ['WAREHOUSE'] }).catch(() => undefined);
   await userSvc.createUser({ fullName: 'Sale K2', username: 'salesk2user', password: 'Sales@123456', roleCodes: ['SALES'] }).catch(() => undefined);

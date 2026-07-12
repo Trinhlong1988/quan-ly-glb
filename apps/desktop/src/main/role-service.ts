@@ -10,6 +10,7 @@ import {
 } from '@glb/business-rules';
 import { requirePermission, verifyActorPassword } from './guard.js';
 import { writeAudit } from './audit.js';
+import { staleGuard } from './optimistic-lock.js';
 
 export interface RoleDto {
   id: number;
@@ -20,6 +21,7 @@ export interface RoleDto {
   isSystem: boolean;
   userCount: number;
   permissions: string[]; // permission codes
+  updatedAt: string; // R48 #2 optimistic-lock — client echo lại khi Lưu để chống sửa đè
 }
 
 export interface MutationResult {
@@ -52,7 +54,8 @@ export async function listRoles(): Promise<{ ok: boolean; data?: RoleDto[]; erro
     status: r.status,
     isSystem: r.isSystem,
     userCount: r._count.users,
-    permissions: r.permissions.map((p) => p.permission.code)
+    permissions: r.permissions.map((p) => p.permission.code),
+    updatedAt: r.updatedAt.toISOString()
   }));
   return { ok: true, data };
 }
@@ -71,6 +74,7 @@ export interface RoleInput {
   description?: string;
   status?: string; // ACTIVE | LOCKED
   permissionCodes: string[];
+  expectedUpdatedAt?: string | null; // R48 #2 optimistic-lock — mốc updatedAt client giữ lúc mở form (chỉ dùng ở updateRole)
 }
 
 /** R_ROLE_001 create role (+ ROLE_ASSIGN via permissionCodes). */
@@ -119,6 +123,8 @@ export async function updateRole(id: number, input: RoleInput): Promise<Mutation
     include: { permissions: { include: { permission: true } } }
   });
   if (!role || role.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Vai trò không tồn tại.' };
+  const stale = staleGuard(role.updatedAt, input.expectedUpdatedAt);
+  if (stale) return stale;
   if (!input.name?.trim()) return { ok: false, error: 'VALIDATION', message: 'Tên vai trò bắt buộc.' };
 
   const before = {

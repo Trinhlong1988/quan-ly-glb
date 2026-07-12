@@ -7,6 +7,7 @@ import { requirePermission, verifyActorPassword } from './guard.js';
 import { writeAudit } from './audit.js';
 import { dateRange } from './customer-service.js';
 import { isValidStatus } from './status-catalog-service.js';
+import { staleGuard } from './optimistic-lock.js';
 
 export interface MutationResult {
   ok: boolean;
@@ -82,6 +83,7 @@ export interface UpdateBankInput {
   name?: string;
   code?: string;
   status?: string;
+  expectedUpdatedAt?: string | null; // R48 #2 optimistic-lock — mốc updatedAt client giữ lúc mở form
 }
 
 /** seq → mã hiển thị NH01, NH02... */
@@ -151,6 +153,8 @@ export async function updateBank(id: number, input: UpdateBankInput): Promise<Mu
 
   const row = await db.bank.findUnique({ where: { id } });
   if (!row || row.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Ngân hàng không tồn tại.' };
+  const stale = staleGuard(row.updatedAt, input.expectedUpdatedAt);
+  if (stale) return stale;
 
   const name = input.name !== undefined ? input.name.trim() : row.name;
   const code = input.code !== undefined ? input.code.trim().toUpperCase() : row.code;
@@ -245,6 +249,7 @@ export interface UpdateCardTypeInput {
   bankId?: number;
   name?: string;
   code?: string;
+  expectedUpdatedAt?: string | null; // R48 #2 optimistic-lock — mốc updatedAt client giữ lúc mở form
 }
 
 export async function listCardTypes(filter: CardTypeFilter = {}): Promise<{ ok: boolean; data?: CardTypeDto[]; error?: string; message?: string }> {
@@ -312,6 +317,8 @@ export async function updateCardType(id: number, input: UpdateCardTypeInput): Pr
 
   const row = await db.cardType.findUnique({ where: { id } });
   if (!row || row.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Loại thẻ không tồn tại.' };
+  const stale = staleGuard(row.updatedAt, input.expectedUpdatedAt);
+  if (stale) return stale;
 
   const bankId = input.bankId ?? row.bankId;
   const name = input.name !== undefined ? input.name.trim() : row.name;
@@ -405,6 +412,7 @@ export interface UpdatePartnerInput {
   phone?: string | null;
   email?: string | null;
   contactPerson?: string | null;
+  expectedUpdatedAt?: string | null; // R48 #2 optimistic-lock — mốc updatedAt client giữ lúc mở form
 }
 
 export async function listPartners(filter: PartnerFilter = {}): Promise<{ ok: boolean; data?: PartnerDto[]; error?: string; message?: string }> {
@@ -501,6 +509,8 @@ export async function updatePartner(id: number, input: UpdatePartnerInput): Prom
 
   const row = await db.partner.findUnique({ where: { id } });
   if (!row || row.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Đối tác không tồn tại.' };
+  const stale = staleGuard(row.updatedAt, input.expectedUpdatedAt);
+  if (stale) return stale;
 
   const name = input.name !== undefined ? input.name.trim() : row.name;
   const code = input.code !== undefined ? input.code.trim().toUpperCase() : row.code;

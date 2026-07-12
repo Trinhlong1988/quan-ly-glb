@@ -6,6 +6,7 @@ import { getDb } from './db.js';
 import { me } from './auth-service.js';
 import { requirePermission } from './guard.js';
 import { writeAudit } from './audit.js';
+import { staleGuard } from './optimistic-lock.js';
 
 export interface MutationResult {
   ok: boolean;
@@ -23,6 +24,7 @@ export interface StatusOptionDto {
   isBuiltin: boolean;
   sortOrder: number;
   active: boolean;
+  updatedAt: string; // R48 #2 optimistic-lock — client echo lại khi Lưu để chống sửa đè
 }
 
 /** Thực thể master-data cho phép "Thêm trạng thái mới". Ngoài danh sách này = cố định (chỉ đổi nhãn/màu). */
@@ -51,8 +53,9 @@ function toDto(r: {
   isBuiltin: boolean;
   sortOrder: number;
   active: boolean;
+  updatedAt: Date;
 }): StatusOptionDto {
-  return { id: r.id, entity: r.entity, code: r.code, label: r.label, tone: r.tone, isBuiltin: r.isBuiltin, sortOrder: r.sortOrder, active: r.active };
+  return { id: r.id, entity: r.entity, code: r.code, label: r.label, tone: r.tone, isBuiltin: r.isBuiltin, sortOrder: r.sortOrder, active: r.active, updatedAt: r.updatedAt.toISOString() };
 }
 
 /** Đọc options 1 entity (badge/dropdown). includeInactive=true cho trang cấu hình. Chỉ cần đăng nhập. */
@@ -152,6 +155,7 @@ export interface UpdateStatusOptionInput {
   tone?: string;
   sortOrder?: number;
   active?: boolean;
+  expectedUpdatedAt?: string | null; // R48 #2 optimistic-lock — mốc updatedAt client giữ lúc mở form
 }
 
 export async function updateStatusOption(id: number, input: UpdateStatusOptionInput): Promise<MutationResult> {
@@ -161,6 +165,8 @@ export async function updateStatusOption(id: number, input: UpdateStatusOptionIn
 
   const row = await db.statusOption.findUnique({ where: { id } });
   if (!row || row.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Trạng thái không tồn tại.' };
+  const stale = staleGuard(row.updatedAt, input.expectedUpdatedAt);
+  if (stale) return stale;
 
   const label = input.label !== undefined ? input.label.trim() : row.label;
   if (!label) return { ok: false, error: 'VALIDATION', message: 'Tên trạng thái không được để trống.' };

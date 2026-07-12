@@ -360,6 +360,13 @@ app.whenReady().then(async () => {
     app.exit(code);
     return;
   }
+  // R48 #2 optimistic-lock (chống 2 người sửa đè): mốc updatedAt cũ → STALE_WRITE; mốc mới → ok; không mốc → ok.
+  if (process.env['GLB_SELFTEST'] === '37') {
+    const { runOptLockSelfTest } = await import('./selftest-optlock.js');
+    const code = await runOptLockSelfTest();
+    app.exit(code);
+    return;
+  }
 
   await createWindow();
   startHousekeeping();

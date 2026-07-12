@@ -7,6 +7,7 @@ import type { AuthUser } from '@glb/shared';
 import { hasPermission } from '@glb/shared';
 import type { StatusOptionDto, StatusEntityDto } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
+import { isStaleWrite, STALE_TITLE } from '../lib/optlock.js';
 import { Modal } from '../components/Modal.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { Field, inputCls } from '../components/Field.js';
@@ -201,11 +202,14 @@ function StatusForm({ mode, entity, row, onClose, onSaved }: { mode: 'create' | 
     setBusy(true);
     const res =
       mode === 'edit' && row
-        ? await window.api.statusOptionUpdate(row.id, { label: label.trim(), tone, sortOrder, active })
+        ? await window.api.statusOptionUpdate(row.id, { label: label.trim(), tone, sortOrder, active, expectedUpdatedAt: row.updatedAt })
         : await window.api.statusOptionCreate({ entity, label: label.trim(), tone });
     setBusy(false);
     if (res.ok) {
       toast.success(mode === 'edit' ? 'Đã cập nhật trạng thái' : `Đã thêm trạng thái "${label.trim()}"`);
+      onSaved();
+    } else if (isStaleWrite(res)) {
+      toast.alert(res.message ?? 'Bản ghi đã được người khác cập nhật, vui lòng mở lại.', STALE_TITLE);
       onSaved();
     } else toast.alert(res.message ?? 'Lưu trạng thái thất bại', 'Không lưu được');
   }

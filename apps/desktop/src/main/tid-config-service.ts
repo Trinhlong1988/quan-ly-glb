@@ -7,6 +7,7 @@ import type { Db } from '@glb/database';
 import { requirePermission, verifyActorPassword } from './guard.js';
 import { writeAudit } from './audit.js';
 import { dateRange } from './customer-service.js';
+import { staleGuard } from './optimistic-lock.js';
 
 const VIEW = 'CONFIG_TID_VIEW';
 const MANAGE = 'CONFIG_TID_MANAGE';
@@ -66,6 +67,7 @@ export interface CreateTidConfigStatusInput {
 }
 export interface UpdateTidConfigStatusInput {
   name?: string;
+  expectedUpdatedAt?: string | null; // R48 #2 optimistic-lock — mốc updatedAt client giữ lúc mở form
 }
 
 export async function listStatuses(): Promise<{ ok: boolean; data?: TidConfigStatusDto[]; error?: string; message?: string }> {
@@ -105,6 +107,8 @@ export async function updateStatus(id: number, input: UpdateTidConfigStatusInput
   const { db, user } = g;
   const row = await db.tidConfigStatus.findUnique({ where: { id } });
   if (!row || row.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Trạng thái không tồn tại.' };
+  const stale = staleGuard(row.updatedAt, input.expectedUpdatedAt);
+  if (stale) return stale;
   const name = input.name !== undefined ? input.name.trim() : row.name;
   if (!name) return { ok: false, error: 'VALIDATION', message: 'Tên trạng thái không được để trống.' };
   if (name !== row.name) {
@@ -189,6 +193,7 @@ export interface ConfigTidInput {
   configStatusId?: number | null;
   dossierSourceId?: number | null;
   note?: string | null;
+  expectedUpdatedAt?: string | null; // R48 #2 optimistic-lock — mốc updatedAt client giữ lúc mở form (chỉ dùng ở updateConfigTid)
 }
 
 export async function listConfigTids(filter: ConfigTidFilter = {}): Promise<{ ok: boolean; data?: ConfigTidDto[]; error?: string; message?: string }> {
@@ -318,6 +323,8 @@ export async function updateConfigTid(id: number, input: ConfigTidInput): Promis
   const { db, user } = g;
   const row = await db.tid.findUnique({ where: { id } });
   if (!row || row.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'TID không tồn tại.' };
+  const stale = staleGuard(row.updatedAt, input.expectedUpdatedAt);
+  if (stale) return stale;
   const tid = input.tid !== undefined ? input.tid.trim() : row.tid;
   const hkdName = input.hkdName !== undefined ? input.hkdName.trim() : row.hkdName ?? '';
   const bankId = input.bankId ?? row.bankId ?? 0;

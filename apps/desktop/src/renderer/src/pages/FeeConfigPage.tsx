@@ -4,6 +4,7 @@ import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate, fmtTime } from '@glb/shared';
 import type { FeeTypeDto, FeeRateDto, PartnerDto, LiteRef, CardTypeDto } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
+import { isStaleWrite, STALE_TITLE } from '../lib/optlock.js';
 import { Modal } from '../components/Modal.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { Field, inputCls } from '../components/Field.js';
@@ -141,9 +142,10 @@ function TypeForm({ mode, row, onClose, onSaved }: { mode: 'create' | 'edit'; ro
   async function save(): Promise<void> {
     if (!name.trim()) return toast.alert('Tên loại phí bắt buộc.', 'Thiếu thông tin');
     setBusy(true);
-    const res = mode === 'edit' && row ? await window.api.feeTypeUpdate(row.id, { name: name.trim() }) : await window.api.feeTypeCreate({ name: name.trim() });
+    const res = mode === 'edit' && row ? await window.api.feeTypeUpdate(row.id, { name: name.trim(), expectedUpdatedAt: row.updatedAt }) : await window.api.feeTypeCreate({ name: name.trim() });
     setBusy(false);
     if (res.ok) { toast.success(mode === 'edit' ? 'Đã cập nhật loại phí' : `Đã thêm loại phí ${name}`); onSaved(); }
+    else if (isStaleWrite(res)) { toast.alert(res.message ?? 'Bản ghi đã được người khác cập nhật, vui lòng mở lại.', STALE_TITLE); onSaved(); }
     else toast.alert(res.message ?? 'Lưu loại phí thất bại', 'Không lưu được');
   }
   return (

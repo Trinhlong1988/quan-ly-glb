@@ -17,6 +17,7 @@ import { me } from './auth-service.js';
 import { getDb } from './db.js';
 import { writeAudit } from './audit.js';
 import { nextCode } from './code-service.js';
+import { staleGuard } from './optimistic-lock.js';
 
 export interface UserDto {
   id: number;
@@ -32,6 +33,7 @@ export interface UserDto {
   forceChangePassword: boolean;
   joinedAt: string | null;
   createdAt: string;
+  updatedAt: string; // R48 #2 optimistic-lock — client echo lại khi Lưu để chống sửa đè
   roles: string[]; // role codes
 }
 
@@ -79,6 +81,7 @@ function toDto(u: {
     forceChangePassword: u.forceChangePassword,
     joinedAt: u.joinDate ? u.joinDate.toISOString() : null,
     createdAt: u.createdAt.toISOString(),
+    updatedAt: u.updatedAt.toISOString(),
     roles: u.roles.map((r) => r.role.code)
   };
 }
@@ -243,6 +246,7 @@ export interface UpdateUserInput {
   joinDate?: string | null;
   status?: string;
   roleCodes?: string[];
+  expectedUpdatedAt?: string | null; // R48 #2 optimistic-lock — mốc updatedAt client giữ lúc mở form
 }
 
 /** USER_UPDATE + R006 (no self privilege escalation) + audit before/after (R_AUDIT_002). */
@@ -253,6 +257,8 @@ export async function updateUser(id: number, input: UpdateUserInput): Promise<Mu
 
   const row = await db.user.findUnique({ where: { id }, include: { roles: { include: { role: true } } } });
   if (!row || row.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Nhân sự không tồn tại.' };
+  const stale = staleGuard(row.updatedAt, input.expectedUpdatedAt);
+  if (stale) return stale;
 
   const changingRoles = Array.isArray(input.roleCodes);
   const currentRoleCodes = row.roles.map((r) => r.role.code);

@@ -4,6 +4,7 @@ import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate, fmtTime } from '@glb/shared';
 import type { IndustryDto, CreateIndustryInput, UpdateIndustryInput } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
+import { isStaleWrite, STALE_TITLE } from '../lib/optlock.js';
 import { Modal } from '../components/Modal.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { Field, inputCls } from '../components/Field.js';
@@ -148,10 +149,11 @@ function IndustryForm({ mode, row, onClose, onSaved }: { mode: 'create' | 'edit'
     if (!name.trim()) return toast.alert('Tên ngành nghề bắt buộc.', 'Thiếu thông tin');
     setBusy(true);
     const res = mode === 'edit' && row
-      ? await window.api.industryUpdate(row.id, { name: name.trim(), active, note: note.trim() || null } satisfies UpdateIndustryInput)
+      ? await window.api.industryUpdate(row.id, { name: name.trim(), active, note: note.trim() || null, expectedUpdatedAt: row.updatedAt } satisfies UpdateIndustryInput)
       : await window.api.industryCreate({ name: name.trim(), active, note: note.trim() || null } satisfies CreateIndustryInput);
     setBusy(false);
     if (res.ok) { toast.success(mode === 'edit' ? 'Đã cập nhật ngành nghề' : `Đã thêm ngành ${name}`); onSaved(); }
+    else if (isStaleWrite(res)) { toast.alert(res.message ?? 'Bản ghi đã được người khác cập nhật, vui lòng mở lại.', STALE_TITLE); onSaved(); }
     else toast.alert(res.message ?? 'Lưu thất bại', 'Không lưu được');
   }
 

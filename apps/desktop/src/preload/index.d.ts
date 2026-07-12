@@ -59,6 +59,7 @@ export interface RoleDto {
   isSystem: boolean;
   userCount: number;
   permissions: string[];
+  updatedAt: string;
 }
 export interface PermissionDto {
   code: string;
@@ -80,6 +81,7 @@ export interface UserDto {
   joinedAt: string | null;
   createdAt: string;
   roles: string[];
+  updatedAt: string;
 }
 export interface AuditRowDto {
   id: number;
@@ -124,6 +126,7 @@ export interface CustomerDto {
   status: string;
   display: string;
   createdAt: string;
+  updatedAt: string;
 }
 export interface AgentDto {
   id: number;
@@ -268,6 +271,7 @@ export interface UpdateCustomerInput {
   agentId?: number | null;
   note?: string | null;
   status?: string;
+  expectedUpdatedAt?: string | null;
 }
 export interface PosFilter {
   search?: string;
@@ -304,6 +308,8 @@ export interface TidFilter {
   // #14 — "Kỳ giao": lọc theo deliveredAt trong khoảng (ngầm = đã giao).
   deliveredFrom?: string;
   deliveredTo?: string;
+  holdingCustomerId?: number;
+  dossierSourceId?: number;
 }
 /** #13 — Xếp hạng doanh số theo TID (mặc định tháng hiện tại nếu from/to trống). */
 export interface TidRevenueRankFilter {
@@ -406,6 +412,7 @@ export interface UpdateBankInput {
   name?: string;
   code?: string;
   status?: string;
+  expectedUpdatedAt?: string | null;
 }
 export interface CardTypeDto extends AuditTrail {
   id: number;
@@ -430,6 +437,7 @@ export interface UpdateCardTypeInput {
   bankId?: number;
   name?: string;
   code?: string;
+  expectedUpdatedAt?: string | null;
 }
 export interface PartnerDto extends AuditTrail {
   id: number;
@@ -465,6 +473,7 @@ export interface UpdatePartnerInput {
   phone?: string | null;
   email?: string | null;
   contactPerson?: string | null;
+  expectedUpdatedAt?: string | null;
 }
 
 /** Danh mục trạng thái tùy biến dùng chung (R14). */
@@ -477,6 +486,7 @@ export interface StatusOptionDto {
   isBuiltin: boolean;
   sortOrder: number;
   active: boolean;
+  updatedAt: string;
 }
 export interface StatusEntityDto {
   entity: string;
@@ -493,6 +503,7 @@ export interface UpdateStatusOptionInput {
   tone?: string;
   sortOrder?: number;
   active?: boolean;
+  expectedUpdatedAt?: string | null;
 }
 export interface PartnerBankMatrixRow {
   partnerId: number;
@@ -572,6 +583,7 @@ export interface UpdateSupplierInput {
   address?: string | null;
   phone?: string | null;
   contactPerson?: string | null;
+  expectedUpdatedAt?: string | null;
 }
 export interface PosModelDto extends AuditTrail {
   id: number;
@@ -590,6 +602,7 @@ export interface CreatePosModelInput {
 export interface UpdatePosModelInput {
   code?: string;
   name?: string;
+  expectedUpdatedAt?: string | null;
 }
 export interface IntakeStatusDto extends AuditTrail {
   id: number;
@@ -600,6 +613,7 @@ export interface CreateIntakeStatusInput {
 }
 export interface UpdateIntakeStatusInput {
   name?: string;
+  expectedUpdatedAt?: string | null;
 }
 export interface PosIntakeDto extends AuditTrail {
   id: number;
@@ -641,6 +655,7 @@ export interface UpdatePosIntakeInput {
   importPrice?: number;
   importedAt?: string;
   note?: string | null;
+  expectedUpdatedAt?: string | null;
 }
 export interface LiteRef {
   id: number;
@@ -658,6 +673,7 @@ export interface CreateFeeTypeInput {
 }
 export interface UpdateFeeTypeInput {
   name?: string;
+  expectedUpdatedAt?: string | null;
 }
 export interface FeeRateDto extends AuditTrail {
   id: number;
@@ -702,6 +718,7 @@ export interface CreateRcvSourceInput {
 }
 export interface UpdateRcvSourceInput {
   name?: string;
+  expectedUpdatedAt?: string | null;
 }
 export interface RcvAccountDto extends AuditTrail {
   id: number;
@@ -750,6 +767,7 @@ export interface RcvAccountInput {
   note?: string | null;
   cccdFrontSrc?: string | null;
   cccdBackSrc?: string | null;
+  expectedUpdatedAt?: string | null;
 }
 // ── G-CFG.5 DTOs (Quản lý Hồ sơ HKD §10) ──
 export interface DossierSourceDto extends AuditTrail {
@@ -764,6 +782,7 @@ export interface CreateDossierSourceInput {
 export interface UpdateDossierSourceInput {
   code?: string;
   discountRate?: number;
+  expectedUpdatedAt?: string | null;
 }
 export interface DossierDto extends AuditTrail {
   id: number;
@@ -825,6 +844,7 @@ export interface DossierInput {
   dkkdBackSrc?: string | null;
   cccdFrontSrc?: string | null;
   cccdBackSrc?: string | null;
+  expectedUpdatedAt?: string | null;
 }
 // ── G-CFG.6 DTOs (Cấu hình TID §9) ──
 export interface TidConfigStatusDto extends AuditTrail {
@@ -836,6 +856,7 @@ export interface CreateTidConfigStatusInput {
 }
 export interface UpdateTidConfigStatusInput {
   name?: string;
+  expectedUpdatedAt?: string | null;
 }
 export interface ConfigTidDto extends AuditTrail {
   id: number;
@@ -876,6 +897,7 @@ export interface ConfigTidInput {
   configStatusId?: number | null;
   dossierSourceId?: number | null;
   note?: string | null;
+  expectedUpdatedAt?: string | null;
 }
 // ── G-CFG.7 DTOs (Cấu hình ngành nghề §11 Pha I1) ──
 export interface IndustryDto extends AuditTrail {
@@ -900,6 +922,7 @@ export interface UpdateIndustryInput {
   name?: string;
   active?: boolean;
   note?: string | null;
+  expectedUpdatedAt?: string | null;
 }
 // ── PHASE H1 — Thu–Chi DTOs (danh mục thu/chi §A/§B) ──
 export interface CashCategoryDto extends AuditTrail {
@@ -937,6 +960,7 @@ export interface UpdateCashCategoryInput {
   sourceKind?: string;
   affectsPnl?: boolean;
   active?: boolean;
+  expectedUpdatedAt?: string | null;
 }
 // ── PHASE H2-core — Thu–Chi DTOs (Quỹ + Phiếu thu/chi §J/§D/§E) ──
 export interface FundDto extends AuditTrail {
@@ -971,6 +995,7 @@ export interface UpdateFundInput {
   openingBalance?: number;
   active?: boolean;
   note?: string | null;
+  expectedUpdatedAt?: string | null;
 }
 export interface CashflowUserLite {
   id: number;
@@ -1124,6 +1149,7 @@ export interface RoleInput {
   description?: string;
   status?: string;
   permissionCodes: string[];
+  expectedUpdatedAt?: string | null;
 }
 export interface CreateUserInput {
   fullName: string;
@@ -1148,6 +1174,7 @@ export interface UpdateUserInput {
   joinDate?: string | null;
   status?: string;
   roleCodes?: string[];
+  expectedUpdatedAt?: string | null;
 }
 export interface UserFilter {
   roleCode?: string;

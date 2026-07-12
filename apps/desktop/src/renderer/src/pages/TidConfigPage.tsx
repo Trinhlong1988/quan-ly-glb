@@ -4,6 +4,7 @@ import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate, fmtTime, prereqMessage } from '@glb/shared';
 import type { TidConfigStatusDto, ConfigTidDto, ConfigTidInput, BankLite, PartnerDto, RcvAccountDto, DossierSourceDto, FeeRateDto } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
+import { isStaleWrite, STALE_TITLE } from '../lib/optlock.js';
 import { Modal } from '../components/Modal.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { Field, inputCls } from '../components/Field.js';
@@ -136,9 +137,10 @@ function StatusForm({ mode, row, onClose, onSaved }: { mode: 'create' | 'edit'; 
   async function save(): Promise<void> {
     if (!name.trim()) return toast.alert('Tên trạng thái bắt buộc.', 'Thiếu thông tin');
     setBusy(true);
-    const res = mode === 'edit' && row ? await window.api.tidStatusUpdate(row.id, { name: name.trim() }) : await window.api.tidStatusCreate({ name: name.trim() });
+    const res = mode === 'edit' && row ? await window.api.tidStatusUpdate(row.id, { name: name.trim(), expectedUpdatedAt: row.updatedAt }) : await window.api.tidStatusCreate({ name: name.trim() });
     setBusy(false);
     if (res.ok) { toast.success(mode === 'edit' ? 'Đã cập nhật trạng thái' : `Đã thêm trạng thái ${name}`); onSaved(); }
+    else if (isStaleWrite(res)) { toast.alert(res.message ?? 'Bản ghi đã được người khác cập nhật, vui lòng mở lại.', STALE_TITLE); onSaved(); }
     else toast.alert(res.message ?? 'Lưu thất bại', 'Không lưu được');
   }
   return (
@@ -315,9 +317,10 @@ function TidForm({ mode, row, banks, partners, accounts, statuses, dsources, onC
       dossierSourceId: f.dossierSourceId ? Number(f.dossierSourceId) : null,
       note: f.note || null
     };
-    const res = mode === 'edit' && row ? await window.api.tidConfigUpdate(row.id, input) : await window.api.tidConfigCreate(input);
+    const res = mode === 'edit' && row ? await window.api.tidConfigUpdate(row.id, { ...input, expectedUpdatedAt: row.updatedAt }) : await window.api.tidConfigCreate(input);
     setBusy(false);
     if (res.ok) { toast.success(mode === 'edit' ? 'Đã cập nhật TID' : `Đã thêm TID ${f.tid}`); onSaved(); }
+    else if (isStaleWrite(res)) { toast.alert(res.message ?? 'Bản ghi đã được người khác cập nhật, vui lòng mở lại.', STALE_TITLE); onSaved(); }
     else toast.alert(res.message ?? 'Lưu TID thất bại', 'Không lưu được');
   }
 

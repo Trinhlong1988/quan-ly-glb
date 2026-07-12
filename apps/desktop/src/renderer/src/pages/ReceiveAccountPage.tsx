@@ -4,6 +4,7 @@ import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate, fmtTime, prereqMessage } from '@glb/shared';
 import type { RcvSourceDto, RcvAccountDto, LiteRef, CustomerDto, RcvAccountInput } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
+import { isStaleWrite, STALE_TITLE } from '../lib/optlock.js';
 import { Modal } from '../components/Modal.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { Field, inputCls } from '../components/Field.js';
@@ -135,9 +136,10 @@ function SourceForm({ mode, row, onClose, onSaved }: { mode: 'create' | 'edit'; 
   async function save(): Promise<void> {
     if (!name.trim()) return toast.alert('Tên nguồn bắt buộc.', 'Thiếu thông tin');
     setBusy(true);
-    const res = mode === 'edit' && row ? await window.api.rcvSourceUpdate(row.id, { name: name.trim() }) : await window.api.rcvSourceCreate({ name: name.trim() });
+    const res = mode === 'edit' && row ? await window.api.rcvSourceUpdate(row.id, { name: name.trim(), expectedUpdatedAt: row.updatedAt }) : await window.api.rcvSourceCreate({ name: name.trim() });
     setBusy(false);
     if (res.ok) { toast.success(mode === 'edit' ? 'Đã cập nhật nguồn' : `Đã thêm nguồn ${name}`); onSaved(); }
+    else if (isStaleWrite(res)) { toast.alert(res.message ?? 'Bản ghi đã được người khác cập nhật, vui lòng mở lại.', STALE_TITLE); onSaved(); }
     else toast.alert(res.message ?? 'Lưu nguồn thất bại', 'Không lưu được');
   }
   return (
@@ -222,7 +224,7 @@ function AccountTab({ canManage }: { canManage: boolean }): JSX.Element {
           {canManage && <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => { const msg = prereqMessage([{ count: sources.length, label: 'Nguồn tài khoản', where: "tab 'Nguồn tài khoản'" }, { count: banks.length, label: 'Ngân hàng', where: "tab 'Ngân hàng'" }]); return msg ? toast.alert(msg, 'Thiếu dữ liệu nền') : setForm({ mode: 'create' }); }}>Thêm tài khoản</Button>}
         </div>
       </div>
-      <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Tìm tên TK / STK / CCCD / Số điện thoại…"
+      <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Tìm tên TK / STK / CCCD / SĐT / Mã KH / Tên khách…"
         selects={[{ key: 's', placeholder: 'Tất cả nguồn', value: fSource, options: sources.map((s) => ({ value: String(s.id), label: s.name })), onChange: setFSource }]}
         onApply={reload} onReset={() => { setSearch(''); setFSource(''); setTimeout(reload, 0); }} />
       {canManage && <SelectionBar count={sel.count} entityLabel="tài khoản" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
@@ -321,9 +323,10 @@ function AccountForm({ mode, row, sources, banks, customers, onClose, onSaved }:
     };
     if (frontSrc !== undefined) input.cccdFrontSrc = frontSrc;
     if (backSrc !== undefined) input.cccdBackSrc = backSrc;
-    const res = mode === 'edit' && row ? await window.api.rcvAccountUpdate(row.id, input) : await window.api.rcvAccountCreate(input);
+    const res = mode === 'edit' && row ? await window.api.rcvAccountUpdate(row.id, { ...input, expectedUpdatedAt: row.updatedAt }) : await window.api.rcvAccountCreate(input);
     setBusy(false);
     if (res.ok) { toast.success(mode === 'edit' ? 'Đã cập nhật tài khoản' : `Đã thêm tài khoản ${f.accountNumber}`); onSaved(); }
+    else if (isStaleWrite(res)) { toast.alert(res.message ?? 'Bản ghi đã được người khác cập nhật, vui lòng mở lại.', STALE_TITLE); onSaved(); }
     else toast.alert(res.message ?? 'Lưu tài khoản thất bại', 'Không lưu được');
   }
 
