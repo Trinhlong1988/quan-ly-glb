@@ -10,6 +10,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { RequestCancelModal, type RequestCancelTarget } from '../components/RequestCancelModal.js';
 import { StatusBadge, useStatusOptions, toneCls } from '../components/StatusBadge.js';
 import { StatBar } from '../components/StatBar.js';
+import { StaleBanner } from '../lib/realtime.js';
 import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
 import { TabBar, TabButton } from '../components/Tabs.js';
@@ -175,6 +176,7 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
         ]}
       />
 
+      <StaleBanner domain="Pos" onReload={reload} className="mb-2" />
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs uppercase tracking-wide text-slate-500">

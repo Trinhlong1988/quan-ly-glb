@@ -10,6 +10,7 @@ const api = {
   // R46 nhịp tim + R41 danh sách đang đăng nhập.
   sessionHeartbeat: () => ipcRenderer.invoke('session:heartbeat'),
   onlineUsers: () => ipcRenderer.invoke('session:onlineUsers'),
+  realtimeTokens: () => ipcRenderer.invoke('realtime:tokens'),
   changePassword: (currentPassword: string, newPassword: string, confirmPassword?: string) =>
     ipcRenderer.invoke('auth:changePassword', { currentPassword, newPassword, confirmPassword }),
   adminResetPassword: (userId: number, newPassword: string, actorPassword: string) =>

@@ -18,6 +18,7 @@ import { Field, inputCls } from '../components/Field.js';
 import { Button } from '../components/Button.js';
 import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../components/Selection.js';
 import { StatBar } from '../components/StatBar.js';
+import { StaleBanner } from '../lib/realtime.js';
 import { exportCsv } from '../lib/exportCsv.js';
 
 /** VND, nhóm 3 số bằng dấu chấm (KHÔNG toLocaleString — R_UI QA gate). Giữ dấu âm. */
@@ -218,6 +219,7 @@ export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
 
       {canManage && <SelectionBar count={sel.count} entityLabel="giao dịch" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
 
+      <StaleBanner domain="Transaction" onReload={reload} className="mb-2" />
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">

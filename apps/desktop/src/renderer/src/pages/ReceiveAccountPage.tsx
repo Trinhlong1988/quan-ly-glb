@@ -11,6 +11,7 @@ import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
 import { Button } from '../components/Button.js';
 import { StatBar } from '../components/StatBar.js';
+import { StaleBanner } from '../lib/realtime.js';
 import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../components/Selection.js';
 import { Thumb, AttachField } from '../components/Attach.js';
 import { exportCsv } from '../lib/exportCsv.js';
@@ -228,6 +229,7 @@ function AccountTab({ canManage }: { canManage: boolean }): JSX.Element {
         selects={[{ key: 's', placeholder: 'Tất cả nguồn', value: fSource, options: sources.map((s) => ({ value: String(s.id), label: s.name })), onChange: setFSource }]}
         onApply={reload} onReset={() => { setSearch(''); setFSource(''); setTimeout(reload, 0); }} />
       {canManage && <SelectionBar count={sel.count} entityLabel="tài khoản" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
+      <StaleBanner domain="ReceiveAccount" onReload={reload} className="mb-2" />
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">

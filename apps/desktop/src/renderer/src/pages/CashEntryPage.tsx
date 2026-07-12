@@ -13,6 +13,7 @@ import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
 import { Button } from '../components/Button.js';
 import { StatBar } from '../components/StatBar.js';
+import { StaleBanner } from '../lib/realtime.js';
 import { statusTone } from '../components/StatusPill.js';
 import { PasswordInput } from '../components/PasswordInput.js';
 import { ImportButton } from '../components/ImportModal.js';
@@ -120,6 +121,7 @@ export function CashEntryPage({ user, kind }: { user: AuthUser; kind: 'THU' | 'C
         </div>
       </div>
 
+      <StaleBanner domain="CashEntry" onReload={reload} className="mb-2" />
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">

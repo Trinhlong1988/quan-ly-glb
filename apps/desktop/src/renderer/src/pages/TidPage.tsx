@@ -10,6 +10,7 @@ import { StatusPill, statusLabel, statusTone } from '../components/StatusPill.js
 import { StatBar } from '../components/StatBar.js';
 import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
+import { StaleBanner } from '../lib/realtime.js';
 import { ImportButton } from '../components/ImportModal.js';
 import { RequestCancelModal, type RequestCancelTarget } from '../components/RequestCancelModal.js';
 import { exportCsv } from '../lib/exportCsv.js';
@@ -265,21 +266,22 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
         />
       )}
 
+      {(tab === 'all' || tab === 'undelivered') && <StaleBanner domain="Tid" onReload={reload} className="mb-2" />}
       {(tab === 'all' || tab === 'undelivered') && (
         <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-4 py-3">TID</th>
-                <th className="px-4 py-3">HKD</th>
-                <th className="px-4 py-3">Ngành nghề</th>
-                <th className="px-4 py-3">Ngân hàng</th>
-                <th className="px-4 py-3">Gán máy POS</th>
-                <th className="px-4 py-3">Giao cho khách</th>
-                <th className="px-4 py-3">Khách hàng đang giữ</th>
-                <th className="px-4 py-3">Trạng thái</th>
-                {tab === 'undelivered' && <th className="px-4 py-3">Số ngày tồn</th>}
-                {(tab === 'all' || tab === 'undelivered') && <th className="px-4 py-3 text-right">Thao tác</th>}
+                <th className="px-4 py-3 whitespace-nowrap">TID</th>
+                <th className="px-4 py-3 whitespace-nowrap">HKD</th>
+                <th className="px-4 py-3 whitespace-nowrap">Ngành nghề</th>
+                <th className="px-4 py-3 whitespace-nowrap">Ngân hàng</th>
+                <th className="px-4 py-3 whitespace-nowrap">Gán máy POS</th>
+                <th className="px-4 py-3 whitespace-nowrap">Giao cho khách</th>
+                <th className="px-4 py-3 whitespace-nowrap">Khách hàng đang giữ</th>
+                <th className="px-4 py-3 whitespace-nowrap">Trạng thái</th>
+                {tab === 'undelivered' && <th className="px-4 py-3 whitespace-nowrap">Số ngày tồn</th>}
+                {(tab === 'all' || tab === 'undelivered') && <th className="px-4 py-3 text-right whitespace-nowrap">Thao tác</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
@@ -309,16 +311,16 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
               {!loading && (tab === 'all' ? rows : undelivered).map((t) => (
                 <tr key={t.id} className={tab === 'undelivered' && (t as UndeliveredTidDto).agingDays >= 30 ? 'bg-danger/5' : 'hover:bg-appbg/60'}>
                   <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700 whitespace-nowrap">{t.tid}</td>
-                  <td className="px-4 py-3 text-slate-600">{t.hkdName ?? '—'}</td>
-                  <td className="px-4 py-3 text-slate-600">{t.industryName ?? '—'}</td>
-                  <td className="px-4 py-3 text-slate-600">{t.bankCode ?? t.bank ?? '—'}</td>
+                  <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{t.hkdName ?? '—'}</td>
+                  <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{t.industryName ?? '—'}</td>
+                  <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{t.bankCode ?? t.bank ?? '—'}</td>
                   <td className="px-4 py-3">
                     <AssignCell t={t} />
                   </td>
                   <td className="px-4 py-3">
                     <DeliverCell t={t} />
                   </td>
-                  <td className="px-4 py-3 text-slate-600">{t.holdingCustomerName ?? '—'}</td>
+                  <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{t.holdingCustomerName ?? '—'}</td>
                   <td className="px-4 py-3">
                     <StatusPill status={t.status} />
                   </td>
@@ -331,13 +333,15 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
                   )}
                   {(tab === 'all' || tab === 'undelivered') && (
                     <td className="px-4 py-3">
-                      <div className="flex flex-wrap justify-end gap-1">
-                        <button onClick={() => setTimelineTid(t)} className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs text-slate-600 hover:bg-appbg hover:brightness-110">
-                          <History className="h-3.5 w-3.5" /> Vòng đời TID
+                      {/* Mr.Long 12/7 — nút thao tác ICON-ONLY (tooltip) cho gọn: cột Thao tác không còn chiếm nhiều
+                          chỗ, nhường bề ngang cho dữ liệu (TID/HKD/Khách giữ hiển thị đủ 1 hàng). */}
+                      <div className="flex justify-end gap-1">
+                        <button onClick={() => setTimelineTid(t)} title="Vòng đời TID" className="rounded-md border border-line p-1.5 text-slate-600 hover:bg-appbg hover:brightness-110">
+                          <History className="h-4 w-4" />
                         </button>
                         {canOps && (
-                          <button onClick={() => setSellFeeTid(t)} className="flex items-center gap-1 rounded-md border border-brand/30 bg-brand/5 px-2 py-1 text-xs font-semibold text-brand hover:brightness-110" title="Phí bán thực tế theo loại thẻ (thỏa thuận khi giao)">
-                            <Percent className="h-3.5 w-3.5" /> Phí bán
+                          <button onClick={() => setSellFeeTid(t)} className="rounded-md border border-brand/30 bg-brand/5 p-1.5 text-brand hover:brightness-110" title="Phí bán thực tế theo loại thẻ (thỏa thuận khi giao)">
+                            <Percent className="h-4 w-4" />
                           </button>
                         )}
                         {canOps &&
@@ -353,9 +357,10 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
                               <button
                                 key={a.kind}
                                 onClick={() => setAction({ tid: t, kind: a.kind })}
-                                className={'flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:brightness-110 ' + tone}
+                                title={a.label}
+                                className={'rounded-md border p-1.5 hover:brightness-110 ' + tone}
                               >
-                                {a.icon} {a.label}
+                                {a.icon}
                               </button>
                             );
                           })}
@@ -363,9 +368,9 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
                           <button
                             onClick={() => setCancelTarget({ entityType: 'Tid', entityId: t.id, entityLabel: t.tid, typeLabel: 'TID' })}
                             title="Yêu cầu hủy"
-                            className="flex items-center gap-1 rounded-md border border-danger/30 bg-danger/5 px-2 py-1 text-xs font-semibold text-danger hover:brightness-110"
+                            className="rounded-md border border-danger/30 bg-danger/5 p-1.5 text-danger hover:brightness-110"
                           >
-                            <Trash2 className="h-3.5 w-3.5" /> Yêu cầu hủy
+                            <Trash2 className="h-4 w-4" />
                           </button>
                         )}
                       </div>

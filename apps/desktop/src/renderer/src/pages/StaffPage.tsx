@@ -11,6 +11,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { RequestCancelModal, type RequestCancelTarget } from '../components/RequestCancelModal.js';
 import { StatusPill, statusLabel, statusTone } from '../components/StatusPill.js';
 import { StatBar } from '../components/StatBar.js';
+import { StaleBanner } from '../lib/realtime.js';
 import { RoleBadge } from '../components/RoleBadge.js';
 import { Field, inputCls } from '../components/Field.js';
 import { PasswordInput } from '../components/PasswordInput.js';
@@ -142,6 +143,7 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
         </button>
       </div>
 
+      <StaleBanner domain="User" onReload={reload} className="mb-2" />
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs uppercase tracking-wide text-slate-500">

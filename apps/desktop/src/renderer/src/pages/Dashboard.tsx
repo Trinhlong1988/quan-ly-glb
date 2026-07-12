@@ -38,6 +38,7 @@ import { DossierPage } from './DossierPage.js';
 import { RevenueDebtPage } from './RevenueDebtPage.js';
 import { ApprovalPage } from './ApprovalPage.js';
 import { UpdateBanner } from '../components/UpdateBanner.js';
+import { useRealtime } from '../lib/realtime.js';
 
 interface MenuItem {
   key: string;
@@ -45,8 +46,8 @@ interface MenuItem {
   icon: JSX.Element;
   /** Permission(s) required to see the item; undefined = always visible. Any-of semantics. */
   perms?: string[];
-  /** Show a live badge (e.g. undelivered TID count). */
-  badge?: 'undeliveredTid';
+  /** Show a live badge (e.g. undelivered TID count / pending cancel-approvals). */
+  badge?: 'undeliveredTid' | 'pendingCancels';
   /** Visually a sub-item of the group above (indented). */
   indent?: boolean;
 }
@@ -67,7 +68,7 @@ const MENU: MenuItem[] = [
   { key: 'finance', label: 'Quản Lý Tài Chính', icon: <Wallet className="h-[18px] w-[18px]" />, perms: ['CASHENTRY_VIEW', 'FUND_VIEW', 'CASHCAT_VIEW'] },
   { key: 'tid', label: 'Quản Lý TID', icon: <CreditCard className="h-[18px] w-[18px]" />, perms: ['TID_VIEW', 'CONFIG_TID_VIEW'], badge: 'undeliveredTid' },
   // R34: "Duyệt Hủy" gộp yêu cầu hủy bill + hủy dữ liệu (TID/POS/Khách/Nhân sự). Hiện với ai có bất kỳ quyền duyệt.
-  { key: 'approval', label: 'Quản lý dữ liệu yêu cầu duyệt hủy', icon: <ClipboardCheck className="h-[18px] w-[18px]" />, perms: ['BILL_CANCEL_APPROVE', 'TID_CANCEL_APPROVE', 'POS_CANCEL_APPROVE', 'CUSTOMER_CANCEL_APPROVE', 'USER_CANCEL_APPROVE'] },
+  { key: 'approval', label: 'Quản lý dữ liệu yêu cầu duyệt hủy', icon: <ClipboardCheck className="h-[18px] w-[18px]" />, perms: ['BILL_CANCEL_APPROVE', 'TID_CANCEL_APPROVE', 'POS_CANCEL_APPROVE', 'CUSTOMER_CANCEL_APPROVE', 'USER_CANCEL_APPROVE'], badge: 'pendingCancels' },
   { key: 'system', label: 'Quản Lý Cấu Hình Hệ Thống', icon: <Settings className="h-[18px] w-[18px]" />, perms: ['AUDIT_LOG_VIEW', 'SYSTEM_SETTING_VIEW', 'BACKUP_CREATE', 'BACKUP_RESTORE', 'STORAGE_VIEW', 'TRASH_VIEW'] }
 ];
 
@@ -76,6 +77,7 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
   const [active, setActive] = useState(visible[0]?.key ?? 'dashboard');
   const [menuOpen, setMenuOpen] = useState(false);
   const [undeliveredCount, setUndeliveredCount] = useState(0);
+  const { pendingCancels } = useRealtime(); // R48 Pha 4 — badge số yêu cầu hủy đang chờ duyệt (realtime poll)
   const [showInbox, setShowInbox] = useState(false);
   const [showChangePw, setShowChangePw] = useState(false);
   const [showLevel2, setShowLevel2] = useState(false);
@@ -176,6 +178,9 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
                 <span className="flex-1 text-left tracking-wide">{m.label}</span>
                 {m.badge === 'undeliveredTid' && undeliveredCount > 0 && (
                   <span className="rounded-full bg-danger px-1.5 text-xs font-semibold text-white shadow">{undeliveredCount}</span>
+                )}
+                {m.badge === 'pendingCancels' && pendingCancels > 0 && (
+                  <span className="rounded-full bg-danger px-1.5 text-xs font-semibold text-white shadow">{pendingCancels}</span>
                 )}
               </button>
             );

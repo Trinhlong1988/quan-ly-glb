@@ -15,6 +15,7 @@ import { FilterBar } from '../components/FilterBar.js';
 import { Button } from '../components/Button.js';
 import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../components/Selection.js';
 import { StatBar } from '../components/StatBar.js';
+import { StaleBanner } from '../lib/realtime.js';
 import { AuditTrailHeadCells, AuditTrailCells, AUDIT_TRAIL_COLS_DATE_ONLY } from '../components/AuditCells.js';
 import { StatusBadge, useStatusOptions, statusSelectOptions, toneCls } from '../components/StatusBadge.js';
 import { TabBar, TabButton } from '../components/Tabs.js';
@@ -121,6 +122,7 @@ function BankTab({ canManage }: { canManage: boolean }): JSX.Element {
       />
       <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Tìm mã / tên ngân hàng…" fromDate={fromDate} toDate={toDate} onFromDate={setFromDate} onToDate={setToDate} selects={[{ key: 'status', placeholder: 'Tất cả trạng thái', value: statusFilter, options: bankStatusOptions.filter((o) => o.active).map((o) => ({ value: o.code, label: o.label })), onChange: setStatusFilter }]} onApply={reload} onReset={() => { setSearch(''); setStatusFilter(''); setFromDate(''); setToDate(''); setTimeout(reload, 0); }} />
       {canManage && <SelectionBar count={sel.count} entityLabel="ngân hàng" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
+      <StaleBanner domain="Bank" onReload={reload} className="mb-2" />
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">

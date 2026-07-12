@@ -14,6 +14,7 @@ import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
 import { Button } from '../components/Button.js';
 import { StatBar } from '../components/StatBar.js';
+import { StaleBanner } from '../lib/realtime.js';
 import { statusTone } from '../components/StatusPill.js';
 import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../components/Selection.js';
 import { exportCsv } from '../lib/exportCsv.js';
@@ -118,6 +119,7 @@ export function FundPage({ user }: { user: AuthUser }): JSX.Element {
         onApply={reload} onReset={() => { setSearch(''); setFType(''); setFActive(''); setTimeout(reload, 0); }} />
 
       {canDelete && <SelectionBar count={sel.count} entityLabel="quỹ" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
+      <StaleBanner domain="Fund" onReload={reload} className="mb-2" />
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">

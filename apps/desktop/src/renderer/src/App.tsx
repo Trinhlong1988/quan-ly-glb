@@ -5,6 +5,7 @@ import { Login } from './pages/Login.js';
 import { ServerConfig } from './pages/ServerConfig.js';
 import { ForceChangePassword } from './pages/ForceChangePassword.js';
 import { Dashboard } from './pages/Dashboard.js';
+import { RealtimeProvider } from './lib/realtime.js';
 import { useToast } from './lib/toast.js';
 
 type Screen = 'loading' | 'server-config' | 'login' | 'force-change' | 'dashboard';
@@ -80,5 +81,10 @@ export function App(): JSX.Element {
   if (screen === 'server-config') return <ServerConfig onConfigured={() => setScreen('login')} />;
   if (screen === 'login' || !user) return <Login onLoggedIn={onLoggedIn} />;
   if (screen === 'force-change') return <ForceChangePassword user={user} onChanged={onChanged} onLogout={onLogout} />;
-  return <Dashboard user={user} onLogout={onLogout} />;
+  // R48 Pha 4 — provider realtime chỉ chạy khi đã đăng nhập (poll cần phiên hợp lệ); logout → Dashboard unmount → dừng poll.
+  return (
+    <RealtimeProvider>
+      <Dashboard user={user} onLogout={onLogout} />
+    </RealtimeProvider>
+  );
 }

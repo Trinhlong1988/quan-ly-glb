@@ -373,6 +373,13 @@ app.whenReady().then(async () => {
     app.exit(code);
     return;
   }
+  // R48 Pha 4 realtime: version change-token tăng đúng miền (targetType), không nhiễu chéo; pendingCancels hợp lệ.
+  if (process.env['GLB_SELFTEST'] === '38') {
+    const { runRealtimeSelfTest } = await import('./selftest-realtime.js');
+    const code = await runRealtimeSelfTest();
+    app.exit(code);
+    return;
+  }
 
   await createWindow();
   startHousekeeping();

@@ -130,6 +130,17 @@ model AuditLog {
   @@map("audit_logs")
 }
 
+// R48 Pha 4 — realtime: 1 dòng/miền dữ liệu (domain = targetType audit, vd 'Customer'/'Tid'/'Transaction').
+// writeAudit tăng version mỗi thao tác → client poll realtimeTokens(), phát hiện miền của mình đổi → nhắc tải lại.
+// Bảng TÍ HON (~vài chục dòng) → đọc O(1) mãi mãi dù audit log phình (khác GROUP BY audit sẽ chậm dần).
+model ChangeToken {
+  domain    String   @id
+  version   BigInt   @default(0)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("change_tokens")
+}
+
 model AppSetting {
   id        Int      @id @default(autoincrement())
   key       String   @unique

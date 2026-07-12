@@ -15,6 +15,11 @@ export interface OnlineUserDto {
   deviceInfo: string | null;
   since: string;
 }
+export interface RealtimeTokensDto {
+  byDomain: Record<string, number>; // targetType → version (đồng hồ thay đổi realtime)
+  pendingCancels: number;
+  serverNow: string;
+}
 export interface MutationOutcome {
   ok: boolean;
   error?: string;
@@ -1193,6 +1198,7 @@ export interface GlbApi {
   logout(): Promise<{ ok: boolean }>;
   sessionHeartbeat(): Promise<{ ok: boolean; kicked?: boolean; byDevice?: string }>;
   onlineUsers(): Promise<{ ok: boolean; error?: string; message?: string; data?: OnlineUserDto[] }>;
+  realtimeTokens(): Promise<{ ok: boolean; error?: string; message?: string; data?: RealtimeTokensDto }>;
   changePassword(currentPassword: string, newPassword: string, confirmPassword?: string): Promise<MutationOutcome>;
   adminResetPassword(userId: number, newPassword: string, actorPassword: string): Promise<MutationOutcome>;
   level2Status(): Promise<{ ok: boolean; hasLevel2?: boolean; error?: string; message?: string }>;

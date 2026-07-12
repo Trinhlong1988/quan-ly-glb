@@ -4,6 +4,7 @@ import { writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import { validatePassword } from '@glb/shared';
 import * as auth from './auth-service.js';
+import { realtimeTokens } from './realtime-service.js';
 import * as roleSvc from './role-service.js';
 import * as userSvc from './user-service.js';
 import * as auditSvc from './audit-service.js';
@@ -62,6 +63,7 @@ export function registerIpc(): void {
   // R46 nhịp tim (renderer gọi ~15s) + R41 danh sách user đang đăng nhập.
   ipcMain.handle('session:heartbeat', async () => auth.heartbeat());
   ipcMain.handle('session:onlineUsers', async () => auth.listOnlineUsers());
+  ipcMain.handle('realtime:tokens', async () => realtimeTokens()); // R48 Pha 4 — poll thay đổi dữ liệu + badge chờ duyệt
   ipcMain.handle('auth:me', async () => auth.me());
   ipcMain.handle('auth:logout', async () => {
     await auth.logout();
