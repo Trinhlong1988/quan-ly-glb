@@ -16,6 +16,7 @@ import * as customerSvc from './customer-service.js';
 import * as posSvc from './pos-service.js';
 import * as tidSvc from './tid-service.js';
 import * as supplySvc from './pos-supply-service.js';
+import * as warehouseSvc from './warehouse-service.js';
 import * as bankSvc from './bank-config-service.js';
 import * as userSvc from './user-service.js';
 import * as notifySvc from './notification-service.js';
@@ -153,7 +154,8 @@ export async function runTidUnifySelfTest(): Promise<number> {
   await mkDevice(sG);
   await tidSvc.createTidUnified({ tid: 'TID-K2-G', ...baseCfg });
   await tidSvc.assignTid('TID-K2-G', { posSerial: sG, customerId, occurredAt: '2026-07-05' });
-  const rcPos = await posSvc.recallPos(sG, { occurredAt: '2026-07-06' });
+  const whT = await warehouseSvc.createWarehouse({ code: 'TUK0', name: 'Kho TidUnify' }); // Model 1 — thu hồi BẮT BUỘC có kho
+  const rcPos = await posSvc.recallPos(sG, { toWarehouseId: whT.id!, occurredAt: '2026-07-06' });
   const sG2 = 'SN-K2-G2';
   await mkDevice(sG2);
   const reasgG = await tidSvc.assignTid('TID-K2-G', { posSerial: sG2, customerId, occurredAt: '2026-07-07' });

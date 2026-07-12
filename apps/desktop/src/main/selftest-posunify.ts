@@ -13,6 +13,7 @@ import * as customerSvc from './customer-service.js';
 import * as posSvc from './pos-service.js';
 import * as tidSvc from './tid-service.js';
 import * as supplySvc from './pos-supply-service.js';
+import * as warehouseSvc from './warehouse-service.js';
 
 let failures = 0;
 function assert(name: string, cond: boolean, extra?: unknown): void {
@@ -77,7 +78,8 @@ export async function runPosUnifySelfTest(): Promise<number> {
   await supplySvc.createPosIntake({ posModelId: modelId, serial: s2, intakeStatusId: statusId!, supplierId, importPrice: 1_200_000, importedAt: '2026-07-01' });
   await tidSvc.createTid({ tid: 'TID-K1-002' });
   await tidSvc.assignTid('TID-K1-002', { posSerial: s2, customerId, occurredAt: '2026-07-02' });
-  const recall = await posSvc.recallPos(s2, { occurredAt: '2026-07-05' });
+  const whU = await warehouseSvc.createWarehouse({ code: 'PUK0', name: 'Kho PosUnify' }); // Model 1 — thu hồi BẮT BUỘC có kho
+  const recall = await posSvc.recallPos(s2, { toWarehouseId: whU.id!, occurredAt: '2026-07-05' });
   assert('recallPos ok', recall.ok === true, recall.error);
   const devRec = await db.posDevice.findUnique({ where: { serial: s2 } });
   assert('recallPos: máy về IN_STOCK + currentTid=null', devRec?.status === 'IN_STOCK' && devRec?.currentTid === null, { status: devRec?.status, tid: devRec?.currentTid });

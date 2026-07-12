@@ -33,6 +33,9 @@ export async function runPosLifecycleSelfTest(): Promise<number> {
   const c1 = await customerSvc.createCustomer({ fullName: 'PL Khách Một', nickname: 'PL Khách Một' });
   const c2 = await customerSvc.createCustomer({ fullName: 'PL Khách Hai', nickname: 'PL Khách Hai' });
   assert('2 khách test tạo được', c1.ok && c2.ok, { c1: c1.error, c2: c2.error });
+  // Model 1 — thu hồi BẮT BUỘC có kho → tạo sẵn 1 kho cho các bước recall.
+  const whR = await warehouseSvc.createWarehouse({ code: 'PLK0', name: 'Kho PL 0' });
+  assert('kho recall tạo được', whR.ok === true, whR.error);
 
   // ── POS #1: 1 máy 1 TID sống ─────────────────────────────────────────────
   const A = 'SN-PL-A';
@@ -67,7 +70,7 @@ export async function runPosLifecycleSelfTest(): Promise<number> {
   assert('DB backstop: binding mở thứ 2/máy bị partial-unique chặn (23505)', dbBlocked);
 
   // unbind-before-bind: thu hồi máy A (gỡ TID-1) rồi mới lắp TID-1 sang B được
-  const recall = await posSvc.recallPos(A, { occurredAt: '2026-06-04T09:00:00Z' });
+  const recall = await posSvc.recallPos(A, { toWarehouseId: whR.id!, occurredAt: '2026-06-04T09:00:00Z' });
   assert('thu hồi máy A ok (gỡ TID-1)', recall.ok === true, recall.error);
   const devA = await db.posDevice.findUnique({ where: { serial: A } });
   assert('máy A về IN_STOCK, currentTid null sau thu hồi', devA?.status === 'IN_STOCK' && devA?.currentTid === null, { s: devA?.status, tid: devA?.currentTid });
@@ -138,6 +141,8 @@ export async function runPosLifecycleSelfTest(): Promise<number> {
   assert('deploy A (dọn kho) ok', badWh.ok === true, badWh.error);
   const recallBad = await posSvc.recallPos(A, { toWarehouseId: 999999, occurredAt: '2026-06-08T11:00:00Z' });
   assert('thu hồi về kho không tồn tại → NOT_FOUND', recallBad.ok === false && recallBad.error === 'NOT_FOUND', { err: recallBad.error });
+  const recallNoWh = await posSvc.recallPos(A, { occurredAt: '2026-06-08T12:00:00Z' });
+  assert('thu hồi KHÔNG chọn kho → VALIDATION (siết cứng backend)', recallNoWh.ok === false && recallNoWh.error === 'VALIDATION', { err: recallNoWh.error });
 
   await logout();
   // eslint-disable-next-line no-console

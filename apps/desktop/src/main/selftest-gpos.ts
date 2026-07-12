@@ -13,6 +13,7 @@ import * as userSvc from './user-service.js';
 import * as customerSvc from './customer-service.js';
 import * as posSvc from './pos-service.js';
 import * as tidSvc from './tid-service.js';
+import * as warehouseSvc from './warehouse-service.js';
 import * as auditSvc from './audit-service.js';
 import { nextCode } from './code-service.js';
 
@@ -95,8 +96,9 @@ export async function runGposSelfTest(): Promise<number> {
   assert('reportDamage ok', dmg.ok === true, dmg.error);
   const snd = await posSvc.sendPosRepair(serial, { occurredAt: '2026-07-03T09:00:00Z' });
   assert('sendRepair ok', snd.ok === true, snd.error);
-  const rcv = await posSvc.receivePosRepaired(serial, { occurredAt: '2026-07-04T09:00:00Z' });
-  assert('receiveRepaired ok', rcv.ok === true, rcv.error);
+  const whG = await warehouseSvc.createWarehouse({ code: 'GPK0', name: 'Kho GPOS' }); // Model 1 — nhận-sửa BẮT BUỘC có kho
+  const rcv = await posSvc.receivePosRepaired(serial, { toWarehouseId: whG.id!, occurredAt: '2026-07-04T09:00:00Z' });
+  assert('receiveRepaired ok (về kho)', rcv.ok === true, rcv.error);
 
   const devNow = await db.posDevice.findUnique({ where: { serial } });
   assert('device projected back to IN_STOCK', devNow?.status === 'IN_STOCK', { status: devNow?.status });

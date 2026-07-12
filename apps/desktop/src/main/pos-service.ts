@@ -406,8 +406,13 @@ async function applyTransition(serial: string, event: PosEvent, input: Transitio
   if (event === 'cancelCustomer' && pre.currentCustomerId == null) {
     return { ok: false, error: 'VALIDATION', message: 'Máy này chưa gán khách nào để hủy.' };
   }
-  // Model 1 — thu hồi / nhận-sửa VỀ kho: kho đích (nếu truyền) phải tồn tại (chống FK treo).
-  if ((event === 'recall' || event === 'receiveRepaired') && input.toWarehouseId != null) {
+  // Model 1 — thu hồi / nhận-sửa VỀ kho: BẮT BUỘC chọn kho (máy về kho phải biết ở kho nào — giữ đồng bộ),
+  // và kho đích phải tồn tại (chống FK treo). CHỈ bắt khi chuyển HỢP LỆ về trạng thái — sai trạng thái để
+  // state machine báo INVALID_STATE (không che lỗi trạng thái bằng lỗi thiếu kho).
+  if ((event === 'recall' || event === 'receiveRepaired') && decidePosTransition(pre.status as PosStatus, event).allowed) {
+    if (input.toWarehouseId == null) {
+      return { ok: false, error: 'VALIDATION', message: 'Phải chọn KHO nhận máy về (máy trong kho luôn phải thuộc 1 kho).' };
+    }
     const wh = await db.warehouse.findFirst({ where: { id: input.toWarehouseId, deletedAt: null }, select: { id: true } });
     if (!wh) return { ok: false, error: 'NOT_FOUND', message: 'Kho nhận máy về không tồn tại (hoặc đã bị xóa).' };
   }

@@ -126,8 +126,9 @@ export async function runDeviceSaleSelfTest(): Promise<number> {
   await posSvc.createPos({ serial: 'SN-DS-7', occurredAt: '2026-06-01T09:00:00Z' });
   const ccNo = await posSvc.cancelCustomerPos('SN-DS-7', { occurredAt: '2026-06-07T09:00:00Z' });
   assert('hủy khách máy chưa gán khách → VALIDATION', ccNo.ok === false && ccNo.error === 'VALIDATION', { err: ccNo.error });
-  // thu hồi → recallPending false
-  await posSvc.recallPos('SN-DS-6', { occurredAt: '2026-06-08T09:00:00Z' });
+  // thu hồi → recallPending false (Model 1: thu hồi BẮT BUỘC có kho về)
+  const whCancel = await warehouseSvc.createWarehouse({ code: 'DSK0', name: 'Kho DS 0' });
+  await posSvc.recallPos('SN-DS-6', { toWarehouseId: whCancel.id!, occurredAt: '2026-06-08T09:00:00Z' });
   const dev6b = await db.posDevice.findUnique({ where: { serial: 'SN-DS-6' } });
   assert('thu hồi máy → recallPending=false, về IN_STOCK', dev6b?.recallPending === false && dev6b?.status === 'IN_STOCK');
 
