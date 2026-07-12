@@ -35,9 +35,17 @@ describe('backup manifest', () => {
     expect(m.createdAt).toBe('2026-07-09T09:30:00.000Z');
   });
 
-  it('backupFileName matches the §17 convention', () => {
-    const name = backupFileName(new Date('2026-07-09T09:30:05'));
-    expect(name).toMatch(/^\d{4}-\d{2}-\d{2}_\d{6}_ims_backup\.zip$/);
+  it('backupFileName matches the §17 convention (ms + token chống trùng)', () => {
+    const name = backupFileName(new Date('2026-07-09T09:30:05.123'));
+    // date_HHMMSSmmm_<rand4>_ims_backup.zip
+    expect(name).toMatch(/^\d{4}-\d{2}-\d{2}_\d{9}_[a-z0-9]{4}_ims_backup\.zip$/);
+    expect(name.startsWith('2026-07-09_093005123_')).toBe(true);
     expect(name.endsWith('_ims_backup.zip')).toBe(true);
+  });
+
+  it('backupFileName không trùng khi gọi liên tiếp cùng thời điểm (token ngẫu nhiên)', () => {
+    const d = new Date('2026-07-09T09:30:05.123');
+    const names = new Set(Array.from({ length: 50 }, () => backupFileName(d)));
+    expect(names.size).toBe(50);
   });
 });

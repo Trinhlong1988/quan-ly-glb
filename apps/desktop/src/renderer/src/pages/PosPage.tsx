@@ -71,11 +71,13 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
   const toast = useToast();
   const [rows, setRows] = useState<PosDto[]>([]);
   const [models, setModels] = useState<LiteRef[]>([]);
+  const [warehouses, setWarehouses] = useState<WarehouseLite[]>([]); // Model 1 — lọc theo kho
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   // LANE B (#24) — lọc "Chủng loại" phía client trên tập rows (posList trả full, không phân trang).
   const [modelFilter, setModelFilter] = useState('');
+  const [warehouseFilter, setWarehouseFilter] = useState(''); // Model 1 — lọc theo kho vật lý (server-side)
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [timelineOf, setTimelineOf] = useState<PosDto | null>(null);
@@ -96,6 +98,7 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
     const res = await window.api.posList({
       search: search || undefined,
       status: statusFilter || undefined,
+      warehouseId: warehouseFilter ? Number(warehouseFilter) : undefined,
       fromDate: fromDate || undefined,
       toDate: toDate || undefined
     });
@@ -106,8 +109,14 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
   useEffect(() => {
     void reload();
     window.api.posModelLite().then((r) => r.ok && r.data && setModels(r.data));
+    window.api.warehouseLite().then((r) => r.ok && r.data && setWarehouses(r.data));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // Đổi kho là lọc lại ngay (server-side).
+  useEffect(() => {
+    void reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [warehouseFilter]);
 
   // Lọc chủng loại (client-side) trên tập đã lọc phía server. Ưu tiên posModelId; nếu DTO thiếu id
   // nhưng có tên khớp option đang chọn thì fallback theo posModelName.
@@ -126,6 +135,7 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
     setSearch('');
     setStatusFilter('');
     setModelFilter('');
+    setWarehouseFilter('');
     setFromDate('');
     setToDate('');
     setTimeout(reload, 0);
@@ -142,8 +152,8 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
             onClick={() =>
               exportCsv(
                 'may_pos',
-                ['Serial', 'Chủng loại', 'Nhà cung cấp', 'Giá nhập', 'Ngày nhập', 'Trạng thái', 'TID hiện tại', 'Khách'],
-                filteredRows.map((d) => [d.serial, d.posModelName ?? '', d.supplierName ?? '', d.importPrice ?? '', d.importedAt ? fmtDate(d.importedAt) : '', posStatusLabel(d.status), d.currentTid ?? '', d.customerName ?? ''])
+                ['Serial', 'Chủng loại', 'Nhà cung cấp', 'Giá nhập', 'Ngày nhập', 'Trạng thái', 'Kho', 'TID hiện tại', 'Khách'],
+                filteredRows.map((d) => [d.serial, d.posModelName ?? '', d.supplierName ?? '', d.importPrice ?? '', d.importedAt ? fmtDate(d.importedAt) : '', posStatusLabel(d.status), d.warehouseName ?? '', d.currentTid ?? '', d.customerName ?? ''])
               )
             }
           >
@@ -163,7 +173,9 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
         selects={[
           { key: 'status', placeholder: 'Tất cả trạng thái', value: statusFilter, options: posOptions.filter((o) => o.active).map((o) => ({ value: o.code, label: o.label })), onChange: setStatusFilter },
           // Lọc chủng loại (client-side) — đổi giá trị là lọc ngay, không cần bấm "Lọc".
-          { key: 'model', placeholder: 'Tất cả chủng loại', value: modelFilter, options: models.map((m) => ({ value: String(m.id), label: m.name })), onChange: setModelFilter }
+          { key: 'model', placeholder: 'Tất cả chủng loại', value: modelFilter, options: models.map((m) => ({ value: String(m.id), label: m.name })), onChange: setModelFilter },
+          // Model 1 — lọc theo KHO đang chứa máy (server-side). "Chưa gán kho" bắt máy IN_STOCK chưa có kho.
+          { key: 'warehouse', placeholder: 'Tất cả kho', value: warehouseFilter, options: warehouses.map((w) => ({ value: String(w.id), label: `${w.code} · ${w.name}` })), onChange: setWarehouseFilter }
         ]}
         onApply={reload}
         onReset={resetFilters}
@@ -201,6 +213,7 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
               <th className="px-4 py-3 text-right">Giá nhập</th>
               <th className="px-4 py-3">Ngày nhập</th>
               <th className="px-4 py-3">Trạng thái</th>
+              <th className="px-4 py-3">Kho</th>
               <th className="px-4 py-3">TID hiện tại</th>
               <th className="px-4 py-3">Khách</th>
               <th className="px-4 py-3 text-right">Thao tác</th>
@@ -209,14 +222,14 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
           <tbody className="divide-y divide-line">
             {loading && (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={10} className="px-4 py-8 text-center text-slate-400">
                   <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                 </td>
               </tr>
             )}
             {!loading && filteredRows.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-4 py-10 text-center text-slate-400">
+                <td colSpan={10} className="px-4 py-10 text-center text-slate-400">
                   <HardDrive className="mx-auto mb-2 h-6 w-6" />
                   {rows.length === 0 ? 'Chưa có máy POS.' : 'Không có máy POS khớp bộ lọc.'}
                 </td>
@@ -233,6 +246,7 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
                   <td className="px-4 py-3">
                     <StatusBadge entity="POS_DEVICE" code={d.status} />
                   </td>
+                  <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{d.warehouseName ?? (d.status === 'IN_STOCK' ? <span className="text-amber-500">Chưa gán kho</span> : '—')}</td>
                   <td className="px-4 py-3 font-mono text-xs text-slate-500 whitespace-nowrap">{d.currentTid ?? '—'}</td>
                   <td className="px-4 py-3 text-slate-600">{d.customerName ?? '—'}</td>
                   <td className="px-4 py-3">
@@ -328,13 +342,11 @@ function SellDeviceModal({ device, onClose, onDone }: { device: PosDto; onClose:
   const toast = useToast();
   const [customers, setCustomers] = useState<CustomerDto[]>([]);
   const [funds, setFunds] = useState<FundDto[]>([]);
-  const [warehouses, setWarehouses] = useState<WarehouseLite[]>([]);
   const [customerId, setCustomerId] = useState('');
   const [salePrice, setSalePrice] = useState('');
   const [paidNow, setPaidNow] = useState('');
   const [fundId, setFundId] = useState('');
   const [method, setMethod] = useState('CASH');
-  const [warehouseId, setWarehouseId] = useState('');
   const [occurredAt, setOccurredAt] = useState('');
   const [note, setNote] = useState('');
   const [password, setPassword] = useState('');
@@ -343,7 +355,6 @@ function SellDeviceModal({ device, onClose, onDone }: { device: PosDto; onClose:
   useEffect(() => {
     window.api.customerList({}).then((r) => r.ok && r.data && setCustomers(r.data));
     window.api.fundList({}).then((r) => r.ok && r.data && setFunds(r.data.filter((f) => f.active)));
-    window.api.warehouseLite().then((r) => r.ok && r.data && setWarehouses(r.data));
   }, []);
 
   const price = Number(salePrice) || 0;
@@ -359,7 +370,7 @@ function SellDeviceModal({ device, onClose, onDone }: { device: PosDto; onClose:
     setBusy(true);
     const res = await window.api.deviceSellPos(device.serial, {
       customerId: Number(customerId), salePrice: price, paidNow: paid,
-      fundId: fundId ? Number(fundId) : null, method, warehouseId: warehouseId ? Number(warehouseId) : null,
+      fundId: fundId ? Number(fundId) : null, method, warehouseId: device.warehouseId ?? null, // ĐỒNG BỘ: kho xuất = kho đang chứa máy
       occurredAt: occurredAt ? new Date(occurredAt).toISOString() : null, note: note || null
     }, password);
     setBusy(false);
@@ -397,12 +408,11 @@ function SellDeviceModal({ device, onClose, onDone }: { device: PosDto; onClose:
             <option value="CK">Chuyển khoản</option>
           </select>
         </Field>
-        <Field label="Từ kho">
-          <select className={inputCls} value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
-            <option value="">— Không chọn —</option>
-            {warehouses.map((w) => <option key={w.id} value={w.id}>{w.code} · {w.name}</option>)}
-          </select>
-        </Field>
+        {device.warehouseId != null && (
+          <Field label="Từ kho" hint="Kho đang chứa máy (đồng bộ, không chọn lệch)">
+            <div className="rounded-md border border-line bg-appbg px-3 py-2 text-sm font-medium text-slate-700">{device.warehouseName ?? `Kho #${device.warehouseId}`}</div>
+          </Field>
+        )}
         <Field label="Thời gian bán" hint="Bỏ trống = hiện tại">
           <input type="datetime-local" className={inputCls} value={occurredAt} onChange={(e) => setOccurredAt(e.target.value)} />
         </Field>
@@ -497,6 +507,7 @@ function TransitionModal({ device, event, onClose, onDone }: { device: PosDto; e
   const [customerId, setCustomerId] = useState('');
   const [warehouses, setWarehouses] = useState<WarehouseLite[]>([]);
   const [warehouseId, setWarehouseId] = useState('');
+  const [toWarehouseId, setToWarehouseId] = useState(''); // Model 1 — thu hồi/nhận-sửa VỀ kho nào
   const [occurredAt, setOccurredAt] = useState('');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
@@ -504,23 +515,30 @@ function TransitionModal({ device, event, onClose, onDone }: { device: PosDto; e
 
   const needCustomer = event === 'deploy' || event === 'changeCustomer';
   // R27: giao / đổi-khách ghi "Từ kho" (chọn kho → hiện địa chỉ).
-  const needWarehouse = event === 'deploy' || event === 'changeCustomer';
+  const needFromWarehouse = event === 'deploy' || event === 'changeCustomer';
+  // Model 1: thu hồi / nhận-sửa xong → máy VỀ kho nào.
+  const needToWarehouse = event === 'recall' || event === 'receiveRepaired';
+  // ĐỒNG BỘ: máy đang có kho (đang trong kho) → deploy xuất TỪ chính kho đó, KHÓA không cho chọn lệch.
+  const lockedFromWarehouse = event === 'deploy' && device.warehouseId != null;
   const selectedWarehouse = warehouses.find((w) => String(w.id) === warehouseId);
 
   useEffect(() => {
     if (needCustomer) window.api.customerList({}).then((r) => r.ok && r.data && setCustomers(r.data));
-    if (needWarehouse) window.api.warehouseLite().then((r) => r.ok && r.data && setWarehouses(r.data));
-  }, [needCustomer, needWarehouse]);
+    if (needFromWarehouse || needToWarehouse) window.api.warehouseLite().then((r) => r.ok && r.data && setWarehouses(r.data));
+    if (event === 'deploy' && device.warehouseId != null) setWarehouseId(String(device.warehouseId));
+  }, [needCustomer, needFromWarehouse, needToWarehouse, event, device.warehouseId]);
 
   async function run(password?: string): Promise<void> {
     if (needCustomer && !customerId) return toast.alert(event === 'changeCustomer' ? 'Phải chọn khách hàng mới.' : 'Phải chọn khách hàng nhận máy.');
+    if (needToWarehouse && !toWarehouseId) return toast.alert('Phải chọn KHO nhận máy về (để biết máy đang ở kho nào).', 'Thiếu kho');
     setBusy(true);
     const input = {
       occurredAt: occurredAt ? new Date(occurredAt).toISOString() : null,
       note: note || null,
       customerId: customerId ? Number(customerId) : null,
       agentId: null,
-      fromWarehouseId: needWarehouse && warehouseId ? Number(warehouseId) : null
+      fromWarehouseId: needFromWarehouse && warehouseId ? Number(warehouseId) : null,
+      toWarehouseId: needToWarehouse && toWarehouseId ? Number(toWarehouseId) : null
     };
     let res;
     switch (event) {
@@ -585,7 +603,15 @@ function TransitionModal({ device, event, onClose, onDone }: { device: PosDto; e
             </select>
           </Field>
         )}
-        {needWarehouse && (
+        {needFromWarehouse && lockedFromWarehouse && (
+          <Field label="Từ kho" hint="Máy đang trong kho này — xuất giao từ đúng kho (đồng bộ, không chọn lệch)">
+            <div className="rounded-md border border-line bg-appbg px-3 py-2 text-sm font-medium text-slate-700">{device.warehouseName ?? `Kho #${device.warehouseId}`}</div>
+            {selectedWarehouse?.address && (
+              <div className="mt-1.5 rounded-md bg-appbg px-3 py-2 text-xs text-slate-600"><span className="text-slate-400">Địa chỉ giao: </span>{selectedWarehouse.address}</div>
+            )}
+          </Field>
+        )}
+        {needFromWarehouse && !lockedFromWarehouse && (
           <Field label="Từ kho" hint="Chọn kho xuất — địa chỉ kho sẽ hiện bên dưới">
             <select className={inputCls} value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
               <option value="">— Không chọn kho —</option>
@@ -601,6 +627,18 @@ function TransitionModal({ device, event, onClose, onDone }: { device: PosDto; e
                 {selectedWarehouse.address || <span className="italic text-slate-400">kho chưa có địa chỉ</span>}
               </div>
             )}
+          </Field>
+        )}
+        {needToWarehouse && (
+          <Field label="Về kho" required hint="Máy thu về kho nào (để lọc/biết máy đang ở kho nào)">
+            <select className={inputCls} value={toWarehouseId} onChange={(e) => setToWarehouseId(e.target.value)}>
+              <option value="">— Chọn kho nhận —</option>
+              {warehouses.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.code} · {w.name}
+                </option>
+              ))}
+            </select>
           </Field>
         )}
         <Field label="Thời gian thao tác" hint="Bỏ trống = thời điểm hiện tại">

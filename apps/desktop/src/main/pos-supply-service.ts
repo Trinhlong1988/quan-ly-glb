@@ -438,6 +438,7 @@ export interface CreatePosIntakeInput {
   importPrice: number;
   importedAt: string; // yyyy-mm-dd hoặc ISO
   note?: string | null;
+  warehouseId?: number | null; // Model 1 — nhập vào KHO nào (set PosDevice.warehouseId khi máy IN_STOCK)
 }
 export interface UpdatePosIntakeInput {
   posModelId?: number;
@@ -528,6 +529,11 @@ export async function createPosIntake(input: CreatePosIntakeInput): Promise<Muta
   if (!importedAt) return { ok: false, error: 'VALIDATION', message: 'Ngày nhập không hợp lệ.' };
   const refErr = await validateRefs(db, input.posModelId, input.intakeStatusId, input.supplierId);
   if (refErr) return refErr;
+  // Model 1 — kho nhập (nếu chọn) phải tồn tại (chống FK treo).
+  if (input.warehouseId != null) {
+    const wh = await db.warehouse.findFirst({ where: { id: input.warehouseId, deletedAt: null }, select: { id: true } });
+    if (!wh) return { ok: false, error: 'NOT_FOUND', message: 'Kho nhập đã chọn không tồn tại (hoặc đã bị xóa).' };
+  }
   const dup = dupResult(await db.posIntake.findFirst({ where: { serial } }), 'Seri number', serial);
   if (dup) return dup;
   // PHASE K1 (Q-P1, desync #22): tạo phiếu nhập + UPSERT PosDevice IN_STOCK + ghi AssetEvent(STOCK_IN)
@@ -550,12 +556,15 @@ export async function createPosIntake(input: CreatePosIntakeInput): Promise<Muta
       let fromState: string | null;
       let eventType: string;
       if (!existing) {
-        await tx.posDevice.create({ data: { serial, status: 'IN_STOCK', ...intakeCols, createdBy: user.id } });
+        // Máy mới nhập kho → IN_STOCK + gán KHO (Model 1: warehouseId≠null ⟺ IN_STOCK).
+        await tx.posDevice.create({ data: { serial, status: 'IN_STOCK', ...intakeCols, warehouseId: input.warehouseId ?? null, createdBy: user.id } });
         fromState = null;
         eventType = 'STOCK_IN';
       } else {
         // GIỮ status/currentTid/currentCustomerId/currentAgentId — chỉ cập nhật cột nhập gần nhất.
-        await tx.posDevice.update({ where: { id: existing.id }, data: { ...intakeCols, updatedBy: user.id } });
+        // Kho: CHỈ đổi khi máy đang IN_STOCK (đang ở kho); máy đang DEPLOYED/… thì KHÔNG gán kho (giữ đồng bộ bất biến).
+        const whPatch = existing.status === 'IN_STOCK' ? { warehouseId: input.warehouseId ?? null } : {};
+        await tx.posDevice.update({ where: { id: existing.id }, data: { ...intakeCols, ...whPatch, updatedBy: user.id } });
         fromState = existing.status;
         eventType = existing.status === 'IN_STOCK' ? 'STOCK_IN' : 'INTAKE_UPDATE';
       }

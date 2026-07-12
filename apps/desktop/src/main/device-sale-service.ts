@@ -129,10 +129,12 @@ export async function sellPos(serial: string, input: SellPosInput, password: str
         if (!decision.allowed) throw new SaleAbort({ ok: false, error: decision.reason, message: `Không thể bán máy đang ở trạng thái ${dev.status}.` });
 
         const code = await nextCode('BS', tx);
+        // ĐỒNG BỘ kho: máy bán XUẤT TỪ kho đang chứa nó (nguồn sự thật dev.warehouseId); legacy null → input.
+        const soldFromWh = dev.warehouseId ?? input.warehouseId ?? null;
         const sale = await tx.deviceSale.create({
           data: {
             code, saleKind: 'POS', deviceSerial: serial, tid: dev.currentTid, customerId: input.customerId,
-            salePrice: money2.salePrice, warehouseId: input.warehouseId ?? null, soldByUserId: user.id,
+            salePrice: money2.salePrice, warehouseId: soldFromWh, soldByUserId: user.id,
             occurredAt, note: input.note?.trim() || null, status: 'POSTED', createdBy: user.id
           }
         });
@@ -151,11 +153,11 @@ export async function sellPos(serial: string, input: SellPosInput, password: str
           }
         }
 
-        // Máy → ĐÃ BÁN (rời tồn kho), khách = người mua, gỡ TID khỏi máy, hết chờ-thu-hồi.
+        // Máy → ĐÃ BÁN (RỜI tồn kho → warehouseId=null giữ bất biến), khách = người mua, gỡ TID, hết chờ-thu-hồi.
         const fromState = dev.status;
-        await tx.posDevice.update({ where: { id: dev.id }, data: { status: 'SOLD', currentTid: null, currentCustomerId: input.customerId, currentAgentId: null, recallPending: false, updatedBy: user.id } });
+        await tx.posDevice.update({ where: { id: dev.id }, data: { status: 'SOLD', currentTid: null, currentCustomerId: input.customerId, currentAgentId: null, recallPending: false, warehouseId: null, updatedBy: user.id } });
         await tx.assetEvent.create({
-          data: { deviceSerial: serial, tid: dev.currentTid, eventType: 'SELL', fromState, toState: 'SOLD', customerId: input.customerId, actorUserId: user.id, occurredAt, fromWarehouseId: input.warehouseId ?? null, note: input.note?.trim() || null, afterJson: JSON.stringify(auditSnapshot({ sale: code, salePrice: money2.salePrice.toString(), customerId: input.customerId })) }
+          data: { deviceSerial: serial, tid: dev.currentTid, eventType: 'SELL', fromState, toState: 'SOLD', customerId: input.customerId, actorUserId: user.id, occurredAt, fromWarehouseId: soldFromWh, note: input.note?.trim() || null, afterJson: JSON.stringify(auditSnapshot({ sale: code, salePrice: money2.salePrice.toString(), customerId: input.customerId })) }
         });
 
         await bookSaleCashEntries(tx, { saleId: sale.id, saleKind: 'POS', salePrice: money2.salePrice, paid: money2.paid, fundId: input.fundId ?? null, method, entryDate: occurredAt, customerId: input.customerId, userId: user.id });

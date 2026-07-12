@@ -47,13 +47,19 @@ export function buildBackupManifest(input: BuildManifestInput): BackupManifest {
   };
 }
 
-/** Backup filename convention: 2026-07-09_093000_ims_backup.zip (IMS_SPEC §17). */
+/**
+ * Backup filename convention (IMS_SPEC §17): `2026-07-09_093005123_a4f9_ims_backup.zip`.
+ * Khối thời gian gồm MILLISECOND (9 chữ số HHMMSSmmm) + token ngẫu nhiên 4 ký tự → 2 backup
+ * trong CÙNG 1 giây KHÔNG còn trùng tên (chống đè mất bản sao lưu). Sort chuỗi vẫn theo thời gian
+ * (date → HHMMSSmmm) nên rotation/mirror giữ đúng thứ tự cũ→mới.
+ */
 export function backupFileName(now: Date = new Date()): string {
   const p = (n: number, w = 2): string => String(n).padStart(w, '0');
   const stamp =
     `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}_` +
-    `${p(now.getHours())}${p(now.getMinutes())}${p(now.getSeconds())}`;
-  return `${stamp}_ims_backup.zip`;
+    `${p(now.getHours())}${p(now.getMinutes())}${p(now.getSeconds())}${p(now.getMilliseconds(), 3)}`;
+  const rand = Math.random().toString(36).slice(2, 6).padEnd(4, '0');
+  return `${stamp}_${rand}_ims_backup.zip`;
 }
 
 /** R_BACKUP: verify a restored/loaded DB against the checksum recorded in its manifest. */

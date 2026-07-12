@@ -3,7 +3,7 @@ import { Plus, Pencil, Trash2, Loader2, Building2, Cpu, PackagePlus, Tag, Downlo
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate, fmtTime, groupDigits, parseVndInput, prereqMessage } from '@glb/shared';
 import type { PrereqDef } from '@glb/shared';
-import type { SupplierDto, PosModelDto, IntakeStatusDto, PosIntakeDto, LiteRef } from '../../../preload/index.d';
+import type { SupplierDto, PosModelDto, IntakeStatusDto, PosIntakeDto, LiteRef, WarehouseLite } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
 import { isStaleWrite, STALE_TITLE } from '../lib/optlock.js';
 import { Modal } from '../components/Modal.js';
@@ -570,7 +570,13 @@ function IntakeForm({ mode, row, models, suppliers, statuses, onClose, onSaved }
   const [price, setPrice] = useState(row ? String(row.importPrice) : '');
   const [importedAt, setImportedAt] = useState(row ? row.importedAt.slice(0, 10) : '');
   const [note, setNote] = useState(row?.note ?? '');
+  const [warehouseId, setWarehouseId] = useState(''); // Model 1 — nhập vào kho nào (chỉ khi nhập kho mới)
+  const [warehouses, setWarehouses] = useState<WarehouseLite[]>([]);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (mode === 'create') window.api.warehouseLite().then((r) => r.ok && r.data && setWarehouses(r.data));
+  }, [mode]);
 
   async function save(): Promise<void> {
     if (!posModelId) return toast.alert('Vui lòng chọn chủng loại máy.', 'Thiếu thông tin');
@@ -582,7 +588,9 @@ function IntakeForm({ mode, row, models, suppliers, statuses, onClose, onSaved }
     if (!importedAt) return toast.alert('Vui lòng nhập đủ ngày/tháng/năm nhập.', 'Thiếu ngày nhập');
     setBusy(true);
     const payload = { posModelId: Number(posModelId), serial: serial.trim(), intakeStatusId: Number(intakeStatusId), supplierId: Number(supplierId), importPrice: priceNum, importedAt, note: note || null };
-    const res = mode === 'edit' && row ? await window.api.posIntakeUpdate(row.id, { ...payload, expectedUpdatedAt: row.updatedAt }) : await window.api.posIntakeCreate(payload);
+    const res = mode === 'edit' && row
+      ? await window.api.posIntakeUpdate(row.id, { ...payload, expectedUpdatedAt: row.updatedAt })
+      : await window.api.posIntakeCreate({ ...payload, warehouseId: warehouseId ? Number(warehouseId) : null });
     setBusy(false);
     if (res.ok) { toast.success(mode === 'edit' ? 'Đã cập nhật máy POS' : `Đã nhập kho máy ${serial}`); onSaved(); }
     else if (isStaleWrite(res)) { toast.alert(res.message ?? 'Bản ghi đã được người khác cập nhật, vui lòng mở lại.', STALE_TITLE); onSaved(); }
@@ -599,6 +607,14 @@ function IntakeForm({ mode, row, models, suppliers, statuses, onClose, onSaved }
         <Field label="Trạng thái nhập" required><select className={inputCls} value={intakeStatusId} onChange={(e) => setIntakeStatusId(e.target.value)}><option value="">— Chọn trạng thái —</option>{statuses.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
         <Field label="Giá nhập (VND)" required hint={price ? fmtVnd(priceNum) : 'Số nguyên đồng'}><input className={inputCls} inputMode="numeric" value={groupDigits(price)} onChange={(e) => setPrice(e.target.value.replace(/\D/g, ''))} placeholder="5.000.000" /></Field>
         <Field label="Ngày nhập" required><DateInput value={importedAt} onChange={setImportedAt} /></Field>
+        {mode === 'create' && (
+          <Field label="Nhập vào kho" hint="Máy sẽ nằm ở kho này (để lọc/thu hồi/giao đúng kho)">
+            <select className={inputCls} value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
+              <option value="">— Chưa gán kho —</option>
+              {warehouses.map((w) => <option key={w.id} value={w.id}>{w.code} · {w.name}</option>)}
+            </select>
+          </Field>
+        )}
         <div className="col-span-2"><Field label="Ghi chú"><input className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} /></Field></div>
       </div>
       <div className="mt-6 flex justify-end gap-2">

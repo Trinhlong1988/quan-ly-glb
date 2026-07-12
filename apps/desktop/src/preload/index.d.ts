@@ -157,6 +157,8 @@ export interface PosDto {
   currentCustomerId: number | null;
   currentTid: string | null;
   warehouseLoc: string | null;
+  warehouseId: number | null;
+  warehouseName: string | null;
   recallPending: boolean;
   note: string | null;
   createdAt: string;
@@ -296,6 +298,7 @@ export interface PosFilter {
   bank?: string;
   status?: string;
   agentId?: number;
+  warehouseId?: number;
   fromDate?: string;
   toDate?: string;
 }
@@ -313,6 +316,7 @@ export interface TransitionInput {
   agentId?: number | null;
   customerId?: number | null;
   fromWarehouseId?: number | null;
+  toWarehouseId?: number | null;
 }
 export interface SellPosInput {
   customerId: number;
@@ -757,6 +761,7 @@ export interface CreatePosIntakeInput {
   importPrice: number;
   importedAt: string;
   note?: string | null;
+  warehouseId?: number | null;
 }
 export interface UpdatePosIntakeInput {
   posModelId?: number;

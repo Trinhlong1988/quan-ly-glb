@@ -16,6 +16,7 @@ import { getDb } from './db.js';
 import * as customerSvc from './customer-service.js';
 import * as posSvc from './pos-service.js';
 import * as tidSvc from './tid-service.js';
+import * as warehouseSvc from './warehouse-service.js';
 
 let failures = 0;
 function assert(name: string, cond: boolean, extra?: unknown): void {
@@ -101,6 +102,42 @@ export async function runPosLifecycleSelfTest(): Promise<number> {
   // máy IN_STOCK (A) đổi khách → INVALID_STATE
   const onStock = await posSvc.changeCustomerPos(A, { customerId: c2.id!, occurredAt: '2026-06-05T10:00:00Z' });
   assert('đổi khách trên máy IN_STOCK → INVALID_STATE', onStock.ok === false && onStock.error === 'INVALID_STATE', { err: onStock.error });
+
+  // ── Model 1: KHO VẬT LÝ đồng bộ (bất biến warehouseId≠null ⟺ IN_STOCK) ──────
+  const wh1 = await warehouseSvc.createWarehouse({ code: 'PLK1', name: 'Kho PL 1', address: 'Số 1 Đường A' });
+  const wh2 = await warehouseSvc.createWarehouse({ code: 'PLK2', name: 'Kho PL 2', address: 'Số 2 Đường B' });
+  assert('2 kho test tạo được', wh1.ok && wh2.ok, { wh1: wh1.error, wh2: wh2.error });
+
+  // A đang IN_STOCK (warehouseId null). deploy A cho c1 → rời kho (null); rồi thu hồi VỀ kho wh1 → warehouseId=wh1.
+  await posSvc.deployPos(A, { customerId: c1.id!, occurredAt: '2026-06-06T09:00:00Z' });
+  const aDeployed = await db.posDevice.findUnique({ where: { serial: A } });
+  assert('deploy A → rời kho: warehouseId null', aDeployed?.warehouseId == null && aDeployed?.status === 'DEPLOYED', { wh: aDeployed?.warehouseId, s: aDeployed?.status });
+
+  const recallToWh1 = await posSvc.recallPos(A, { toWarehouseId: wh1.id!, occurredAt: '2026-06-06T10:00:00Z' });
+  assert('thu hồi A VỀ kho wh1 ok', recallToWh1.ok === true, recallToWh1.error);
+  const aInWh1 = await db.posDevice.findUnique({ where: { serial: A } });
+  assert('A về kho: warehouseId = wh1 + IN_STOCK (bất biến)', aInWh1?.warehouseId === wh1.id && aInWh1?.status === 'IN_STOCK', { wh: aInWh1?.warehouseId, want: wh1.id, s: aInWh1?.status });
+
+  // deploy lại A: KHÔNG truyền fromWarehouseId → sự kiện DEPLOY tự lấy KHO ĐANG CHỨA (wh1) = ĐỒNG BỘ; máy rời kho.
+  await posSvc.deployPos(A, { customerId: c2.id!, occurredAt: '2026-06-07T09:00:00Z' });
+  const aRedeployed = await db.posDevice.findUnique({ where: { serial: A } });
+  assert('deploy lại A → warehouseId null (rời kho)', aRedeployed?.warehouseId == null, { wh: aRedeployed?.warehouseId });
+  const depEv = await db.assetEvent.findMany({ where: { deviceSerial: A, eventType: 'DEPLOY' }, orderBy: { id: 'desc' }, take: 1 });
+  assert('sự kiện DEPLOY tự ĐỒNG BỘ fromWarehouseId = kho đang chứa (wh1), không cần chọn tay', depEv[0]?.fromWarehouseId === wh1.id, { got: depEv[0]?.fromWarehouseId, want: wh1.id });
+
+  // thu hồi A về wh1, B (DEPLOYED) không có kho → LỌC theo kho chỉ trả máy trong đúng kho.
+  await posSvc.recallPos(A, { toWarehouseId: wh1.id!, occurredAt: '2026-06-08T09:00:00Z' });
+  const inWh1 = await posSvc.listPosDevices({ warehouseId: wh1.id! });
+  const inWh2 = await posSvc.listPosDevices({ warehouseId: wh2.id! });
+  assert('lọc kho wh1 → có máy A', inWh1.ok === true && !!inWh1.data?.some((d) => d.serial === A), { serials: inWh1.data?.map((d) => d.serial) });
+  assert('lọc kho wh1 → warehouseName hiển thị đúng', inWh1.data?.find((d) => d.serial === A)?.warehouseName === 'PLK1 · Kho PL 1', { wn: inWh1.data?.find((d) => d.serial === A)?.warehouseName });
+  assert('lọc kho wh2 → KHÔNG có máy A (đang ở wh1)', inWh2.ok === true && !inWh2.data?.some((d) => d.serial === A), { serials: inWh2.data?.map((d) => d.serial) });
+
+  // kho nhận không tồn tại → NOT_FOUND (chống FK treo)
+  const badWh = await posSvc.deployPos(A, { customerId: c1.id!, occurredAt: '2026-06-08T10:00:00Z' }); // đưa A ra khỏi kho trước
+  assert('deploy A (dọn kho) ok', badWh.ok === true, badWh.error);
+  const recallBad = await posSvc.recallPos(A, { toWarehouseId: 999999, occurredAt: '2026-06-08T11:00:00Z' });
+  assert('thu hồi về kho không tồn tại → NOT_FOUND', recallBad.ok === false && recallBad.error === 'NOT_FOUND', { err: recallBad.error });
 
   await logout();
   // eslint-disable-next-line no-console

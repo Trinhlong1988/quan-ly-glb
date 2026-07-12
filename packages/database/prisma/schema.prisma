@@ -235,6 +235,10 @@ model PosDevice {
   currentCustomerId Int?     @map("current_customer_id")
   currentTid        String?  @map("current_tid")
   warehouseLoc      String?  @map("warehouse_loc")
+  // Model 1 (Mr.Long 12/7) — KHO VẬT LÝ đang chứa máy, trỏ Danh mục Kho (Warehouse). Chỉ có giá trị khi
+  // máy ở trong kho (IN_STOCK): set khi nhập kho + thu hồi/nhận-sửa về kho; xóa null khi rời kho
+  // (giao khách/bán/thanh lý/hỏng/gửi sửa). Dùng để lọc "máy đang ở kho nào". Scalar (join tại service).
+  warehouseId       Int?     @map("warehouse_id")
   // #6 (Mr.Long 12/7) — hủy khách giữ máy: true = khách đã hủy nhưng máy CHƯA thu về (còn ở chỗ khách) →
   // hiện trong danh sách "Cần thu hồi". Đặt false lại khi recall (về kho) / redeploy (giao khách mới).
   recallPending     Boolean  @default(false) @map("recall_pending")

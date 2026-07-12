@@ -6,6 +6,7 @@ import * as customerSvc from './customer-service.js';
 import * as posSvc from './pos-service.js';
 import * as tidSvc from './tid-service.js';
 import * as saleSvc from './device-sale-service.js';
+import * as warehouseSvc from './warehouse-service.js';
 import * as userSvc from './user-service.js';
 import type { Db } from '@glb/database';
 
@@ -140,6 +141,21 @@ export async function runDeviceSaleSelfTest(): Promise<number> {
   assert('SALES không có DEVICE_SALE_MANAGE → FORBIDDEN', salesSell.ok === false && salesSell.error === 'FORBIDDEN', { err: salesSell.error });
   await logout();
   await login('adminroot', PW);
+
+  // ── Model 1: bán máy XÓA kho vật lý + ghi kho xuất = kho đang chứa (đồng bộ) ──
+  const whS = await warehouseSvc.createWarehouse({ code: 'DSK1', name: 'Kho DS' });
+  assert('kho test tạo được', whS.ok === true, whS.error);
+  await posSvc.createPos({ serial: 'SN-DS-8', occurredAt: '2026-06-01T09:00:00Z' });
+  await posSvc.deployPos('SN-DS-8', { customerId: buyer.id!, occurredAt: '2026-06-02T09:00:00Z' });
+  await posSvc.recallPos('SN-DS-8', { toWarehouseId: whS.id!, occurredAt: '2026-06-03T09:00:00Z' }); // vào kho DSK1
+  const dev8Before = await db.posDevice.findUnique({ where: { serial: 'SN-DS-8' } });
+  assert('trước bán: máy trong kho DSK1 (IN_STOCK)', dev8Before?.warehouseId === whS.id && dev8Before?.status === 'IN_STOCK', { wh: dev8Before?.warehouseId, s: dev8Before?.status });
+  const s8 = await saleSvc.sellPos('SN-DS-8', { customerId: buyer.id!, salePrice: 1_000_000, paidNow: 0, occurredAt: '2026-06-10T09:00:00Z' }, PW);
+  assert('bán máy trong kho ok', s8.ok === true, s8);
+  const dev8 = await db.posDevice.findUnique({ where: { serial: 'SN-DS-8' } });
+  assert('bán máy → warehouseId null (rời kho, giữ bất biến)', dev8?.warehouseId == null && dev8?.status === 'SOLD', { wh: dev8?.warehouseId, s: dev8?.status });
+  const sale8 = await db.deviceSale.findFirst({ where: { deviceSerial: 'SN-DS-8' } });
+  assert('đơn bán ghi kho xuất = kho đang chứa DSK1 (đồng bộ, không cần chọn tay)', sale8?.warehouseId === whS.id, { got: sale8?.warehouseId, want: whS.id });
 
   // eslint-disable-next-line no-console
   console.log(`DEVSALE41 SUMMARY | failures=${failures}`);

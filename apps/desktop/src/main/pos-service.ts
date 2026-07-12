@@ -17,6 +17,8 @@ export interface PosDto {
   currentCustomerId: number | null;
   currentTid: string | null;
   warehouseLoc: string | null;
+  warehouseId: number | null; // Model 1 — kho vật lý đang chứa máy (chỉ khi IN_STOCK)
+  warehouseName: string | null; // "MÃ · Tên" kho hiện tại
   recallPending: boolean; // #6 — khách đã hủy, máy chưa thu về (còn ở khách)
   note: string | null;
   createdAt: string;
@@ -60,6 +62,7 @@ export interface PosFilter {
   bank?: string;
   status?: string;
   agentId?: number;
+  warehouseId?: number; // Model 1 — lọc theo kho vật lý đang chứa máy
   fromDate?: string;
   toDate?: string;
 }
@@ -74,6 +77,7 @@ interface PosDeviceRow {
   currentCustomerId: number | null;
   currentTid: string | null;
   warehouseLoc: string | null;
+  warehouseId: number | null;
   recallPending: boolean;
   note: string | null;
   createdAt: Date;
@@ -87,6 +91,7 @@ interface PosNameMaps {
   suppliers: Map<number, { code: string; name: string }>;
   customers: Map<number, string>;
   agents: Map<number, string>;
+  warehouses: Map<number, string>;
 }
 function toDto(d: PosDeviceRow, maps: PosNameMaps): PosDto {
   const m = d.posModelId != null ? maps.models.get(d.posModelId) : undefined;
@@ -101,6 +106,8 @@ function toDto(d: PosDeviceRow, maps: PosNameMaps): PosDto {
     currentCustomerId: d.currentCustomerId,
     currentTid: d.currentTid,
     warehouseLoc: d.warehouseLoc,
+    warehouseId: d.warehouseId,
+    warehouseName: d.warehouseId != null ? maps.warehouses.get(d.warehouseId) ?? null : null,
     recallPending: d.recallPending,
     note: d.note,
     createdAt: d.createdAt.toISOString(),
@@ -127,6 +134,7 @@ export async function listPosDevices(
       bank: filter.bank || undefined,
       status: filter.status || undefined,
       currentAgentId: filter.agentId ?? undefined,
+      warehouseId: filter.warehouseId ?? undefined,
       createdAt: dateRange(filter.fromDate, filter.toDate),
       OR: filter.search
         ? [{ serial: { contains: filter.search, mode: 'insensitive' } }, { currentTid: { contains: filter.search, mode: 'insensitive' } }]
@@ -134,16 +142,18 @@ export async function listPosDevices(
     },
     orderBy: { id: 'asc' }
   });
-  // Resolve FK names (chủng loại / NCC / khách / đại lý) — join ở service layer (resilient soft-delete).
+  // Resolve FK names (chủng loại / NCC / khách / đại lý / kho) — join ở service layer (resilient soft-delete).
   const modelIds = [...new Set(rows.map((r) => r.posModelId).filter((x): x is number => x != null))];
   const supplierIds = [...new Set(rows.map((r) => r.supplierId).filter((x): x is number => x != null))];
   const customerIds = [...new Set(rows.map((r) => r.currentCustomerId).filter((x): x is number => x != null))];
   const agentIds = [...new Set(rows.map((r) => r.currentAgentId).filter((x): x is number => x != null))];
+  const whIds = [...new Set(rows.map((r) => r.warehouseId).filter((x): x is number => x != null))];
   const maps: PosNameMaps = {
     models: new Map((await g.db.posModel.findMany({ where: { id: { in: modelIds } }, select: { id: true, code: true, name: true } })).map((x) => [x.id, { code: x.code, name: x.name }])),
     suppliers: new Map((await g.db.supplier.findMany({ where: { id: { in: supplierIds } }, select: { id: true, code: true, name: true } })).map((x) => [x.id, { code: x.code, name: x.name }])),
     customers: new Map((await g.db.customer.findMany({ where: { id: { in: customerIds } }, select: { id: true, nickname: true, fullName: true } })).map((x) => [x.id, x.nickname || x.fullName])),
-    agents: new Map((await g.db.agent.findMany({ where: { id: { in: agentIds } }, select: { id: true, name: true } })).map((x) => [x.id, x.name]))
+    agents: new Map((await g.db.agent.findMany({ where: { id: { in: agentIds } }, select: { id: true, name: true } })).map((x) => [x.id, x.name])),
+    warehouses: new Map((await g.db.warehouse.findMany({ where: { id: { in: whIds } }, select: { id: true, code: true, name: true } })).map((x) => [x.id, `${x.code} · ${x.name}`]))
   };
   return { ok: true, data: rows.map((r) => toDto(r, maps)) };
 }
@@ -248,6 +258,7 @@ export interface TransitionInput {
   agentId?: number | null; // deploy / transferAgent target
   customerId?: number | null; // deploy target
   fromWarehouseId?: number | null; // R27 (§4) — giao/đổi-khách: kho xuất (địa chỉ snapshot theo kho)
+  toWarehouseId?: number | null; // Model 1 — thu hồi / nhận-sửa VỀ kho nào (set PosDevice.warehouseId)
 }
 
 /** Vietnamese label for a rejected transition reason (R_UX_WARN). */
@@ -395,6 +406,11 @@ async function applyTransition(serial: string, event: PosEvent, input: Transitio
   if (event === 'cancelCustomer' && pre.currentCustomerId == null) {
     return { ok: false, error: 'VALIDATION', message: 'Máy này chưa gán khách nào để hủy.' };
   }
+  // Model 1 — thu hồi / nhận-sửa VỀ kho: kho đích (nếu truyền) phải tồn tại (chống FK treo).
+  if ((event === 'recall' || event === 'receiveRepaired') && input.toWarehouseId != null) {
+    const wh = await db.warehouse.findFirst({ where: { id: input.toWarehouseId, deletedAt: null }, select: { id: true } });
+    if (!wh) return { ok: false, error: 'NOT_FOUND', message: 'Kho nhận máy về không tồn tại (hoặc đã bị xóa).' };
+  }
   const unbinds = event === 'recall' || event === 'retire';
   // changeCustomer KHÔNG unbind nhưng CÓ đụng hàng tids (đổi customerId TID theo khách) → phải khóa
   // hàng tids TRƯỚC pos_devices như nhánh unbind (chống ABBA + TOCTOU currentTid đổi giữa chừng).
@@ -476,13 +492,24 @@ async function applyTransition(serial: string, event: PosEvent, input: Transitio
       }
       // Q-P6: reportDamage / sendRepair / receiveRepaired / transferAgent → GIỮ currentTid (không đụng).
 
-      // R27 (§4): giao/đổi-khách ghi KHO XUẤT + SNAPSHOT địa chỉ kho (chọn kho → địa chỉ theo kho).
-      if ((event === 'deploy' || event === 'changeCustomer') && input.fromWarehouseId != null) {
-        const wh = await tx.warehouse.findFirst({ where: { id: input.fromWarehouseId, deletedAt: null }, select: { id: true, address: true } });
+      // R27 + Model 1 (§4): giao/đổi-khách ghi KHO XUẤT + SNAPSHOT địa chỉ kho.
+      // ĐỒNG BỘ: deploy xuất TỪ kho đang chứa máy (nguồn sự thật `dev.warehouseId`); legacy (null) → dùng input.
+      const srcWhId =
+        event === 'deploy'
+          ? (dev.warehouseId ?? input.fromWarehouseId ?? null)
+          : event === 'changeCustomer'
+            ? (input.fromWarehouseId ?? null)
+            : null;
+      if (srcWhId != null) {
+        const wh = await tx.warehouse.findFirst({ where: { id: srcWhId, deletedAt: null }, select: { id: true, address: true } });
         if (!wh) throw new TransitionAbort({ ok: false, error: 'NOT_FOUND', message: 'Kho xuất đã chọn không tồn tại (hoặc đã bị xóa).' });
         eventWarehouseId = wh.id;
         eventDeliveryAddress = wh.address;
       }
+
+      // Model 1 — ĐỒNG BỘ kho vật lý của máy: CHỈ khi IN_STOCK máy mới thuộc 1 kho (recall/nhận-sửa VỀ kho);
+      // mọi trạng thái rời kho (giao/thanh lý/hỏng/gửi-sửa) → warehouseId = null. Bất biến: warehouseId≠null ⟺ IN_STOCK.
+      patch.warehouseId = toState === 'IN_STOCK' ? (input.toWarehouseId ?? null) : null;
 
       await tx.posDevice.update({ where: { id: dev.id }, data: patch });
       await tx.assetEvent.create({
