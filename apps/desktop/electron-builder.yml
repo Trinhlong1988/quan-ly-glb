@@ -60,9 +60,11 @@ nsis:
   createStartMenuShortcut: true
   shortcutName: Quản Lý GLB
 
-# G11 — Feed cập nhật LAN (electron-updater). LEAD dựng HTTP tĩnh cổng 8686 phục vụ D:\glb-updates\.
-# quitAndInstall(true,…) truyền /S nên tự cập nhật vẫn cài IM dù oneClick=false (cài tay lần đầu).
+# G11 — Feed cập nhật qua Tailscale (electron-updater). HTTP tĩnh cổng 8686 phục vụ D:\glb-updates\, nghe
+# 0.0.0.0 nên tới được qua CẢ LAN (192.168.1.6) LẪN Tailscale (100.75.194.94). Dùng IP Tailscale làm feed
+# để máy MẠNG KHÁC cũng tự cập nhật (mọi máy cài Tailscale — đã kèm trong bộ cài). LAN vẫn tới IP này qua
+# Tailscale (route trực tiếp nội bộ). quitAndInstall(true,…) truyền /S → tự cập nhật vẫn cài IM.
 publish:
   provider: generic
-  url: http://192.168.1.6:8686/updates/
+  url: http://100.75.194.94:8686/updates/
   channel: latest
