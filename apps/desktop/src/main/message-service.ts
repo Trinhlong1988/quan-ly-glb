@@ -2,7 +2,6 @@
 // Bảng messages dùng chung: kind=SYSTEM (thông báo bảo mật, senderId null) | USER (thư người dùng).
 // Nhận realtime = renderer poll vài giây (Cách A); tách lớp sẵn để nâng WebSocket khi lên VPS.
 import type { Db } from '@glb/database';
-import { getDb } from './db.js';
 import { requirePermission } from './guard.js';
 import { writeAudit } from './audit.js';
 

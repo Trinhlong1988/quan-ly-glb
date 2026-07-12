@@ -8,7 +8,9 @@ export default defineConfig({
     environment: 'node',
     include: [
       'packages/shared/**/*.test.ts',
-      'packages/business-rules/**/*.test.ts'
+      'packages/business-rules/**/*.test.ts',
+      // Static-source guards (fs-scan only, KHÔNG import Electron/Prisma runtime).
+      'apps/desktop/src/main/**/*.test.ts'
     ],
     reporters: ['default']
   }

@@ -8,6 +8,7 @@ import * as tidSvc from './tid-service.js';
 import * as saleSvc from './device-sale-service.js';
 import * as warehouseSvc from './warehouse-service.js';
 import * as userSvc from './user-service.js';
+import * as cashEntrySvc from './cash-entry-service.js';
 import type { Db } from '@glb/database';
 
 let failures = 0;
@@ -157,6 +158,44 @@ export async function runDeviceSaleSelfTest(): Promise<number> {
   assert('bán máy → warehouseId null (rời kho, giữ bất biến)', dev8?.warehouseId == null && dev8?.status === 'SOLD', { wh: dev8?.warehouseId, s: dev8?.status });
   const sale8 = await db.deviceSale.findFirst({ where: { deviceSerial: 'SN-DS-8' } });
   assert('đơn bán ghi kho xuất = kho đang chứa DSK1 (đồng bộ, không cần chọn tay)', sale8?.warehouseId === whS.id, { got: sale8?.warehouseId, want: whS.id });
+
+  // ══ Ca 9: HỦY phiếu THU tiền bán thiết bị (SALE_COLLECT) → HOÀN công nợ (regression bug M3b) ══
+  // Bug cũ: cancelCashEntry chỉ gỡ cashDebtSettlement (nợ POS) mà KHÔNG gỡ deviceSaleSettlement → hủy
+  // phiếu thu làm quỹ giảm nhưng công nợ mua thiết bị vẫn bị trừ (remaining kẹt) → chặn thu lại.
+  await posSvc.createPos({ serial: 'SN-DS-9', occurredAt: '2026-06-01T09:00:00Z' });
+  const s9 = await saleSvc.sellPos('SN-DS-9', { customerId: buyer.id!, salePrice: 2_000_000, paidNow: 0, occurredAt: '2026-06-11T09:00:00Z' }, PW);
+  assert('Ca9 bán chịu 2tr ok', s9.ok === true, s9.error);
+  const sale9 = (await saleSvc.listDeviceSales({ customerId: buyer.id!, onlyDebt: true })).data?.find((x) => x.deviceSerial === 'SN-DS-9');
+  assert('Ca9 chứng từ còn nợ 2tr', sale9?.remaining === 2_000_000, { sale9 });
+  const fbC9 = await fundBalance(db, fund.id);
+  const col9 = await saleSvc.collectDeviceSaleDebt({ deviceSaleId: sale9!.id, amount: 800_000, fundId: fund.id, method: 'CASH' });
+  assert('Ca9 thu 800k ok', col9.ok === true, col9.error);
+  assert('Ca9 quỹ +800k sau thu', (await fundBalance(db, fund.id)) - fbC9 === 800_000n);
+  const sale9b = (await saleSvc.listDeviceSales({ customerId: buyer.id! })).data?.find((x) => x.id === sale9!.id);
+  assert('Ca9 sau thu còn nợ 1,2tr', sale9b?.remaining === 1_200_000, { sale9b });
+  const collectEntry = await db.cashEntry.findFirst({ where: { sourceType: 'SALE_COLLECT', sourceId: sale9!.id, status: 'POSTED' }, orderBy: { id: 'desc' } });
+  assert('Ca9 tìm được phiếu thu SALE_COLLECT', collectEntry != null, { id: collectEntry?.id });
+  const cancel9 = await cashEntrySvc.cancelCashEntry(collectEntry!.id, 'thu nhầm', PW);
+  assert('Ca9 hủy phiếu thu ok', cancel9.ok === true, cancel9.error);
+  assert('Ca9 quỹ hoàn về mức trước thu (−800k)', (await fundBalance(db, fund.id)) - fbC9 === 0n, { delta: Number((await fundBalance(db, fund.id)) - fbC9) });
+  const sale9c = (await saleSvc.listDeviceSales({ customerId: buyer.id! })).data?.find((x) => x.id === sale9!.id);
+  assert('Ca9 CÔNG NỢ HOÀN về 2tr sau hủy phiếu thu (bug M3b)', sale9c?.remaining === 2_000_000, { sale9c });
+  const reCol9 = await saleSvc.collectDeviceSaleDebt({ deviceSaleId: sale9!.id, amount: 2_000_000, fundId: fund.id, method: 'CASH' });
+  assert('Ca9 THU LẠI được sau hủy (không kẹt ALREADY_SETTLED)', reCol9.ok === true, reCol9.error);
+
+  // ══ Ca 10: CẤM xóa kho còn máy IN_STOCK (regression R27b — máy mắc kẹt) ══
+  const whDel = await warehouseSvc.createWarehouse({ code: 'DSKDEL', name: 'Kho DS xóa thử' });
+  await posSvc.createPos({ serial: 'SN-DS-10', occurredAt: '2026-06-01T09:00:00Z' });
+  await posSvc.deployPos('SN-DS-10', { customerId: buyer.id!, occurredAt: '2026-06-02T09:00:00Z' });
+  await posSvc.recallPos('SN-DS-10', { toWarehouseId: whDel.id!, occurredAt: '2026-06-03T09:00:00Z' }); // IN_STOCK trong DSKDEL
+  const delBlocked = await warehouseSvc.deleteWarehouses([whDel.id!], PW);
+  assert('Ca10 xóa kho còn máy → IN_USE (chặn)', delBlocked.ok === false && delBlocked.error === 'IN_USE', { err: delBlocked.error });
+  const whStill = (await warehouseSvc.listWarehouses()).data?.find((w) => w.id === whDel.id);
+  assert('Ca10 kho VẪN còn (không bị xóa mềm)', whStill != null, { whStill });
+  const redeploy10 = await posSvc.deployPos('SN-DS-10', { customerId: buyer.id!, occurredAt: '2026-06-04T09:00:00Z' });
+  assert('Ca10 máy KHÔNG mắc kẹt — giao lại được', redeploy10.ok === true, redeploy10.error);
+  const delOk = await warehouseSvc.deleteWarehouses([whDel.id!], PW);
+  assert('Ca10 kho rỗng (máy đã giao đi) → xóa được', delOk.ok === true, delOk.error);
 
   // eslint-disable-next-line no-console
   console.log(`DEVSALE41 SUMMARY | failures=${failures}`);

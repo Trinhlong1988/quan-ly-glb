@@ -614,6 +614,12 @@ export async function cancelCashEntry(id: number, reason: string, password: stri
           }
         }
       }
+      // M3b — phiếu THU tiền BÁN THIẾT BỊ (SALE_COLLECT): gỡ dòng deviceSaleSettlement. Nếu KHÔNG gỡ →
+      // hủy phiếu làm quỹ giảm nhưng công nợ mua thiết bị vẫn bị trừ (remaining kẹt) → chặn thu lại
+      // (ALREADY_SETTLED) + báo cáo công nợ thiếu số. Remaining của DeviceSale tính LIVE từ Σ settlement
+      // (không có cờ settled) nên chỉ cần xóa dòng; chỉ phiếu SALE_COLLECT mới có deviceSaleSettlement.cashEntryId
+      // trỏ về nên deleteMany an toàn cho mọi loại phiếu. Chạy sau moved.count===1 → chống hủy 2 lần.
+      await txc.deviceSaleSettlement.deleteMany({ where: { cashEntryId: id } });
       // R48 Pha 3 — audit TRONG transaction (hủy phiếu + hoàn đối soát + log atomic).
       await writeAudit(txc, {
         actorUserId: user.id,

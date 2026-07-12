@@ -5,7 +5,6 @@
 export type PosStatus = 'IN_STOCK' | 'DEPLOYED' | 'IN_REPAIR' | 'DAMAGED' | 'RETIRED' | 'SOLD';
 export type TidStatus = 'UNASSIGNED' | 'ACTIVE' | 'DEAD' | 'CLOSED' | 'RECALLED' | 'SOLD';
 
-export const POS_STATUSES: PosStatus[] = ['IN_STOCK', 'DEPLOYED', 'IN_REPAIR', 'DAMAGED', 'RETIRED', 'SOLD'];
 export const TID_STATUSES: TidStatus[] = ['UNASSIGNED', 'ACTIVE', 'DEAD', 'CLOSED', 'RECALLED', 'SOLD'];
 
 /** POS lifecycle events → allowed source states + resulting state (§A3). */

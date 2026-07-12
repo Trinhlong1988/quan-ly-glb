@@ -6,7 +6,6 @@ import { writeFileSync, mkdtempSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { login, logout } from './auth-service.js';
-import { getDb } from './db.js';
 import * as userSvc from './user-service.js';
 import * as dsr from './dossier-service.js';
 import { uploadsRoot, fileSize, readAttachmentDataUrl } from './file-store.js';

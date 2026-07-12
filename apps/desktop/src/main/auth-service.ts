@@ -12,7 +12,7 @@ import {
   MAX_FAILED_ATTEMPTS,
   type AuthUserRecord
 } from '@glb/business-rules';
-import { hasPermission, validatePassword, type AuthUser, type UserStatus } from '@glb/shared';
+import { validatePassword, type AuthUser, type UserStatus } from '@glb/shared';
 import { getDb } from './db.js';
 import { writeAudit } from './audit.js';
 import { requirePermission, verifyActorPassword } from './guard.js';

@@ -408,13 +408,6 @@ export const IMPORT_REGISTRY: Record<string, ImportEntity> = {
   }
 };
 
-export type ImportEntityKey = keyof typeof IMPORT_REGISTRY;
-
-/** Danh sách entity + nhãn (cho FE hiển thị / kiểm tra). */
-export function importEntities(): { key: string; label: string }[] {
-  return Object.entries(IMPORT_REGISTRY).map(([key, e]) => ({ key, label: e.label }));
-}
-
 /** Cột mẫu của 1 entity (cho FE sinh .xlsx rỗng). null nếu entityKey sai. */
 export function importTemplateColumns(entityKey: string): { ok: boolean; data?: TemplateColumnDto[]; error?: string; message?: string } {
   const entity = IMPORT_REGISTRY[entityKey];

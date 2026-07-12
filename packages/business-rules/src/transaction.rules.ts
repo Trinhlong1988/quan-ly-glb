@@ -6,8 +6,6 @@
 //   • CL_KH  (chênh bán)     = phiBan − phiCaiMay  → khoản thu từ khách
 //   Doanh thu = số tiền × (CL_NCC% + CL_KH%). CẢ 2 khoản = công nợ thu về.
 
-export const FEE_MILLI_SCALE = 1000;
-
 /**
  * Quy đổi 1 khoản chênh (milli %) trên số tiền → VND. Làm tròn về đồng.
  * marginMilli = phần trăm × 1000. amount × (marginMilli/1000)/100 = amount × marginMilli / 100000.

@@ -18,11 +18,3 @@ export function createPrisma(databaseUrl?: string): PrismaClient {
   const adapter = new PrismaPg({ connectionString });
   return new PrismaClient({ adapter });
 }
-
-let _prisma: PrismaClient | undefined;
-
-/** Lazy process-wide singleton (used by seed & tests). Main process may pass a url once. */
-export function getPrisma(databaseUrl?: string): PrismaClient {
-  if (!_prisma) _prisma = createPrisma(databaseUrl);
-  return _prisma;
-}

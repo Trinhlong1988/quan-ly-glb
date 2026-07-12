@@ -13,7 +13,7 @@ import { hasPermission, validateUsername, validatePassword, isValidEmail, ADMIN_
 import type { AuthUser } from '@glb/shared';
 import type { Db } from '@glb/database';
 import { requirePermission, verifyActorPassword } from './guard.js';
-import { me } from './auth-service.js';
+import { validateCurrentSession } from './auth-service.js';
 import { getDb } from './db.js';
 import { writeAudit } from './audit.js';
 import { nextCode } from './code-service.js';
@@ -158,8 +158,12 @@ export interface CreateUserInput {
 /** R_MANAGER_001..004 + username/email validation + audit USER_CREATED (R007). */
 export async function createUser(input: CreateUserInput): Promise<MutationResult> {
   // USER_CREATE (full) OR USER_CREATE_LIMITED (manager) — either grants entry; scope enforced below.
-  const actor = me();
-  if (!actor) return { ok: false, error: 'NOT_AUTHENTICATED', message: 'Bạn chưa đăng nhập.' };
+  // R48 (#3/#4) — BẮT BUỘC qua session guard DB (TTL/khóa/xóa/buộc-đổi-mật-khẩu) như mọi handler khác;
+  // KHÔNG tin mỗi in-memory me(). Vì có 2 quyền vào nên tự validate session tại đây thay cho requirePermission(1 quyền).
+  const v = await validateCurrentSession();
+  if (!v) return { ok: false, error: 'NOT_AUTHENTICATED', message: 'Phiên đã kết thúc hoặc bạn chưa đăng nhập. Hãy đăng nhập lại.' };
+  if (v.forceChangePassword) return { ok: false, error: 'MUST_CHANGE_PASSWORD', message: 'Bạn phải đổi mật khẩu (lần đầu / được cấp lại) trước khi thực hiện thao tác.' };
+  const actor = v.user;
   const db = getDb();
   if (!hasPermission(actor, 'USER_CREATE') && !hasPermission(actor, 'USER_CREATE_LIMITED')) {
     await writeAudit(db, {

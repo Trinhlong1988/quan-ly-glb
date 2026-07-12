@@ -285,10 +285,11 @@ export function registerIpc(): void {
     return { ok: true, path: res.filePaths[0] };
   });
   // R48 — GẮN QUYỀN đọc tệp đính kèm (trước đây MỞ cho mọi phiên → IDOR đọc trộm CCCD/ĐKKD). Ảnh thuộc
-  // hồ sơ HKD (dossier) → DOSSIER_VIEW; tài khoản nhận tiền (receiveAccount) → RCV_ACCT_VIEW; tiền tố lạ → chặn.
+  // hồ sơ HKD (dossier) → CONFIG_DOSSIER_VIEW; tài khoản nhận tiền (receiveAccount) → CONFIG_RCV_ACCT_VIEW;
+  // tiền tố lạ → chặn. (Trước đây dùng mã DOSSIER_VIEW/RCV_ACCT_VIEW KHÔNG tồn tại → fail-closed chặn cả ADMIN.)
   ipcMain.handle('file:read', async (_e, relPath: string) => {
     const kind = String(relPath ?? '').split('/')[0];
-    const perm = kind === 'dossier' ? 'DOSSIER_VIEW' : kind === 'receiveAccount' ? 'RCV_ACCT_VIEW' : null;
+    const perm = kind === 'dossier' ? 'CONFIG_DOSSIER_VIEW' : kind === 'receiveAccount' ? 'CONFIG_RCV_ACCT_VIEW' : null;
     if (!perm) return { ok: false, error: 'FORBIDDEN', message: 'Không có quyền xem tệp này.' };
     const g = await requirePermission(perm, { action: 'file:read', targetType: kind });
     if (!g.ok) return g;
@@ -347,6 +348,9 @@ export function registerIpc(): void {
   // ── XUẤT EXCEL chuẩn nhà (.xlsx thật) + LƯU qua hộp thoại HĐH + MỞ file (R38/R39) ──
   // Nhớ thư mục lưu gần nhất để lần sau gợi ý đúng chỗ (đỡ phải dò lại).
   let lastExportDir: string | null = null;
+  // R48 — chỉ cho file:open MỞ đúng các file .xlsx do CHÍNH app này vừa xuất (report:export) trong phiên.
+  // Không nhận đường dẫn tùy ý từ renderer → chặn RCE (shell.openPath THỰC THI .exe/.bat/.lnk qua ShellExecute).
+  const exportedFiles = new Set<string>();
   ipcMain.handle('report:export', async (_e, p: { kind?: 'report' | 'template'; fileBase: string; fileName: string; title: string; headers: string[]; rows?: exportSvc.Cell[][]; summary?: string; hints?: { header: string; required?: boolean; hint?: string }[] }) => {
     try {
       const buf = p.kind === 'template'
@@ -359,13 +363,18 @@ export function registerIpc(): void {
       if (res.canceled || !res.filePath) return { ok: true, canceled: true };
       await writeFile(res.filePath, buf);
       lastExportDir = res.filePath.replace(/[\\/][^\\/]*$/, '');
+      exportedFiles.add(res.filePath);
       return { ok: true, path: res.filePath };
     } catch (e) {
       return { ok: false, error: 'EXPORT_FAILED', message: 'Không xuất được Excel: ' + (e instanceof Error ? e.message : String(e)) };
     }
   });
-  // Mở file vừa lưu bằng ứng dụng mặc định (Excel). Trả lỗi rõ nếu không mở được (file đang mở/khóa…).
+  // Mở file vừa lưu bằng ứng dụng mặc định (Excel). CHỈ mở file .xlsx do app này vừa xuất trong phiên
+  // (exportedFiles) → chống RCE: renderer bị chèn script không thể ép mở .exe/.bat/UNC payload tùy ý.
   ipcMain.handle('file:open', async (_e, path: string) => {
+    if (typeof path !== 'string' || !exportedFiles.has(path)) {
+      return { ok: false, message: 'Chỉ mở được file vừa xuất từ phần mềm.' };
+    }
     const err = await shell.openPath(path);
     return err ? { ok: false, message: 'Không mở được file: ' + err } : { ok: true };
   });

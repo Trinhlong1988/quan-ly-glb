@@ -45,7 +45,13 @@ async function createWindow(): Promise<void> {
   win.webContents.on('did-finish-load', () => win.webContents.setZoomFactor(BASE_ZOOM));
 
   win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    // R48 — chỉ mở http/https ra trình duyệt ngoài; chặn scheme lạ (file:/ms-*/…) — footgun Electron.
+    try {
+      const scheme = new URL(url).protocol;
+      if (scheme === 'http:' || scheme === 'https:') shell.openExternal(url);
+    } catch {
+      /* URL không hợp lệ → bỏ qua */
+    }
     return { action: 'deny' };
   });
 

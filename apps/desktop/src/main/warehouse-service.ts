@@ -210,6 +210,21 @@ export async function deleteWarehouses(ids: number[], password: string): Promise
     return { ok: false, error: 'WRONG_PASSWORD', message: 'Mật khẩu xác nhận không đúng.' };
   }
 
+  // R27b — CẤM xóa kho còn máy IN_STOCK (posDevice.warehouseId trỏ vào kho). Nếu xóa → máy "mắc kẹt":
+  // giao máy báo kho NOT_FOUND, cột kho rỗng. Model-1: warehouseId≠null ⟺ IN_STOCK nên đếm posDevice là
+  // đủ. All-or-nothing: chặn cả lô nếu bất kỳ kho nào còn máy (thông báo rõ kho + số máy).
+  const blocked: string[] = [];
+  for (const id of ids) {
+    const row = await db.warehouse.findUnique({ where: { id } });
+    if (!row || row.deletedAt) continue;
+    const held = await db.posDevice.count({ where: { warehouseId: id, deletedAt: null } });
+    if (held > 0) blocked.push(`${row.code} (${held} máy)`);
+  }
+  if (blocked.length > 0) {
+    await writeAudit(db, { actorUserId: user.id, action: 'WAREHOUSE_DELETED', targetType: 'Warehouse', after: { denied: true, reason: 'IN_USE', blocked } });
+    return { ok: false, error: 'IN_USE', message: `Không thể xóa kho còn máy tồn: ${blocked.join(', ')}. Hãy giao hoặc chuyển máy khỏi kho trước.` };
+  }
+
   let deleted = 0;
   for (const id of ids) {
     const row = await db.warehouse.findUnique({ where: { id } });
