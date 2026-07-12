@@ -1250,6 +1250,7 @@ export interface GlbApi {
   posDeploy(serial: string, input: TransitionInput): Promise<MutationOutcome>;
   posRecall(serial: string, input: TransitionInput): Promise<MutationOutcome>;
   posTransferAgent(serial: string, input: TransitionInput): Promise<MutationOutcome>;
+  posChangeCustomer(serial: string, input: TransitionInput): Promise<MutationOutcome>;
   posReportDamage(serial: string, input: TransitionInput): Promise<MutationOutcome>;
   posSendRepair(serial: string, input: TransitionInput): Promise<MutationOutcome>;
   posReceiveRepaired(serial: string, input: TransitionInput): Promise<MutationOutcome>;

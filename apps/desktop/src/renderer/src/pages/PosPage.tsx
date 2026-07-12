@@ -295,6 +295,7 @@ const NEXT: Record<string, { key: string; label: string }[]> = {
     { key: 'retire', label: 'Thanh lý' }
   ],
   DEPLOYED: [
+    { key: 'changeCustomer', label: 'Đổi khách giữ máy' },
     { key: 'recall', label: 'Thu hồi về kho' },
     { key: 'reportDamage', label: 'Báo hỏng' },
     { key: 'retire', label: 'Thanh lý' }
@@ -346,6 +347,7 @@ function TimelineModal({ device, onClose }: { device: PosDto; onClose: () => voi
 const EVENT_LABELS: Record<string, string> = {
   deploy: 'Triển khai (giao khách)',
   recall: 'Thu hồi về kho',
+  changeCustomer: 'Đổi khách giữ máy',
   reportDamage: 'Báo hỏng',
   sendRepair: 'Gửi bảo trì',
   receiveRepaired: 'Nhận sửa xong',
@@ -361,14 +363,14 @@ function TransitionModal({ device, event, onClose, onDone }: { device: PosDto; e
   const [busy, setBusy] = useState(false);
   const [confirmRetire, setConfirmRetire] = useState(false);
 
-  const needCustomer = event === 'deploy';
+  const needCustomer = event === 'deploy' || event === 'changeCustomer';
 
   useEffect(() => {
     if (needCustomer) window.api.customerList({}).then((r) => r.ok && r.data && setCustomers(r.data));
   }, [needCustomer]);
 
   async function run(password?: string): Promise<void> {
-    if (needCustomer && !customerId) return toast.alert('Phải chọn khách hàng nhận máy.');
+    if (needCustomer && !customerId) return toast.alert(event === 'changeCustomer' ? 'Phải chọn khách hàng mới.' : 'Phải chọn khách hàng nhận máy.');
     setBusy(true);
     const input = {
       occurredAt: occurredAt ? new Date(occurredAt).toISOString() : null,
@@ -380,6 +382,7 @@ function TransitionModal({ device, event, onClose, onDone }: { device: PosDto; e
     switch (event) {
       case 'deploy': res = await window.api.posDeploy(device.serial, input); break;
       case 'recall': res = await window.api.posRecall(device.serial, input); break;
+      case 'changeCustomer': res = await window.api.posChangeCustomer(device.serial, input); break;
       case 'reportDamage': res = await window.api.posReportDamage(device.serial, input); break;
       case 'sendRepair': res = await window.api.posSendRepair(device.serial, input); break;
       case 'receiveRepaired': res = await window.api.posReceiveRepaired(device.serial, input); break;
@@ -418,9 +421,15 @@ function TransitionModal({ device, event, onClose, onDone }: { device: PosDto; e
       {event === 'recall' && device.currentTid && (
         <div className="mb-2 rounded-md bg-warning/10 px-3 py-2 text-xs text-warning">Thu hồi máy sẽ GỠ gán TID {device.currentTid} (TID về "chưa gán máy").</div>
       )}
+      {event === 'changeCustomer' && (
+        <div className="mb-2 rounded-md bg-brand-tint px-3 py-2 text-xs text-brand">
+          Khách đang giữ: <b>{device.customerName ?? '—'}</b>. Máy giữ nguyên trạng thái đang triển khai
+          {device.currentTid ? <> và TID <b>{device.currentTid}</b> sẽ đi theo khách mới.</> : '.'}
+        </div>
+      )}
       <div className="grid grid-cols-1 gap-4">
         {needCustomer && (
-          <Field label="Khách hàng nhận máy" required>
+          <Field label={event === 'changeCustomer' ? 'Khách hàng mới' : 'Khách hàng nhận máy'} required>
             <select className={inputCls} value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
               <option value="">— Chọn khách hàng —</option>
               {customers.map((c) => (

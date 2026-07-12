@@ -9,7 +9,7 @@ export const POS_STATUSES: PosStatus[] = ['IN_STOCK', 'DEPLOYED', 'IN_REPAIR', '
 export const TID_STATUSES: TidStatus[] = ['UNASSIGNED', 'ACTIVE', 'DEAD', 'CLOSED', 'RECALLED'];
 
 /** POS lifecycle events → allowed source states + resulting state (§A3). */
-export type PosEvent = 'deploy' | 'recall' | 'transferAgent' | 'reportDamage' | 'sendRepair' | 'receiveRepaired' | 'retire';
+export type PosEvent = 'deploy' | 'recall' | 'transferAgent' | 'changeCustomer' | 'reportDamage' | 'sendRepair' | 'receiveRepaired' | 'retire';
 
 interface PosRule {
   from: PosStatus[];
@@ -23,6 +23,9 @@ export const POS_TRANSITIONS: Record<PosEvent, PosRule> = {
   recall: { from: ['DEPLOYED'], to: 'IN_STOCK', eventType: 'RECALL' },
   // Agent-to-agent transfer keeps the device DEPLOYED.
   transferAgent: { from: ['DEPLOYED'], to: 'DEPLOYED', eventType: 'TRANSFER_AGENT' },
+  // POS #2 (Mr.Long 12/7) — đổi khách giữ máy: máy giữ nguyên DEPLOYED, giữ nguyên TID; TID đi theo
+  // khách mới (giao máy-có-TID = giao cả TID). 1 bước atomic, không recall+deploy rời.
+  changeCustomer: { from: ['DEPLOYED'], to: 'DEPLOYED', eventType: 'CHANGE_CUSTOMER' },
   reportDamage: { from: ['DEPLOYED', 'IN_STOCK'], to: 'DAMAGED', eventType: 'REPORT_DAMAGE' },
   sendRepair: { from: ['DAMAGED'], to: 'IN_REPAIR', eventType: 'SEND_REPAIR' },
   receiveRepaired: { from: ['IN_REPAIR'], to: 'IN_STOCK', eventType: 'RECEIVE_REPAIRED' },

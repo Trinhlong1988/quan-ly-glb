@@ -380,6 +380,12 @@ app.whenReady().then(async () => {
     app.exit(code);
     return;
   }
+  if (process.env['GLB_SELFTEST'] === '39') {
+    const { runPosLifecycleSelfTest } = await import('./selftest-poslifecycle.js');
+    const code = await runPosLifecycleSelfTest();
+    app.exit(code);
+    return;
+  }
 
   await createWindow();
   startHousekeeping();

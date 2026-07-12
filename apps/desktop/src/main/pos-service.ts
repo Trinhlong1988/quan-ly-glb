@@ -245,6 +245,7 @@ const POS_EVENT_LABELS: Record<PosEvent, string> = {
   deploy: 'Triển khai (giao khách)',
   recall: 'Thu hồi về kho',
   transferAgent: 'Chuyển đại lý',
+  changeCustomer: 'Đổi khách giữ máy',
   reportDamage: 'Báo hỏng',
   sendRepair: 'Gửi bảo trì',
   receiveRepaired: 'Nhận sửa xong',
@@ -362,14 +363,27 @@ async function applyTransition(serial: string, event: PosEvent, input: Transitio
   if (event === 'transferAgent' && input.agentId == null) {
     return { ok: false, error: 'VALIDATION', message: 'Chuyển đại lý phải chọn đại lý đích.' };
   }
+  if (event === 'changeCustomer') {
+    if (input.customerId == null) {
+      return { ok: false, error: 'VALIDATION', message: 'Đổi khách giữ máy phải chọn khách hàng mới.' };
+    }
+    if (input.customerId === pre.currentCustomerId) {
+      return { ok: false, error: 'VALIDATION', message: 'Khách hàng mới trùng với khách đang giữ máy.' };
+    }
+    const cust = await db.customer.findFirst({ where: { id: input.customerId, deletedAt: null }, select: { id: true } });
+    if (!cust) return { ok: false, error: 'NOT_FOUND', message: 'Không tìm thấy khách hàng mới (hoặc đã bị xóa).' };
+  }
   const unbinds = event === 'recall' || event === 'retire';
+  // changeCustomer KHÔNG unbind nhưng CÓ đụng hàng tids (đổi customerId TID theo khách) → phải khóa
+  // hàng tids TRƯỚC pos_devices như nhánh unbind (chống ABBA + TOCTOU currentTid đổi giữa chừng).
+  const touchesTid = unbinds || event === 'changeCustomer';
 
   const occurredAt = parseWhen(input.occurredAt);
   let result: MutationResult;
   try {
     result = await runWithRetry(async () => {
       // Dirty-read currentTid (KHÔNG khóa) mỗi lần thử → biết hàng tids cần khóa TRƯỚC.
-      const dirty = unbinds ? await db.posDevice.findUnique({ where: { serial }, select: { currentTid: true } }) : null;
+      const dirty = touchesTid ? await db.posDevice.findUnique({ where: { serial }, select: { currentTid: true } }) : null;
       const dirtyTid = dirty?.currentTid ?? null;
       return await db.$transaction(async (tx) => {
         // THỨ TỰ KHÓA: tids TRƯỚC (nếu máy còn TID) rồi mới pos_devices — khớp assignTid, chống ABBA.
@@ -379,7 +393,7 @@ async function applyTransition(serial: string, event: PosEvent, input: Transitio
         if (!dev) throw new TransitionAbort({ ok: false, error: 'NOT_FOUND', message: `Không tìm thấy máy POS serial "${serial}".` });
 
         // currentTid đổi giữa dirty-read và khóa → tids đã khóa không khớp → retry sạch (dirty-read lại).
-        if (unbinds && (dev.currentTid ?? null) !== dirtyTid) throw new RetrySignal();
+        if (touchesTid && (dev.currentTid ?? null) !== dirtyTid) throw new RetrySignal();
 
         const decision = decidePosTransition(dev.status as PosStatus, event);
         if (!decision.allowed) {
@@ -393,6 +407,7 @@ async function applyTransition(serial: string, event: PosEvent, input: Transitio
       const patch: Record<string, unknown> = { status: toState, updatedBy: user.id };
       let toAgentId: number | null = null;
       let customerId: number | null = null;
+      let eventTid: string | null = null; // TID ghi kèm sự kiện (đổi-khách: TID đi theo máy)
       if (event === 'deploy') {
         patch.currentCustomerId = input.customerId ?? null;
         patch.currentAgentId = input.agentId ?? dev.currentAgentId;
@@ -401,6 +416,15 @@ async function applyTransition(serial: string, event: PosEvent, input: Transitio
       } else if (event === 'transferAgent') {
         patch.currentAgentId = input.agentId ?? null;
         toAgentId = input.agentId ?? null;
+      } else if (event === 'changeCustomer') {
+        // POS #2: máy giữ nguyên DEPLOYED + TID; chỉ đổi khách giữ máy. TID (nếu có) đi theo khách mới.
+        patch.currentCustomerId = input.customerId ?? null;
+        customerId = input.customerId ?? null;
+        toAgentId = dev.currentAgentId; // giữ đại lý
+        eventTid = dev.currentTid; // ghi TID vào sự kiện để timeline thấy TID theo khách mới
+        if (dev.currentTid) {
+          await tx.tid.updateMany({ where: { tid: dev.currentTid }, data: { customerId: input.customerId } });
+        }
       } else if (event === 'recall') {
         patch.currentCustomerId = null;
         patch.currentAgentId = null;
@@ -424,6 +448,7 @@ async function applyTransition(serial: string, event: PosEvent, input: Transitio
       await tx.assetEvent.create({
         data: {
           deviceSerial: serial,
+          tid: eventTid,
           eventType: decision.eventType!,
           fromState,
           toState,
@@ -460,6 +485,8 @@ async function applyTransition(serial: string, event: PosEvent, input: Transitio
 export const deployPos = (serial: string, input: TransitionInput): Promise<MutationResult> => applyTransition(serial, 'deploy', input);
 export const recallPos = (serial: string, input: TransitionInput): Promise<MutationResult> => applyTransition(serial, 'recall', input);
 export const transferPosAgent = (serial: string, input: TransitionInput): Promise<MutationResult> => applyTransition(serial, 'transferAgent', input);
+/** POS #2 — đổi khách giữ máy (giữ DEPLOYED + TID, TID theo khách mới), 1 bước atomic. */
+export const changeCustomerPos = (serial: string, input: TransitionInput): Promise<MutationResult> => applyTransition(serial, 'changeCustomer', input);
 export const reportPosDamage = (serial: string, input: TransitionInput): Promise<MutationResult> => applyTransition(serial, 'reportDamage', input);
 export const sendPosRepair = (serial: string, input: TransitionInput): Promise<MutationResult> => applyTransition(serial, 'sendRepair', input);
 export const receivePosRepaired = (serial: string, input: TransitionInput): Promise<MutationResult> => applyTransition(serial, 'receiveRepaired', input);

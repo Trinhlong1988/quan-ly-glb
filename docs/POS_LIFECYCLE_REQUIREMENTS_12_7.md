@@ -37,6 +37,25 @@
 - **Vòng đời POS** xem được từ: trang Quản Lý Máy POS **và** từ ngữ cảnh TID (máy đang gắn TID).
 
 ## 6. Việc cần làm
-- [ ] Audit thiết kế hiện tại (states PosDevice + eventType AssetEvent + transitions + PosTidBinding + timestamps) — ĐANG CHẠY.
-- [ ] Báo cáo COVERED/PARTIAL/MISSING từng mục §1–§4.
+- [x] Audit thiết kế hiện tại (states PosDevice + eventType AssetEvent + transitions + PosTidBinding + timestamps).
+- [x] Báo cáo COVERED/PARTIAL/MISSING từng mục §1–§4 (đã trình Mr.Long → duyệt ưu tiên #1 + #2).
 - [ ] Đề xuất thiết kế chặt (bổ sung state SỬA/BÁN, event đổi-khách, ràng buộc 1-TID/máy, trường giao đủ) — chờ Mr.Long duyệt.
+
+## 7. ĐÃ LÀM (Mr.Long duyệt "oik" 12/7)
+- [x] **#1 — Khóa CỨNG 1 máy 1 TID SỐNG (§2 invariant):** migration `20260712190000_pos_binding_unique` thêm 2
+  partial-unique trên `pos_tid_bindings`: `UNIQUE(pos_serial) WHERE unbound_at IS NULL` +
+  `UNIQUE(tid) WHERE unbound_at IS NULL`. DB tự chặn dù đường ghi nào lọt guard. Tầng service đã enforce sẵn
+  (assignTid: TID_ON_DEVICE + DEVICE_HAS_TID với FOR UPDATE) — nay có backstop DB. Selftest #39 chứng minh cả
+  guard service LẪN partial-unique (chèn raw binding thứ 2 → 23505).
+- [x] **#2 — Sự kiện ĐỔI KHÁCH atomic (§1.7):** `changeCustomer` (DEPLOYED→DEPLOYED, giữ TID). 1 bước:
+  đổi `currentCustomerId` máy + `tid.customerId` (TID đi theo khách mới) + AssetEvent `CHANGE_CUSTOMER`
+  (ghi kèm TID) + audit — tất cả trong 1 transaction, khóa tids→pos_devices. UI: menu "Đổi khách giữ máy"
+  ở máy DEPLOYED + banner ngữ cảnh (khách đang giữ / TID theo khách). Chặn: đổi trùng khách / thiếu khách /
+  khách không tồn tại / máy không DEPLOYED. Selftest #39.
+
+## 8. CÒN LẠI (chưa duyệt build — chờ Mr.Long)
+- #3 **BÁN máy** (sold outright) — cần trạng thái/sự kiện riêng? Chờ Mr.Long xác nhận GLB có bán đứt máy không.
+- #4 **Thu-về-sửa giữ khách/TID:** máy DEPLOYED→(reportDamage/sendRepair) hiện GIỮ currentTid nhưng vẫn còn
+  currentCustomerId — cần rà: khi máy đi sửa có nên tạm "treo" khách? (spec §1.8-1.10).
+- #5 **Trường giao đủ (§4):** từ kho nào + địa chỉ giao — hiện deploy/changeCustomer chưa ghi kho nguồn + địa chỉ.
+- #6 **Hủy khách giữ máy** (§1.6) — gỡ khách nhưng máy vẫn ở khách? cần định nghĩa.

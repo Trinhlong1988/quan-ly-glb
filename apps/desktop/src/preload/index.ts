@@ -74,6 +74,7 @@ const api = {
   posDeploy: (serial: string, input: unknown) => ipcRenderer.invoke('pos:deploy', { serial, input }),
   posRecall: (serial: string, input: unknown) => ipcRenderer.invoke('pos:recall', { serial, input }),
   posTransferAgent: (serial: string, input: unknown) => ipcRenderer.invoke('pos:transferAgent', { serial, input }),
+  posChangeCustomer: (serial: string, input: unknown) => ipcRenderer.invoke('pos:changeCustomer', { serial, input }),
   posReportDamage: (serial: string, input: unknown) => ipcRenderer.invoke('pos:reportDamage', { serial, input }),
   posSendRepair: (serial: string, input: unknown) => ipcRenderer.invoke('pos:sendRepair', { serial, input }),
   posReceiveRepaired: (serial: string, input: unknown) => ipcRenderer.invoke('pos:receiveRepaired', { serial, input }),

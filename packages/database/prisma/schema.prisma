@@ -407,6 +407,10 @@ model AssetEvent {
 }
 
 // Gắn POS↔TID theo thời gian (§A2) — giữ lịch sử bind/unbind.
+// POS #1 (Mr.Long 12/7): bất biến "1 máy 1 TID SỐNG" được KHÓA CỨNG ở DB bằng 2 partial-unique
+// (migration 20260712190000_pos_binding_unique) — Prisma không diễn đạt được partial-unique nên
+// đặt ngoài schema: UNIQUE(pos_serial) WHERE unbound_at IS NULL + UNIQUE(tid) WHERE unbound_at IS NULL.
+// → mỗi máy tối đa 1 binding mở, mỗi TID tối đa 1 binding mở (backstop cho guard tầng service).
 model PosTidBinding {
   id           Int       @id @default(autoincrement())
   posSerial    String    @map("pos_serial")
