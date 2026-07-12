@@ -55,6 +55,9 @@ const api = {
   backupList: () => ipcRenderer.invoke('backup:list'),
   backupRestore: (filePath: string, password: string) =>
     ipcRenderer.invoke('backup:restore', { filePath, password }),
+  backupMirrorConfigGet: () => ipcRenderer.invoke('backup:mirrorConfigGet'),
+  backupMirrorConfigSet: (input: { mirrorDir: string | null; keep?: number }, password: string) =>
+    ipcRenderer.invoke('backup:mirrorConfigSet', { input, password }),
 
   // Settings
   settingList: () => ipcRenderer.invoke('setting:list'),
@@ -75,6 +78,12 @@ const api = {
   posRecall: (serial: string, input: unknown) => ipcRenderer.invoke('pos:recall', { serial, input }),
   posTransferAgent: (serial: string, input: unknown) => ipcRenderer.invoke('pos:transferAgent', { serial, input }),
   posChangeCustomer: (serial: string, input: unknown) => ipcRenderer.invoke('pos:changeCustomer', { serial, input }),
+  posCancelCustomer: (serial: string, input: unknown) => ipcRenderer.invoke('pos:cancelCustomer', { serial, input }),
+  deviceSellPos: (serial: string, input: unknown, password: string) => ipcRenderer.invoke('deviceSale:sellPos', { serial, input, password }),
+  deviceSellTid: (tid: string, input: unknown, password: string) => ipcRenderer.invoke('deviceSale:sellTid', { tid, input, password }),
+  deviceSaleCollect: (input: unknown) => ipcRenderer.invoke('deviceSale:collect', input),
+  deviceSaleList: (filter: unknown) => ipcRenderer.invoke('deviceSale:list', filter),
+  deviceSaleReceivables: () => ipcRenderer.invoke('deviceSale:receivables'),
   posReportDamage: (serial: string, input: unknown) => ipcRenderer.invoke('pos:reportDamage', { serial, input }),
   posSendRepair: (serial: string, input: unknown) => ipcRenderer.invoke('pos:sendRepair', { serial, input }),
   posReceiveRepaired: (serial: string, input: unknown) => ipcRenderer.invoke('pos:receiveRepaired', { serial, input }),
@@ -249,7 +258,6 @@ const api = {
   // Doanh thu & Công nợ (Nhóm B)
   transactionList: (filter: unknown) => ipcRenderer.invoke('transaction:list', filter),
   transactionCreate: (input: unknown) => ipcRenderer.invoke('transaction:create', input),
-  transactionUpdate: (id: number, input: unknown) => ipcRenderer.invoke('transaction:update', { id, input }),
   transactionDelete: (ids: number[], password: string) => ipcRenderer.invoke('transaction:delete', { ids, password }),
   // FIX 2 — GỠ transactionSettle (H5): handler 'transaction:settle' đã gỡ → gọi sẽ reject "No handler". API chết.
   debtSummary: (filter: unknown) => ipcRenderer.invoke('debt:summary', filter),

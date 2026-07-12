@@ -17,6 +17,7 @@ export interface PosDto {
   currentCustomerId: number | null;
   currentTid: string | null;
   warehouseLoc: string | null;
+  recallPending: boolean; // #6 — khách đã hủy, máy chưa thu về (còn ở khách)
   note: string | null;
   createdAt: string;
   // ── PHASE K1 — cột nhập di trú (§2.3) để hiển thị cạnh trạng thái vận hành ──
@@ -73,6 +74,7 @@ interface PosDeviceRow {
   currentCustomerId: number | null;
   currentTid: string | null;
   warehouseLoc: string | null;
+  recallPending: boolean;
   note: string | null;
   createdAt: Date;
   posModelId: number | null;
@@ -99,6 +101,7 @@ function toDto(d: PosDeviceRow, maps: PosNameMaps): PosDto {
     currentCustomerId: d.currentCustomerId,
     currentTid: d.currentTid,
     warehouseLoc: d.warehouseLoc,
+    recallPending: d.recallPending,
     note: d.note,
     createdAt: d.createdAt.toISOString(),
     posModelId: d.posModelId,
@@ -260,6 +263,8 @@ const POS_EVENT_LABELS: Record<PosEvent, string> = {
   recall: 'Thu hồi về kho',
   transferAgent: 'Chuyển đại lý',
   changeCustomer: 'Đổi khách giữ máy',
+  cancelCustomer: 'Hủy khách giữ máy',
+  sell: 'Bán máy',
   reportDamage: 'Báo hỏng',
   sendRepair: 'Gửi bảo trì',
   receiveRepaired: 'Nhận sửa xong',
@@ -387,6 +392,9 @@ async function applyTransition(serial: string, event: PosEvent, input: Transitio
     const cust = await db.customer.findFirst({ where: { id: input.customerId, deletedAt: null }, select: { id: true } });
     if (!cust) return { ok: false, error: 'NOT_FOUND', message: 'Không tìm thấy khách hàng mới (hoặc đã bị xóa).' };
   }
+  if (event === 'cancelCustomer' && pre.currentCustomerId == null) {
+    return { ok: false, error: 'VALIDATION', message: 'Máy này chưa gán khách nào để hủy.' };
+  }
   const unbinds = event === 'recall' || event === 'retire';
   // changeCustomer KHÔNG unbind nhưng CÓ đụng hàng tids (đổi customerId TID theo khách) → phải khóa
   // hàng tids TRƯỚC pos_devices như nhánh unbind (chống ABBA + TOCTOU currentTid đổi giữa chừng).
@@ -427,8 +435,15 @@ async function applyTransition(serial: string, event: PosEvent, input: Transitio
       if (event === 'deploy') {
         patch.currentCustomerId = input.customerId ?? null;
         patch.currentAgentId = input.agentId ?? dev.currentAgentId;
+        patch.recallPending = false; // giao khách mới → hết trạng thái "chờ thu hồi"
         customerId = input.customerId ?? null;
         toAgentId = (input.agentId ?? dev.currentAgentId) ?? null;
+      } else if (event === 'cancelCustomer') {
+        // #6: GIỮ khách (để biết máy đang ở đâu) + đánh dấu chờ thu hồi. TID giữ nguyên trên máy.
+        patch.recallPending = true;
+        customerId = dev.currentCustomerId; // ghi vào sự kiện: khách đang giữ (bị hủy)
+        toAgentId = dev.currentAgentId;
+        eventTid = dev.currentTid;
       } else if (event === 'transferAgent') {
         patch.currentAgentId = input.agentId ?? null;
         toAgentId = input.agentId ?? null;
@@ -444,6 +459,7 @@ async function applyTransition(serial: string, event: PosEvent, input: Transitio
       } else if (event === 'recall') {
         patch.currentCustomerId = null;
         patch.currentAgentId = null;
+        patch.recallPending = false; // máy đã về kho → hết "chờ thu hồi"
         // Q-P6: Thu hồi máy = GỠ gán TID (nếu còn) — máy về kho, TID về "Chưa gán máy".
         if (dev.currentTid) {
           patch.currentTid = null;
@@ -513,6 +529,8 @@ export const recallPos = (serial: string, input: TransitionInput): Promise<Mutat
 export const transferPosAgent = (serial: string, input: TransitionInput): Promise<MutationResult> => applyTransition(serial, 'transferAgent', input);
 /** POS #2 — đổi khách giữ máy (giữ DEPLOYED + TID, TID theo khách mới), 1 bước atomic. */
 export const changeCustomerPos = (serial: string, input: TransitionInput): Promise<MutationResult> => applyTransition(serial, 'changeCustomer', input);
+/** #6 — hủy khách giữ máy: giữ khách + đánh dấu chờ thu hồi (máy chưa về kho). */
+export const cancelCustomerPos = (serial: string, input: TransitionInput): Promise<MutationResult> => applyTransition(serial, 'cancelCustomer', input);
 export const reportPosDamage = (serial: string, input: TransitionInput): Promise<MutationResult> => applyTransition(serial, 'reportDamage', input);
 export const sendPosRepair = (serial: string, input: TransitionInput): Promise<MutationResult> => applyTransition(serial, 'sendRepair', input);
 export const receivePosRepaired = (serial: string, input: TransitionInput): Promise<MutationResult> => applyTransition(serial, 'receiveRepaired', input);

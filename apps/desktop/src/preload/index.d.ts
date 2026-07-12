@@ -116,6 +116,14 @@ export interface SettingDto {
   key: string;
   value: string | null;
 }
+/** R48 Pha 5 — cấu hình + trạng thái nhân bản sao lưu tầng 2 (mirror ra nơi khác). */
+export interface BackupMirrorConfig {
+  mirrorDir: string | null;
+  keep: number;
+  lastMirrorAt: string | null;
+  lastMirrorOk: boolean | null;
+  lastMirrorError: string | null;
+}
 
 // ── G-POS.1 DTOs ──
 export interface CustomerDto {
@@ -149,6 +157,7 @@ export interface PosDto {
   currentCustomerId: number | null;
   currentTid: string | null;
   warehouseLoc: string | null;
+  recallPending: boolean;
   note: string | null;
   createdAt: string;
   posModelId: number | null;
@@ -304,6 +313,60 @@ export interface TransitionInput {
   agentId?: number | null;
   customerId?: number | null;
   fromWarehouseId?: number | null;
+}
+export interface SellPosInput {
+  customerId: number;
+  salePrice: number;
+  paidNow?: number;
+  fundId?: number | null;
+  method?: string | null;
+  warehouseId?: number | null;
+  occurredAt?: string | null;
+  note?: string | null;
+}
+export interface SellTidInput {
+  customerId: number;
+  salePrice: number;
+  paidNow?: number;
+  fundId?: number | null;
+  method?: string | null;
+  occurredAt?: string | null;
+  note?: string | null;
+}
+export interface CollectDeviceSaleInput {
+  deviceSaleId: number;
+  amount: number;
+  fundId: number;
+  method?: string | null;
+  entryDate?: string | null;
+}
+export interface DeviceSaleFilter {
+  saleKind?: string;
+  customerId?: number;
+  onlyDebt?: boolean;
+}
+export interface DeviceSaleDto {
+  id: number;
+  code: string | null;
+  saleKind: string;
+  deviceSerial: string | null;
+  tid: string | null;
+  customerId: number;
+  customerName: string | null;
+  salePrice: number;
+  paid: number;
+  remaining: number;
+  soldByName: string | null;
+  occurredAt: string;
+  note: string | null;
+}
+export interface CustomerDeviceReceivable {
+  customerId: number;
+  customerName: string | null;
+  totalSale: number;
+  totalPaid: number;
+  remaining: number;
+  saleCount: number;
 }
 export interface TidFilter {
   search?: string;
@@ -1276,6 +1339,8 @@ export interface GlbApi {
   backupCreate(note?: string): Promise<MutationOutcome>;
   backupList(): Promise<ListResult<BackupDto>>;
   backupRestore(filePath: string, password: string): Promise<MutationOutcome>;
+  backupMirrorConfigGet(): Promise<{ ok: boolean; data?: BackupMirrorConfig; error?: string; message?: string }>;
+  backupMirrorConfigSet(input: { mirrorDir: string | null; keep?: number }, password: string): Promise<MutationOutcome>;
 
   settingList(): Promise<ListResult<SettingDto>>;
   settingUpdate(key: string, value: string): Promise<MutationOutcome>;
@@ -1294,6 +1359,12 @@ export interface GlbApi {
   posRecall(serial: string, input: TransitionInput): Promise<MutationOutcome>;
   posTransferAgent(serial: string, input: TransitionInput): Promise<MutationOutcome>;
   posChangeCustomer(serial: string, input: TransitionInput): Promise<MutationOutcome>;
+  posCancelCustomer(serial: string, input: TransitionInput): Promise<MutationOutcome>;
+  deviceSellPos(serial: string, input: SellPosInput, password: string): Promise<MutationOutcome>;
+  deviceSellTid(tid: string, input: SellTidInput, password: string): Promise<MutationOutcome>;
+  deviceSaleCollect(input: CollectDeviceSaleInput): Promise<MutationOutcome>;
+  deviceSaleList(filter: DeviceSaleFilter): Promise<ListResult<DeviceSaleDto>>;
+  deviceSaleReceivables(): Promise<ListResult<CustomerDeviceReceivable>>;
   posReportDamage(serial: string, input: TransitionInput): Promise<MutationOutcome>;
   posSendRepair(serial: string, input: TransitionInput): Promise<MutationOutcome>;
   posReceiveRepaired(serial: string, input: TransitionInput): Promise<MutationOutcome>;
@@ -1470,7 +1541,6 @@ export interface GlbApi {
   // Doanh thu & Công nợ (Nhóm B)
   transactionList(filter: TransactionFilter): Promise<ListTransactionsResult>;
   transactionCreate(input: CreateTransactionInput): Promise<MutationOutcome>;
-  transactionUpdate(id: number, input: UpdateTransactionInput): Promise<MutationOutcome>;
   transactionDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
   // FIX 2 — transactionSettle đã GỠ (H5): handler 'transaction:settle' không còn; settled chỉ đổi qua phiếu Thu công nợ.
   debtSummary(filter: TransactionFilter): Promise<{ ok: boolean; data?: DebtSummary; error?: string; message?: string }>;
@@ -1700,14 +1770,6 @@ export interface CreateTransactionInput {
   cardTypeId: number;
   amount: number;
   txnDate: string;
-  customerId?: number | null;
-  note?: string;
-}
-
-export interface UpdateTransactionInput {
-  cardTypeId?: number;
-  amount?: number;
-  txnDate?: string;
   customerId?: number | null;
   note?: string;
 }

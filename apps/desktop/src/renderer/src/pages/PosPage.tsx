@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Loader2, HardDrive, History, Wrench, Download, List, PackagePlus, Building2, Cpu, Tag, Trash2 } from 'lucide-react';
+import { Loader2, HardDrive, History, Wrench, Download, List, PackagePlus, Building2, Cpu, Tag, Trash2, Banknote, Undo2 } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate, fmtTimeSec } from '@glb/shared';
-import type { PosDto, TimelineEventDto, CustomerDto, LiteRef, WarehouseLite } from '../../../preload/index.d';
+import type { PosDto, TimelineEventDto, CustomerDto, FundDto, LiteRef, WarehouseLite } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
 import { Modal } from '../components/Modal.js';
 import { Button } from '../components/Button.js';
@@ -80,9 +80,12 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
   const [toDate, setToDate] = useState('');
   const [timelineOf, setTimelineOf] = useState<PosDto | null>(null);
   const [actionOf, setActionOf] = useState<{ device: PosDto; event: string } | null>(null);
+  const [saleTarget, setSaleTarget] = useState<PosDto | null>(null);
   const [cancelTarget, setCancelTarget] = useState<RequestCancelTarget | null>(null);
+  const [onlyRecall, setOnlyRecall] = useState(false); // #6 — lọc "cần thu hồi"
 
   const canManage = hasPermission(user, 'POS_MANAGE');
+  const canSell = hasPermission(user, 'DEVICE_SALE_MANAGE');
   const canCancelReq = hasPermission(user, 'POS_CANCEL_REQUEST');
   // R14 — danh mục trạng thái máy POS (entity POS_DEVICE) từ catalog tùy biến.
   const { options: posOptions, byCode: posByCode } = useStatusOptions('POS_DEVICE');
@@ -109,13 +112,15 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
   // Lọc chủng loại (client-side) trên tập đã lọc phía server. Ưu tiên posModelId; nếu DTO thiếu id
   // nhưng có tên khớp option đang chọn thì fallback theo posModelName.
   const selectedModel = models.find((m) => String(m.id) === modelFilter);
-  const filteredRows = modelFilter
+  const filteredRows = (modelFilter
     ? rows.filter((d) =>
         d.posModelId != null
           ? String(d.posModelId) === modelFilter
           : !!selectedModel && d.posModelName === selectedModel.name
       )
-    : rows;
+    : rows
+  ).filter((d) => (onlyRecall ? d.recallPending : true));
+  const recallCount = rows.filter((d) => d.recallPending).length;
 
   function resetFilters(): void {
     setSearch('');
@@ -163,6 +168,15 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
         onApply={reload}
         onReset={resetFilters}
       />
+
+      {recallCount > 0 && (
+        <button
+          onClick={() => setOnlyRecall((v) => !v)}
+          className={'mb-2 inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold transition ' + (onlyRecall ? 'border-warning bg-warning/15 text-warning' : 'border-line text-slate-600 hover:bg-appbg')}
+        >
+          <Undo2 className="h-3.5 w-3.5" /> {onlyRecall ? 'Đang lọc: ' : ''}Cần thu hồi ({recallCount})
+        </button>
+      )}
 
       {/* Bộ đếm (đếm CLIENT từ posList — trả full, không phân trang; theo tập kết quả lọc hiện tại). */}
       <StatBar
@@ -230,6 +244,9 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
                       >
                         <History className="h-3.5 w-3.5" /> Vòng đời
                       </button>
+                      {d.recallPending && (
+                        <span title="Khách đã hủy — máy chưa thu về" className="rounded-full bg-warning/15 px-2 py-0.5 text-xs font-semibold text-warning whitespace-nowrap">Cần thu hồi</span>
+                      )}
                       {canManage && (NEXT[d.status]?.length ?? 0) > 0 && (
                         <select
                           className="rounded-md border border-line px-2 py-1 text-xs text-slate-600 hover:bg-appbg"
@@ -243,6 +260,15 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
                             </option>
                           ))}
                         </select>
+                      )}
+                      {canSell && (d.status === 'IN_STOCK' || d.status === 'DEPLOYED') && (
+                        <button
+                          onClick={() => setSaleTarget(d)}
+                          title="Bán máy (kèm TID nếu có)"
+                          className="flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 hover:brightness-105"
+                        >
+                          <Banknote className="h-3.5 w-3.5" /> Bán máy
+                        </button>
                       )}
                       {canCancelReq && (
                         <button
@@ -273,6 +299,16 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
           }}
         />
       )}
+      {saleTarget && (
+        <SellDeviceModal
+          device={saleTarget}
+          onClose={() => setSaleTarget(null)}
+          onDone={async () => {
+            setSaleTarget(null);
+            await reload();
+          }}
+        />
+      )}
       {cancelTarget && (
         <RequestCancelModal
           target={cancelTarget}
@@ -287,6 +323,102 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
   );
 }
 
+/** #3 — Bán máy POS (kèm TID nếu có). Form tiền + mật khẩu xác nhận. */
+function SellDeviceModal({ device, onClose, onDone }: { device: PosDto; onClose: () => void; onDone: () => void }): JSX.Element {
+  const toast = useToast();
+  const [customers, setCustomers] = useState<CustomerDto[]>([]);
+  const [funds, setFunds] = useState<FundDto[]>([]);
+  const [warehouses, setWarehouses] = useState<WarehouseLite[]>([]);
+  const [customerId, setCustomerId] = useState('');
+  const [salePrice, setSalePrice] = useState('');
+  const [paidNow, setPaidNow] = useState('');
+  const [fundId, setFundId] = useState('');
+  const [method, setMethod] = useState('CASH');
+  const [warehouseId, setWarehouseId] = useState('');
+  const [occurredAt, setOccurredAt] = useState('');
+  const [note, setNote] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    window.api.customerList({}).then((r) => r.ok && r.data && setCustomers(r.data));
+    window.api.fundList({}).then((r) => r.ok && r.data && setFunds(r.data.filter((f) => f.active)));
+    window.api.warehouseLite().then((r) => r.ok && r.data && setWarehouses(r.data));
+  }, []);
+
+  const price = Number(salePrice) || 0;
+  const paid = Number(paidNow) || 0;
+  const remaining = Math.max(0, price - paid);
+
+  async function submit(): Promise<void> {
+    if (!customerId) return toast.alert('Phải chọn khách mua.', 'Thiếu thông tin');
+    if (!(price > 0)) return toast.alert('Giá bán phải > 0.', 'Số tiền không hợp lệ');
+    if (paid < 0 || paid > price) return toast.alert('Số tiền thu phải từ 0 đến giá bán.', 'Số tiền không hợp lệ');
+    if (paid > 0 && !fundId) return toast.alert('Có thu tiền thì phải chọn quỹ nhận.', 'Thiếu quỹ');
+    if (!password) return toast.alert('Nhập mật khẩu để xác nhận bán máy.', 'Cần mật khẩu');
+    setBusy(true);
+    const res = await window.api.deviceSellPos(device.serial, {
+      customerId: Number(customerId), salePrice: price, paidNow: paid,
+      fundId: fundId ? Number(fundId) : null, method, warehouseId: warehouseId ? Number(warehouseId) : null,
+      occurredAt: occurredAt ? new Date(occurredAt).toISOString() : null, note: note || null
+    }, password);
+    setBusy(false);
+    if (res.ok) { toast.success(`Đã bán máy ${device.serial}${device.currentTid ? ` (kèm TID ${device.currentTid})` : ''}`); onDone(); }
+    else toast.alert(res.message ?? 'Bán máy thất bại', 'Không bán được');
+  }
+
+  return (
+    <Modal title={`Bán máy ${device.serial}`} onClose={onClose} width="max-w-lg">
+      <div className="mb-2 rounded-md bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+        Máy sẽ chuyển <b>ĐÃ BÁN</b>{device.currentTid ? <> và <b>TID {device.currentTid}</b> bán kèm sang khách mua.</> : '.'} Doanh thu ghi nhận đủ giá ngay; phần chưa thu thành công nợ mua thiết bị.
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="Khách mua" required>
+          <select className={inputCls} value={customerId} onChange={(e) => setCustomerId(e.target.value)} autoFocus>
+            <option value="">— Chọn khách —</option>
+            {customers.map((c) => <option key={c.id} value={c.id}>{c.display}</option>)}
+          </select>
+        </Field>
+        <Field label="Giá bán (VND)" required>
+          <input className={inputCls + ' text-right tabular-nums'} inputMode="numeric" value={salePrice} onChange={(e) => setSalePrice(e.target.value.replace(/[^\d]/g, ''))} placeholder="0" />
+        </Field>
+        <Field label="Thu ngay (VND)" hint={`Còn nợ: ${remaining.toLocaleString('vi-VN')}`}>
+          <input className={inputCls + ' text-right tabular-nums'} inputMode="numeric" value={paidNow} onChange={(e) => setPaidNow(e.target.value.replace(/[^\d]/g, ''))} placeholder="0" />
+        </Field>
+        <Field label="Quỹ nhận tiền" hint={paid > 0 ? 'Bắt buộc khi có thu' : 'Không thu thì bỏ trống'}>
+          <select className={inputCls} value={fundId} onChange={(e) => setFundId(e.target.value)}>
+            <option value="">— Chọn quỹ —</option>
+            {funds.map((f) => <option key={f.id} value={f.id}>{f.code} · {f.name}</option>)}
+          </select>
+        </Field>
+        <Field label="Hình thức">
+          <select className={inputCls} value={method} onChange={(e) => setMethod(e.target.value)}>
+            <option value="CASH">Tiền mặt</option>
+            <option value="CK">Chuyển khoản</option>
+          </select>
+        </Field>
+        <Field label="Từ kho">
+          <select className={inputCls} value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
+            <option value="">— Không chọn —</option>
+            {warehouses.map((w) => <option key={w.id} value={w.id}>{w.code} · {w.name}</option>)}
+          </select>
+        </Field>
+        <Field label="Thời gian bán" hint="Bỏ trống = hiện tại">
+          <input type="datetime-local" className={inputCls} value={occurredAt} onChange={(e) => setOccurredAt(e.target.value)} />
+        </Field>
+        <Field label="Ghi chú"><input className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} /></Field>
+        <Field label="Mật khẩu xác nhận" required><input type="password" className={inputCls} value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
+      </div>
+      <div className="mt-6 flex justify-end gap-2">
+        <button onClick={onClose} className="rounded-md border border-line px-4 py-2 text-sm font-medium text-slate-600 hover:bg-appbg">Hủy</button>
+        <button onClick={submit} disabled={busy} className="flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:brightness-105 disabled:opacity-60">
+          {busy && <Loader2 className="h-4 w-4 animate-spin" />} Bán máy
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
 /** Transitions available from each status (mirrors the main-process state machine §A3). */
 const NEXT: Record<string, { key: string; label: string }[]> = {
   IN_STOCK: [
@@ -296,6 +428,7 @@ const NEXT: Record<string, { key: string; label: string }[]> = {
   ],
   DEPLOYED: [
     { key: 'changeCustomer', label: 'Đổi khách giữ máy' },
+    { key: 'cancelCustomer', label: 'Hủy khách giữ máy' },
     { key: 'recall', label: 'Thu hồi về kho' },
     { key: 'reportDamage', label: 'Báo hỏng' },
     { key: 'retire', label: 'Thanh lý' }
@@ -351,6 +484,7 @@ const EVENT_LABELS: Record<string, string> = {
   deploy: 'Triển khai (giao khách)',
   recall: 'Thu hồi về kho',
   changeCustomer: 'Đổi khách giữ máy',
+  cancelCustomer: 'Hủy khách giữ máy',
   reportDamage: 'Báo hỏng',
   sendRepair: 'Gửi bảo trì',
   receiveRepaired: 'Nhận sửa xong',
@@ -393,6 +527,7 @@ function TransitionModal({ device, event, onClose, onDone }: { device: PosDto; e
       case 'deploy': res = await window.api.posDeploy(device.serial, input); break;
       case 'recall': res = await window.api.posRecall(device.serial, input); break;
       case 'changeCustomer': res = await window.api.posChangeCustomer(device.serial, input); break;
+      case 'cancelCustomer': res = await window.api.posCancelCustomer(device.serial, input); break;
       case 'reportDamage': res = await window.api.posReportDamage(device.serial, input); break;
       case 'sendRepair': res = await window.api.posSendRepair(device.serial, input); break;
       case 'receiveRepaired': res = await window.api.posReceiveRepaired(device.serial, input); break;

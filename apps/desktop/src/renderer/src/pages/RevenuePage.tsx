@@ -74,7 +74,7 @@ export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
   const [banks, setBanks] = useState<LiteRef[]>([]);
   const [partners, setPartners] = useState<{ id: number; name: string; code: string | null }[]>([]);
 
-  const [form, setForm] = useState<{ mode: 'create' | 'edit'; row?: TransactionDto } | null>(null);
+  const [showForm, setShowForm] = useState(false); // GD chỉ GHI NHẬN (create); bill bất biến — sửa = hủy+tạo lại (BILL_IMMUTABLE)
   const [del, setDel] = useState<TransactionDto | null>(null);
   const [bulkDel, setBulkDel] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<TransactionDto | null>(null);
@@ -165,7 +165,7 @@ export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
           <p className="text-sm text-slate-500">Ghi nhận giao dịch qua TID · doanh thu = chênh đối tác (phí mua − phí cài máy) + chênh bán (phí bán − phí cài máy).</p>
         </div>
         {canManage && (
-          <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => tids.length ? setForm({ mode: 'create' }) : toast.alert('Cần có ít nhất 1 TID đã cấu hình Đối tác trước.', 'Thiếu dữ liệu nền')}>Ghi nhận giao dịch</Button>
+          <Button variant="confirm" icon={<Plus className="h-4 w-4" />} onClick={() => tids.length ? setShowForm(true) : toast.alert('Cần có ít nhất 1 TID đã cấu hình Đối tác trước.', 'Thiếu dữ liệu nền')}>Ghi nhận giao dịch</Button>
         )}
       </div>
 
@@ -286,7 +286,7 @@ export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
         </div>
       )}
 
-      {form && <TransactionForm mode={form.mode} row={form.row} tids={tids} customers={customers} onClose={() => setForm(null)} onSaved={() => { setForm(null); void reload(); }} />}
+      {showForm && <TransactionForm tids={tids} customers={customers} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); void reload(); }} />}
       {del && <ConfirmDialog title="Xóa giao dịch" message={`Giao dịch "${del.code ?? del.id}" (${money(del.amount)}) sẽ vào Thùng rác (có thể phục hồi). Nhập lại mật khẩu để xác nhận.`} confirmLabel="Xóa" danger requirePassword onCancel={() => setDel(null)} onConfirm={(pwd) => doDelete(del, pwd)} />}
       {bulkDel && <ConfirmDialog title="Xóa nhiều giao dịch" message={`${sel.count} giao dịch đã chọn sẽ vào Thùng rác (có thể phục hồi). Nhập lại mật khẩu để xác nhận.`} confirmLabel={`Xóa ${sel.count} mục`} danger requirePassword onCancel={() => setBulkDel(false)} onConfirm={(pwd) => doBulkDelete(pwd)} />}
       {cancelTarget && <CancelReasonModal bill={cancelTarget} onClose={() => setCancelTarget(null)} onSubmit={(reason) => doRequestCancel(cancelTarget, reason)} />}
@@ -318,14 +318,14 @@ function CancelReasonModal({ bill, onClose, onSubmit }: { bill: TransactionDto; 
   );
 }
 
-function TransactionForm({ mode, row, tids, customers, onClose, onSaved }: { mode: 'create' | 'edit'; row?: TransactionDto; tids: ConfigTidDto[]; customers: CustomerDto[]; onClose: () => void; onSaved: () => void }): JSX.Element {
+function TransactionForm({ tids, customers, onClose, onSaved }: { tids: ConfigTidDto[]; customers: CustomerDto[]; onClose: () => void; onSaved: () => void }): JSX.Element {
   const toast = useToast();
-  const [tidId, setTidId] = useState(row?.tidId ? String(row.tidId) : '');
-  const [cardTypeId, setCardTypeId] = useState(row?.cardTypeId ? String(row.cardTypeId) : '');
-  const [amount, setAmount] = useState(row ? String(row.amount) : '');
-  const [txnDate, setTxnDate] = useState(row?.txnDate ? row.txnDate.slice(0, 10) : new Date().toISOString().slice(0, 10));
-  const [customerId, setCustomerId] = useState(row?.customerId ? String(row.customerId) : '');
-  const [note, setNote] = useState(row?.note ?? '');
+  const [tidId, setTidId] = useState('');
+  const [cardTypeId, setCardTypeId] = useState('');
+  const [amount, setAmount] = useState('');
+  const [txnDate, setTxnDate] = useState(new Date().toISOString().slice(0, 10));
+  const [customerId, setCustomerId] = useState('');
+  const [note, setNote] = useState('');
   const [cards, setCards] = useState<CardTypeDto[]>([]);
   const [busy, setBusy] = useState(false);
 
@@ -347,24 +347,19 @@ function TransactionForm({ mode, row, tids, customers, onClose, onSaved }: { mod
     if (!txnDate) return toast.alert('Vui lòng chọn ngày giao dịch.', 'Thiếu thông tin');
     setBusy(true);
     const iso = new Date(txnDate + 'T00:00:00').toISOString();
-    let res;
-    if (mode === 'edit' && row) {
-      res = await window.api.transactionUpdate(row.id, { cardTypeId: Number(cardTypeId), amount: amt, txnDate: iso, customerId: customerId ? Number(customerId) : null, note });
-    } else {
-      const input: CreateTransactionInput = { tidId: Number(tidId), cardTypeId: Number(cardTypeId), amount: amt, txnDate: iso, note };
-      if (customerId) input.customerId = Number(customerId);
-      res = await window.api.transactionCreate(input);
-    }
+    const input: CreateTransactionInput = { tidId: Number(tidId), cardTypeId: Number(cardTypeId), amount: amt, txnDate: iso, note };
+    if (customerId) input.customerId = Number(customerId);
+    const res = await window.api.transactionCreate(input);
     setBusy(false);
-    if (res.ok) { toast.success(mode === 'edit' ? 'Đã cập nhật giao dịch' : 'Đã ghi nhận giao dịch'); onSaved(); }
+    if (res.ok) { toast.success('Đã ghi nhận giao dịch'); onSaved(); }
     else toast.alert(res.message ?? 'Lưu giao dịch thất bại', 'Không lưu được');
   }
 
   return (
-    <Modal title={mode === 'edit' ? `Sửa giao dịch ${row?.code ?? ''}` : 'Ghi nhận giao dịch'} onClose={onClose} width="max-w-xl">
+    <Modal title="Ghi nhận giao dịch" onClose={onClose} width="max-w-xl">
       <div className="grid grid-cols-2 gap-4">
-        <Field label="TID" required hint={mode === 'edit' ? 'Không đổi TID khi sửa' : 'Đối tác/HKD lấy theo TID'}>
-          <select className={inputCls} value={tidId} disabled={mode === 'edit'} onChange={(e) => { setTidId(e.target.value); setCardTypeId(''); }} autoFocus>
+        <Field label="TID" required hint="Đối tác/HKD lấy theo TID">
+          <select className={inputCls} value={tidId} onChange={(e) => { setTidId(e.target.value); setCardTypeId(''); }} autoFocus>
             <option value="">— Chọn TID —</option>
             {tids.map((t) => <option key={t.id} value={t.id}>{t.tid}{t.hkdName ? ` · ${t.hkdName}` : ''}{t.partnerName ? ` · ${t.partnerName}` : ''}</option>)}
           </select>
@@ -383,7 +378,7 @@ function TransactionForm({ mode, row, tids, customers, onClose, onSaved }: { mod
       {selectedTid && !selectedTid.partnerId && <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">TID này chưa gán Đối tác — không tra được biểu phí. Hãy cấu hình TID trước.</div>}
       <div className="mt-6 flex justify-end gap-2">
         <Button variant="neutral" onClick={onClose}>Hủy</Button>
-        <Button variant="confirm" onClick={save} disabled={busy} icon={busy ? <Loader2 className="h-4 w-4 animate-spin" /> : undefined}>{mode === 'edit' ? 'Lưu thay đổi' : 'Ghi nhận'}</Button>
+        <Button variant="confirm" onClick={save} disabled={busy} icon={busy ? <Loader2 className="h-4 w-4 animate-spin" /> : undefined}>Ghi nhận</Button>
       </div>
     </Modal>
   );

@@ -2,14 +2,14 @@
 // State machines for POS device + TID, and identifier-code formatting (§D).
 // These predicates are the enforceable core; the service layer wires them to the DB + audit.
 
-export type PosStatus = 'IN_STOCK' | 'DEPLOYED' | 'IN_REPAIR' | 'DAMAGED' | 'RETIRED';
-export type TidStatus = 'UNASSIGNED' | 'ACTIVE' | 'DEAD' | 'CLOSED' | 'RECALLED';
+export type PosStatus = 'IN_STOCK' | 'DEPLOYED' | 'IN_REPAIR' | 'DAMAGED' | 'RETIRED' | 'SOLD';
+export type TidStatus = 'UNASSIGNED' | 'ACTIVE' | 'DEAD' | 'CLOSED' | 'RECALLED' | 'SOLD';
 
-export const POS_STATUSES: PosStatus[] = ['IN_STOCK', 'DEPLOYED', 'IN_REPAIR', 'DAMAGED', 'RETIRED'];
-export const TID_STATUSES: TidStatus[] = ['UNASSIGNED', 'ACTIVE', 'DEAD', 'CLOSED', 'RECALLED'];
+export const POS_STATUSES: PosStatus[] = ['IN_STOCK', 'DEPLOYED', 'IN_REPAIR', 'DAMAGED', 'RETIRED', 'SOLD'];
+export const TID_STATUSES: TidStatus[] = ['UNASSIGNED', 'ACTIVE', 'DEAD', 'CLOSED', 'RECALLED', 'SOLD'];
 
 /** POS lifecycle events → allowed source states + resulting state (§A3). */
-export type PosEvent = 'deploy' | 'recall' | 'transferAgent' | 'changeCustomer' | 'reportDamage' | 'sendRepair' | 'receiveRepaired' | 'retire';
+export type PosEvent = 'deploy' | 'recall' | 'transferAgent' | 'changeCustomer' | 'cancelCustomer' | 'sell' | 'reportDamage' | 'sendRepair' | 'receiveRepaired' | 'retire';
 
 interface PosRule {
   from: PosStatus[];
@@ -26,6 +26,12 @@ export const POS_TRANSITIONS: Record<PosEvent, PosRule> = {
   // POS #2 (Mr.Long 12/7) — đổi khách giữ máy: máy giữ nguyên DEPLOYED, giữ nguyên TID; TID đi theo
   // khách mới (giao máy-có-TID = giao cả TID). 1 bước atomic, không recall+deploy rời.
   changeCustomer: { from: ['DEPLOYED'], to: 'DEPLOYED', eventType: 'CHANGE_CUSTOMER' },
+  // #6 (Mr.Long 12/7) — hủy khách giữ máy: GIỮ DEPLOYED + GIỮ khách (để biết máy đang ở đâu mà thu về),
+  // chỉ đánh dấu "chờ thu hồi". KHÁC recall (recall = máy về kho). TID giữ nguyên trên máy.
+  cancelCustomer: { from: ['DEPLOYED'], to: 'DEPLOYED', eventType: 'CANCEL_CUSTOMER' },
+  // #3 (Mr.Long 12/7) — bán đứt máy: từ trong kho HOẶC đang cho khách dùng → ĐÃ BÁN (terminal, rời tồn kho).
+  // Máy có TID → TID bán kèm sang khách mua (xử lý ở service). Có tiền → nhập lại mật khẩu (service).
+  sell: { from: ['IN_STOCK', 'DEPLOYED'], to: 'SOLD', eventType: 'SELL' },
   reportDamage: { from: ['DEPLOYED', 'IN_STOCK'], to: 'DAMAGED', eventType: 'REPORT_DAMAGE' },
   sendRepair: { from: ['DAMAGED'], to: 'IN_REPAIR', eventType: 'SEND_REPAIR' },
   receiveRepaired: { from: ['IN_REPAIR'], to: 'IN_STOCK', eventType: 'RECEIVE_REPAIRED' },
@@ -49,7 +55,7 @@ export function decidePosTransition(from: PosStatus, event: PosEvent): Transitio
 }
 
 /** TID lifecycle events → allowed source states + resulting state (§A3). */
-export type TidEvent = 'assign' | 'markDead' | 'close' | 'recall' | 'activateReplacement';
+export type TidEvent = 'assign' | 'markDead' | 'close' | 'recall' | 'activateReplacement' | 'sell';
 
 interface TidRule {
   from: TidStatus[];
@@ -67,7 +73,11 @@ export const TID_TRANSITIONS: Record<TidEvent, TidRule> = {
   close: { from: ['ACTIVE'], to: 'CLOSED', eventType: 'TID_CLOSE' },
   recall: { from: ['ACTIVE', 'DEAD', 'CLOSED'], to: 'RECALLED', eventType: 'TID_RECALL' },
   // The replacement TID coming online during a TID swap.
-  activateReplacement: { from: ['UNASSIGNED'], to: 'ACTIVE', eventType: 'TID_REPLACE' }
+  activateReplacement: { from: ['UNASSIGNED'], to: 'ACTIVE', eventType: 'TID_REPLACE' },
+  // #3 (Mr.Long 12/7) — bán TID: TID chưa trên máy (posSerial=null, chưa giao) bán cho khách → ĐÃ BÁN.
+  // Áp cho: (a) bán kèm khi bán máy (TID đang ACTIVE trên máy → service tháo rồi set SOLD);
+  // (b) bán TID riêng lẻ (UNASSIGNED / ACTIVE chưa trên máy). Guard posSerial ở service.
+  sell: { from: ['UNASSIGNED', 'ACTIVE'], to: 'SOLD', eventType: 'TID_SELL' }
 };
 
 export function decideTidTransition(from: TidStatus, event: TidEvent): TransitionDecision<TidStatus> {

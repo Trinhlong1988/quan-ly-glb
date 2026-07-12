@@ -392,6 +392,12 @@ app.whenReady().then(async () => {
     app.exit(code);
     return;
   }
+  if (process.env['GLB_SELFTEST'] === '41') {
+    const { runDeviceSaleSelfTest } = await import('./selftest-devicesale.js');
+    const code = await runDeviceSaleSelfTest();
+    app.exit(code);
+    return;
+  }
 
   await createWindow();
   startHousekeeping();

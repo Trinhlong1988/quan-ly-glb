@@ -4,7 +4,7 @@
 //   verify checksum, pg_restore --clean --single-transaction; audit RESTORE_EXECUTED.
 // - FutureSyncService: interface designed now, no-op in G1 (R_BACKUP_006).
 // NGUYÊN TẮC (CRITICAL-B): KHÔNG chết-lặng. pg_dump/pg_restore thiếu hoặc lỗi → NÉM/ trả lỗi rõ ràng.
-import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, copyFileSync, statSync, readdirSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { app } from 'electron';
@@ -18,10 +18,27 @@ import {
 import { resolveDatabaseUrl } from './db.js';
 import { requirePermission, verifyActorPassword } from './guard.js';
 import { writeAudit } from './audit.js';
+import { notifyAdmins } from './message-service.js';
 import { zipStore, unzip } from './zip.js';
 
 const MANIFEST_NAME = 'backup_manifest.json';
 const DUMP_ENTRY = 'glb.dump';
+
+// ── R48 Pha 5 — Sao lưu TẦNG 2 (nhân bản ra nơi khác: ổ ngoài/NAS) ──
+// Chống "hỏng ổ mất cả gốc lẫn backup": sau MỖI backup thành công, copy file .zip ra thư mục mirror.
+// Cấu hình lưu AppSetting (Admin đặt trong Cấu hình hệ thống). Mirror TẮT khi mirrorDir rỗng.
+const BACKUP_MIRROR_DIR_KEY = 'backup.mirrorDir';
+const BACKUP_MIRROR_KEEP_KEY = 'backup.mirrorKeep';
+const BACKUP_MIRROR_KEEP_DEFAULT = 30;
+const BACKUP_FILE_SUFFIX = '_ims_backup.zip'; // theo backupFileName() §17
+
+export interface BackupMirrorConfig {
+  mirrorDir: string | null;
+  keep: number;
+  lastMirrorAt: string | null;
+  lastMirrorOk: boolean | null;
+  lastMirrorError: string | null;
+}
 
 export interface BackupDto {
   id: number;
@@ -84,6 +101,136 @@ export function backupsDir(): string {
   const dir = join(base, 'backups');
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   return dir;
+}
+
+/** Đọc đường dẫn mirror + số bản giữ (best-effort; lỗi DB → coi như tắt). */
+async function readMirrorSettings(db: import('@glb/database').Db): Promise<{ dir: string | null; keep: number }> {
+  try {
+    const [d, k] = await Promise.all([
+      db.appSetting.findUnique({ where: { key: BACKUP_MIRROR_DIR_KEY } }),
+      db.appSetting.findUnique({ where: { key: BACKUP_MIRROR_KEEP_KEY } })
+    ]);
+    const dir = d?.value?.trim() ? d.value.trim() : null;
+    const keepNum = Number(k?.value);
+    const keep = Number.isInteger(keepNum) && keepNum > 0 ? keepNum : BACKUP_MIRROR_KEEP_DEFAULT;
+    return { dir, keep };
+  } catch {
+    return { dir: null, keep: BACKUP_MIRROR_KEEP_DEFAULT };
+  }
+}
+
+/** Giữ `keep` bản .zip mới nhất trong thư mục mirror (tên theo timestamp → sort chuỗi = theo thời gian). Best-effort. */
+function rotateMirror(dir: string, keep: number): number {
+  let removed = 0;
+  try {
+    const files = readdirSync(dir).filter((f) => f.endsWith(BACKUP_FILE_SUFFIX)).sort(); // cũ → mới
+    const excess = files.length - keep;
+    for (let i = 0; i < excess; i++) {
+      try { unlinkSync(join(dir, files[i])); removed++; } catch { /* bỏ qua 1 file lỗi, tiếp tục */ }
+    }
+  } catch { /* thư mục không đọc được — bỏ qua, đã báo ở copy */ }
+  return removed;
+}
+
+/**
+ * R48 Pha 5 — nhân bản 1 archive sang thư mục mirror (nếu đã cấu hình). KHÔNG NÉM: mirror lỗi
+ * KHÔNG được làm hỏng backup gốc. Ghi audit BACKUP_MIRRORED / BACKUP_MIRROR_FAILED + báo Admin khi lỗi.
+ * Lưu trạng thái lần cuối vào AppSetting để watchdog/UI đọc.
+ */
+async function mirrorArchive(db: import('@glb/database').Db, filePath: string): Promise<{ mirrored: boolean; error?: string }> {
+  const { dir, keep } = await readMirrorSettings(db);
+  if (!dir) return { mirrored: false }; // mirror tắt — không phải lỗi
+  const stamp = new Date().toISOString();
+  try {
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    const dest = join(dir, basename(filePath));
+    copyFileSync(filePath, dest);
+    // Verify: bản sao phải cùng kích thước với gốc (chống copy cụt do đầy ổ/rút USB giữa chừng).
+    const srcSize = statSync(filePath).size;
+    const dstSize = statSync(dest).size;
+    if (srcSize !== dstSize) throw new Error(`Kích thước bản nhân lệch (${dstSize}≠${srcSize} bytes) — nghi copy cụt.`);
+    const removed = rotateMirror(dir, keep);
+    await setMirrorStatus(db, { at: stamp, ok: true, error: null });
+    await writeAudit(db, {
+      actorUserId: null, action: 'BACKUP_MIRRORED', targetType: 'System', targetId: basename(filePath),
+      after: { mirrorDir: dir, size: dstSize, rotatedRemoved: removed }
+    });
+    return { mirrored: true };
+  } catch (err) {
+    const msg = (err as Error).message;
+    // Best-effort ghi vết + báo Admin; KHÔNG ném để không làm hỏng backup gốc.
+    try {
+      await setMirrorStatus(db, { at: stamp, ok: false, error: msg });
+      await writeAudit(db, {
+        actorUserId: null, action: 'BACKUP_MIRROR_FAILED', targetType: 'System', targetId: basename(filePath),
+        after: { mirrorDir: dir, error: msg }
+      });
+      await notifyAdmins(db, {
+        category: 'BACKUP_MIRROR_FAILED',
+        subject: 'Nhân bản sao lưu (tầng 2) THẤT BẠI',
+        body: `Không nhân được bản sao lưu "${basename(filePath)}" ra "${dir}": ${msg}. Kiểm tra ổ/đường dẫn mirror — dữ liệu vẫn còn bản gốc trên máy.`
+      });
+    } catch { /* audit/notify best-effort */ }
+    return { mirrored: false, error: msg };
+  }
+}
+
+/** Ghi trạng thái mirror lần cuối vào AppSetting (best-effort). */
+async function setMirrorStatus(db: import('@glb/database').Db, s: { at: string; ok: boolean; error: string | null }): Promise<void> {
+  const put = async (key: string, value: string): Promise<void> => {
+    await db.appSetting.upsert({ where: { key }, update: { value }, create: { key, value } });
+  };
+  await put('backup.lastMirrorAt', s.at);
+  await put('backup.lastMirrorOk', s.ok ? '1' : '0');
+  await put('backup.lastMirrorError', s.error ?? '');
+}
+
+/** Đọc cấu hình + trạng thái mirror (cho UI). Gate BACKUP_CREATE (xem là đủ). */
+export async function getBackupMirrorConfig(): Promise<{ ok: boolean; data?: BackupMirrorConfig; error?: string; message?: string }> {
+  const g = await requirePermission('BACKUP_CREATE', { action: 'BACKUP_LIST' });
+  if (!g.ok) return g;
+  const { db } = g;
+  const { dir, keep } = await readMirrorSettings(db);
+  const [at, okv, errv] = await Promise.all([
+    db.appSetting.findUnique({ where: { key: 'backup.lastMirrorAt' } }),
+    db.appSetting.findUnique({ where: { key: 'backup.lastMirrorOk' } }),
+    db.appSetting.findUnique({ where: { key: 'backup.lastMirrorError' } })
+  ]);
+  return {
+    ok: true,
+    data: {
+      mirrorDir: dir, keep,
+      lastMirrorAt: at?.value || null,
+      lastMirrorOk: okv?.value == null || okv.value === '' ? null : okv.value === '1',
+      lastMirrorError: errv?.value ? errv.value : null
+    }
+  };
+}
+
+/** Đặt thư mục mirror + số bản giữ. Đổi cấu hình sao lưu = việc PRIVILEGED → gate BACKUP_RESTORE + xác nhận mật khẩu. */
+export async function setBackupMirrorConfig(input: { mirrorDir: string | null; keep?: number }, password: string): Promise<MutationResult> {
+  const g = await requirePermission('BACKUP_RESTORE', { action: 'SETTING_UPDATED', targetType: 'System' });
+  if (!g.ok) return g;
+  const { db, user } = g;
+  if (!(await verifyActorPassword(user, password))) return { ok: false, error: 'WRONG_PASSWORD', message: 'Mật khẩu xác nhận không đúng.' };
+  const dir = input.mirrorDir?.trim() || '';
+  const keep = input.keep != null ? Number(input.keep) : BACKUP_MIRROR_KEEP_DEFAULT;
+  if (dir && !Number.isInteger(keep)) return { ok: false, error: 'VALIDATION', message: 'Số bản giữ phải là số nguyên.' };
+  if (dir && (keep < 1 || keep > 999)) return { ok: false, error: 'VALIDATION', message: 'Số bản giữ phải trong khoảng 1–999.' };
+  // Nếu bật mirror: thử tạo/kiểm ghi được thư mục ngay để báo lỗi sớm (không đợi tới backup kế).
+  if (dir) {
+    try {
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+      const probe = join(dir, `.glb_mirror_probe_${Date.now()}`);
+      writeFileSync(probe, 'ok'); unlinkSync(probe);
+    } catch (err) {
+      return { ok: false, error: 'MIRROR_UNWRITABLE', message: `Không ghi được vào thư mục mirror "${dir}": ${(err as Error).message}` };
+    }
+  }
+  await db.appSetting.upsert({ where: { key: BACKUP_MIRROR_DIR_KEY }, update: { value: dir }, create: { key: BACKUP_MIRROR_DIR_KEY, value: dir } });
+  await db.appSetting.upsert({ where: { key: BACKUP_MIRROR_KEEP_KEY }, update: { value: String(keep) }, create: { key: BACKUP_MIRROR_KEEP_KEY, value: String(keep) } });
+  await writeAudit(db, { actorUserId: user.id, action: 'SETTING_UPDATED', targetType: 'System', after: { setting: 'backup.mirror', mirrorDir: dir || null, keep } });
+  return { ok: true };
 }
 
 /** R_BACKUP_001 — create a local backup archive (pg_dump custom format zipped + manifest). */
@@ -173,6 +320,9 @@ async function writeBackupArchive(
       note: note ?? null
     }
   });
+  // R48 Pha 5 — nhân bản TẦNG 2 ra nơi khác (best-effort, non-throwing): mọi backup (thủ công/tự động/
+  // pre-restore/pre-autofix) đều đi qua đây → 1 choke-point duy nhất, không sót đường nào.
+  await mirrorArchive(db, filePath);
   return {
     filePath,
     size: zip.length,

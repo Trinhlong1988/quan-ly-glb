@@ -16,6 +16,7 @@ import * as tidSvc from './tid-service.js';
 import * as notifySvc from './notification-service.js';
 import * as bankCfgSvc from './bank-config-service.js';
 import * as whSvc from './warehouse-service.js';
+import * as saleSvc from './device-sale-service.js';
 import * as statusSvc from './status-catalog-service.js';
 import * as posSupplySvc from './pos-supply-service.js';
 import * as feeCfgSvc from './fee-config-service.js';
@@ -131,6 +132,10 @@ export function registerIpc(): void {
   ipcMain.handle('backup:restore', async (_e, args: { filePath: string; password: string }) =>
     backupSvc.restoreBackup(args.filePath, args.password)
   );
+  ipcMain.handle('backup:mirrorConfigGet', async () => backupSvc.getBackupMirrorConfig());
+  ipcMain.handle('backup:mirrorConfigSet', async (_e, args: { input: { mirrorDir: string | null; keep?: number }; password: string }) =>
+    backupSvc.setBackupMirrorConfig(args.input, args.password)
+  );
 
   // ---- Settings (Phase B) ------------------------------------------------
   ipcMain.handle('setting:list', async () => settingSvc.listSettings());
@@ -156,6 +161,12 @@ export function registerIpc(): void {
   ipcMain.handle('pos:recall', async (_e, args: { serial: string; input: posSvc.TransitionInput }) => posSvc.recallPos(args.serial, args.input));
   ipcMain.handle('pos:transferAgent', async (_e, args: { serial: string; input: posSvc.TransitionInput }) => posSvc.transferPosAgent(args.serial, args.input));
   ipcMain.handle('pos:changeCustomer', async (_e, args: { serial: string; input: posSvc.TransitionInput }) => posSvc.changeCustomerPos(args.serial, args.input));
+  ipcMain.handle('pos:cancelCustomer', async (_e, args: { serial: string; input: posSvc.TransitionInput }) => posSvc.cancelCustomerPos(args.serial, args.input));
+  ipcMain.handle('deviceSale:sellPos', async (_e, args: { serial: string; input: saleSvc.SellPosInput; password: string }) => saleSvc.sellPos(args.serial, args.input, args.password));
+  ipcMain.handle('deviceSale:sellTid', async (_e, args: { tid: string; input: saleSvc.SellTidInput; password: string }) => saleSvc.sellTid(args.tid, args.input, args.password));
+  ipcMain.handle('deviceSale:collect', async (_e, input: saleSvc.CollectInput) => saleSvc.collectDeviceSaleDebt(input));
+  ipcMain.handle('deviceSale:list', async (_e, filter: saleSvc.DeviceSaleFilter) => saleSvc.listDeviceSales(filter));
+  ipcMain.handle('deviceSale:receivables', async () => saleSvc.customerDeviceReceivables());
   ipcMain.handle('pos:reportDamage', async (_e, args: { serial: string; input: posSvc.TransitionInput }) => posSvc.reportPosDamage(args.serial, args.input));
   ipcMain.handle('pos:sendRepair', async (_e, args: { serial: string; input: posSvc.TransitionInput }) => posSvc.sendPosRepair(args.serial, args.input));
   ipcMain.handle('pos:receiveRepaired', async (_e, args: { serial: string; input: posSvc.TransitionInput }) => posSvc.receivePosRepaired(args.serial, args.input));
@@ -381,7 +392,7 @@ export function registerIpc(): void {
   // ── Nhóm B — Doanh thu & Công nợ ──
   ipcMain.handle('transaction:list', async (_e, filter: txnSvc.TransactionFilter) => txnSvc.listTransactions(filter));
   ipcMain.handle('transaction:create', async (_e, input: txnSvc.CreateTransactionInput) => txnSvc.createTransaction(input));
-  ipcMain.handle('transaction:update', async (_e, args: { id: number; input: txnSvc.UpdateTransactionInput }) => txnSvc.updateTransaction(args.id, args.input));
+  // Bill BẤT BIẾN: không có wire 'transaction:update' (updateTransaction chỉ còn là guard BILL_IMMUTABLE, test trực tiếp). Sửa GD = hủy + tạo lại.
   ipcMain.handle('transaction:delete', async (_e, args: { ids: number[]; password: string }) => txnSvc.deleteTransactions(args.ids, args.password));
   // H5 — GỠ handler 'transaction:settle' (toggle settled thủ công vô hiệu hóa). settled chỉ đổi qua
   //       phiếu Thu công nợ (cashEntry:createDebtReceipt) / hủy phiếu thu.

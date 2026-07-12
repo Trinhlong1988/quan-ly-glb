@@ -94,6 +94,34 @@ export async function grantWarehousePermsToExistingRoles(db: Db): Promise<number
   return granted;
 }
 
+// ── #3 (Mr.Long 12/7) — Bán thiết bị: bug class "DB tiến hóa" (H7) ────────────
+// Quyền bán thiết bị MỚI (DEVICE_SALE_*) cấp cho role CŨ: MANAGER+ACCOUNTANT view+manage; D_MANAGER+WAREHOUSE view.
+const DEVICE_SALE_FULL_CODES = ['DEVICE_SALE_VIEW', 'DEVICE_SALE_MANAGE'];
+const DEVICE_SALE_FULL_ROLES = ['MANAGER', 'ACCOUNTANT'];
+const DEVICE_SALE_VIEW_ROLES = ['D_MANAGER', 'WAREHOUSE'];
+const DEVICE_SALE_GRANT_FLAG = 'seed.deviceSalePermsGrantedV1';
+
+/** Cấp (idempotent) quyền bán thiết bị cho role đã có sẵn (db-evolution). MANAGER/ACCOUNTANT view+manage;
+ * D_MANAGER/WAREHOUSE chỉ view. Trả về số (role×quyền) vừa thêm. Cờ guard ở seedIfEmpty. */
+export async function grantDeviceSalePermsToExistingRoles(db: Db): Promise<number> {
+  const allPerms = await db.permission.findMany({ where: { code: { in: DEVICE_SALE_FULL_CODES } }, select: { id: true, code: true } });
+  const viewPerm = allPerms.filter((p) => p.code === 'DEVICE_SALE_VIEW');
+  let granted = 0;
+  const grantSet = async (roleCode: string, perms: { id: number }[]): Promise<void> => {
+    const role = await db.role.findUnique({ where: { code: roleCode }, select: { id: true } });
+    if (!role) return;
+    for (const perm of perms) {
+      const existing = await db.rolePermission.findUnique({ where: { roleId_permissionId: { roleId: role.id, permissionId: perm.id } } });
+      if (existing) continue;
+      await db.rolePermission.create({ data: { roleId: role.id, permissionId: perm.id } });
+      granted++;
+    }
+  };
+  for (const roleCode of DEVICE_SALE_FULL_ROLES) await grantSet(roleCode, allPerms);
+  for (const roleCode of DEVICE_SALE_VIEW_ROLES) await grantSet(roleCode, viewPerm);
+  return granted;
+}
+
 // ── PHASE H1 — Thu–Chi: bug class "DB tiến hóa" (H7) ──────────────────────────
 // Quyền thu-chi MỚI (CASHCAT_*) phải cấp cho role ĐÃ TỒN TẠI trên DB cũ (không chỉ role tạo mới).
 // Cùng khuôn với ngành nghề: ADMIN tự đồng bộ mỗi boot (R_ADMIN_SUPERUSER); MANAGER cấp 1 LẦN
@@ -201,6 +229,10 @@ const SYSTEM_CASH_CATEGORIES: SeedCat[] = [
   { kind: 'THU', name: 'Công nợ đối tác', unit: 'đồng', sourceKind: 'DEBT_PARTNER', affectsPnl: false },
   { kind: 'THU', name: 'Doanh thu bán máy POS', unit: 'đồng', sourceKind: 'SALE_POS', affectsPnl: true },
   { kind: 'THU', name: 'Doanh thu bán TID', unit: 'đồng', sourceKind: 'SALE_TID', affectsPnl: true },
+  // #3 (Mr.Long 12/7) — THU tiền bán thiết bị (thu nợ mua máy/TID): chỉ tiền vào quỹ, KHÔNG cộng doanh thu
+  // lần 2 (doanh thu đã ghi đủ qua SALE_POS/SALE_TID lúc bán) → affectsPnl=false. Tách khỏi DEBT_CUSTOMER
+  // (công nợ POS quẹt thẻ) để không lẫn số. Liên kết chứng từ bán qua DeviceSaleSettlement.
+  { kind: 'THU', name: 'Thu tiền bán thiết bị', unit: 'đồng', sourceKind: 'SALE_COLLECT', affectsPnl: false },
   { kind: 'THU', name: 'Doanh thu khác', unit: 'đồng', sourceKind: 'MANUAL', affectsPnl: true },
   { kind: 'THU', name: 'Thu cọc máy', unit: 'đồng', sourceKind: 'DEPOSIT', affectsPnl: false },
   { kind: 'THU', name: 'Hoàn ứng (thu lại tạm ứng)', unit: 'đồng', sourceKind: 'ADVANCE', affectsPnl: false },
@@ -534,6 +566,27 @@ export async function seedIfEmpty(db: Db): Promise<void> {
           action: 'WAREHOUSE_PERMS_GRANTED',
           targetType: 'System',
           after: { granted, fullRoles: WAREHOUSE_FULL_ROLES, viewRoles: WAREHOUSE_VIEW_ROLES, perms: WAREHOUSE_FULL_CODES }
+        });
+      }
+    }
+  }
+
+  // db-evolution (#3 bán thiết bị): cấp quyền DEVICE_SALE_* cho role CŨ 1 lần/DB (cờ AppSetting).
+  {
+    const flag = await db.appSetting.findUnique({ where: { key: DEVICE_SALE_GRANT_FLAG } });
+    if (!flag) {
+      const granted = await grantDeviceSalePermsToExistingRoles(db);
+      await db.appSetting.upsert({
+        where: { key: DEVICE_SALE_GRANT_FLAG },
+        update: {},
+        create: { key: DEVICE_SALE_GRANT_FLAG, value: new Date().toISOString() }
+      });
+      if (granted > 0) {
+        await writeAudit(db, {
+          actorUserId: null,
+          action: 'DEVICE_SALE_PERMS_GRANTED',
+          targetType: 'System',
+          after: { granted, fullRoles: DEVICE_SALE_FULL_ROLES, viewRoles: DEVICE_SALE_VIEW_ROLES, perms: DEVICE_SALE_FULL_CODES }
         });
       }
     }

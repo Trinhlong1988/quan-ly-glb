@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Plus, Loader2, CreditCard, Link2, RefreshCw, Undo2, PackageCheck, Send, Download, History, Tag, Trophy, FilterX, Percent, Trash2 } from 'lucide-react';
+import { Plus, Loader2, CreditCard, Link2, RefreshCw, Undo2, PackageCheck, Send, Download, History, Tag, Trophy, FilterX, Percent, Trash2, Banknote } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate } from '@glb/shared';
-import type { TidDto, UndeliveredTidDto, PosDto, CustomerDto, TidRefs, TimelineEventDto, CreateTidInput, TidRevenueRankRow, TidSellFeeRowDto } from '../../../preload/index.d';
+import type { TidDto, UndeliveredTidDto, PosDto, CustomerDto, FundDto, TidRefs, TimelineEventDto, CreateTidInput, TidRevenueRankRow, TidSellFeeRowDto } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
 import { Modal } from '../components/Modal.js';
 import { Button } from '../components/Button.js';
@@ -35,6 +35,7 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
   const canConfigView = hasPermission(user, 'CONFIG_TID_VIEW');
   const canRevenue = hasPermission(user, 'REVENUE_VIEW'); // #13: tab xếp hạng doanh số (dữ liệu tài chính)
   const canCancelReq = hasPermission(user, 'TID_CANCEL_REQUEST'); // R34: yêu cầu hủy (xóa mềm qua duyệt)
+  const canSell = hasPermission(user, 'DEVICE_SALE_MANAGE'); // Bán TID rời (doanh thu — quyền tiền, không dùng TID_MANAGE)
 
   const [tab, setTab] = useState<Tab>('all');
   const [rows, setRows] = useState<TidDto[]>([]);
@@ -59,6 +60,7 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
   const [timelineTid, setTimelineTid] = useState<TidDto | null>(null);
   const [sellFeeTid, setSellFeeTid] = useState<TidDto | null>(null); // R30: phí bán thực tế theo TID × thẻ
   const [cancelTarget, setCancelTarget] = useState<RequestCancelTarget | null>(null); // R34: yêu cầu hủy TID
+  const [sellTidTarget, setSellTidTarget] = useState<TidDto | null>(null); // Bán TID rời (chưa gắn máy, chưa giao)
 
   async function reload(): Promise<void> {
     setLoading(true);
@@ -344,6 +346,11 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
                             <Percent className="h-4 w-4" />
                           </button>
                         )}
+                        {canSell && !t.deviceAssigned && !t.delivered && ['UNASSIGNED', 'ACTIVE'].includes(t.status) && (
+                          <button onClick={() => setSellTidTarget(t)} title="Bán TID rời (chưa gắn máy)" className="rounded-md border border-emerald-300 bg-emerald-50 p-1.5 text-emerald-700 hover:brightness-110">
+                            <Banknote className="h-4 w-4" />
+                          </button>
+                        )}
                         {canOps &&
                           actionsFor(t).map((a) => {
                             // R33: mỗi thao tác 1 sắc thái riêng để phân biệt rõ (không còn xám giống nhau).
@@ -422,7 +429,104 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
           }}
         />
       )}
+      {sellTidTarget && (
+        <SellTidModal
+          tid={sellTidTarget}
+          onClose={() => setSellTidTarget(null)}
+          onDone={async () => {
+            setSellTidTarget(null);
+            await reload();
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+/** Bán TID rời (chưa gắn máy). Form tiền + mật khẩu xác nhận. Không có trường kho (TID không phải thiết bị vật lý). */
+function SellTidModal({ tid, onClose, onDone }: { tid: TidDto; onClose: () => void; onDone: () => void }): JSX.Element {
+  const toast = useToast();
+  const [customers, setCustomers] = useState<CustomerDto[]>([]);
+  const [funds, setFunds] = useState<FundDto[]>([]);
+  const [customerId, setCustomerId] = useState('');
+  const [salePrice, setSalePrice] = useState('');
+  const [paidNow, setPaidNow] = useState('');
+  const [fundId, setFundId] = useState('');
+  const [method, setMethod] = useState('CASH');
+  const [occurredAt, setOccurredAt] = useState('');
+  const [note, setNote] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    window.api.customerList({}).then((r) => r.ok && r.data && setCustomers(r.data));
+    window.api.fundList({}).then((r) => r.ok && r.data && setFunds(r.data.filter((f) => f.active)));
+  }, []);
+
+  const price = Number(salePrice) || 0;
+  const paid = Number(paidNow) || 0;
+  const remaining = Math.max(0, price - paid);
+
+  async function submit(): Promise<void> {
+    if (!customerId) return toast.alert('Phải chọn khách mua.', 'Thiếu thông tin');
+    if (!(price > 0)) return toast.alert('Giá bán phải > 0.', 'Số tiền không hợp lệ');
+    if (paid < 0 || paid > price) return toast.alert('Số tiền thu phải từ 0 đến giá bán.', 'Số tiền không hợp lệ');
+    if (paid > 0 && !fundId) return toast.alert('Có thu tiền thì phải chọn quỹ nhận.', 'Thiếu quỹ');
+    if (!password) return toast.alert('Nhập mật khẩu để xác nhận bán TID.', 'Cần mật khẩu');
+    setBusy(true);
+    const res = await window.api.deviceSellTid(tid.tid, {
+      customerId: Number(customerId), salePrice: price, paidNow: paid,
+      fundId: fundId ? Number(fundId) : null, method,
+      occurredAt: occurredAt ? new Date(occurredAt).toISOString() : null, note: note || null
+    }, password);
+    setBusy(false);
+    if (res.ok) { toast.success(`Đã bán TID ${tid.tid}`); onDone(); }
+    else toast.alert(res.message ?? 'Bán TID thất bại', 'Không bán được');
+  }
+
+  return (
+    <Modal title={`Bán TID ${tid.tid}`} onClose={onClose} width="max-w-lg">
+      <div className="mb-2 rounded-md bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+        TID sẽ chuyển <b>ĐÃ BÁN</b> sang khách mua. Doanh thu ghi nhận đủ giá ngay; phần chưa thu thành công nợ mua thiết bị.
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="Khách mua" required>
+          <select className={inputCls} value={customerId} onChange={(e) => setCustomerId(e.target.value)} autoFocus>
+            <option value="">— Chọn khách —</option>
+            {customers.map((c) => <option key={c.id} value={c.id}>{c.display}</option>)}
+          </select>
+        </Field>
+        <Field label="Giá bán (VND)" required>
+          <input className={inputCls + ' text-right tabular-nums'} inputMode="numeric" value={salePrice} onChange={(e) => setSalePrice(e.target.value.replace(/[^\d]/g, ''))} placeholder="0" />
+        </Field>
+        <Field label="Thu ngay (VND)" hint={`Còn nợ: ${remaining.toLocaleString('vi-VN')}`}>
+          <input className={inputCls + ' text-right tabular-nums'} inputMode="numeric" value={paidNow} onChange={(e) => setPaidNow(e.target.value.replace(/[^\d]/g, ''))} placeholder="0" />
+        </Field>
+        <Field label="Quỹ nhận tiền" hint={paid > 0 ? 'Bắt buộc khi có thu' : 'Không thu thì bỏ trống'}>
+          <select className={inputCls} value={fundId} onChange={(e) => setFundId(e.target.value)}>
+            <option value="">— Chọn quỹ —</option>
+            {funds.map((f) => <option key={f.id} value={f.id}>{f.code} · {f.name}</option>)}
+          </select>
+        </Field>
+        <Field label="Hình thức">
+          <select className={inputCls} value={method} onChange={(e) => setMethod(e.target.value)}>
+            <option value="CASH">Tiền mặt</option>
+            <option value="CK">Chuyển khoản</option>
+          </select>
+        </Field>
+        <Field label="Thời gian bán" hint="Bỏ trống = hiện tại">
+          <input type="datetime-local" className={inputCls} value={occurredAt} onChange={(e) => setOccurredAt(e.target.value)} />
+        </Field>
+        <Field label="Ghi chú"><input className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} /></Field>
+        <Field label="Mật khẩu xác nhận" required><input type="password" className={inputCls} value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
+      </div>
+      <div className="mt-6 flex justify-end gap-2">
+        <button onClick={onClose} className="rounded-md border border-line px-4 py-2 text-sm font-medium text-slate-600 hover:bg-appbg">Hủy</button>
+        <button onClick={submit} disabled={busy} className="flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:brightness-105 disabled:opacity-60">
+          {busy && <Loader2 className="h-4 w-4 animate-spin" />} Bán TID
+        </button>
+      </div>
+    </Modal>
   );
 }
 

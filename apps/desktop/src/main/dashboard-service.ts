@@ -25,7 +25,8 @@ const POS_STATUS_LABEL: Record<string, string> = {
   DEPLOYED: 'Đã triển khai',
   IN_REPAIR: 'Đang sửa',
   DAMAGED: 'Hư hỏng',
-  RETIRED: 'Ngừng dùng'
+  RETIRED: 'Ngừng dùng',
+  SOLD: 'Đã bán'
 };
 
 function monthKey(d: Date): string {

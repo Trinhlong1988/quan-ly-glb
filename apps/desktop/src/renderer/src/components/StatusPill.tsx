@@ -15,7 +15,9 @@ const MAP: Record<string, { label: string; cls: string }> = {
   UNASSIGNED: { label: 'Chưa gán', cls: 'bg-warning/10 text-warning' },
   DEAD: { label: 'TID chết', cls: 'bg-danger/10 text-danger' },
   CLOSED: { label: 'Đã đóng', cls: 'bg-slate-200 text-slate-500' },
-  RECALLED: { label: 'Đã thu hồi', cls: 'bg-slate-200 text-slate-500' }
+  RECALLED: { label: 'Đã thu hồi', cls: 'bg-slate-200 text-slate-500' },
+  // Bán thiết bị (POS/TID) — trạng thái kết thúc "đã bán cho khách"
+  SOLD: { label: 'Đã bán', cls: 'bg-violet-50 text-violet-600' }
 };
 
 export function StatusPill({ status }: { status: string }): JSX.Element {

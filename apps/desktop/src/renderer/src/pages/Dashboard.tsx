@@ -65,7 +65,7 @@ const MENU: MenuItem[] = [
   // R3: "Cấu hình ngân hàng" nay gồm tab "Phí mua-cài máy-bán" (gộp Cấu hình % phí POS cũ) + tab "Ngành nghề" → menu hiện với CONFIG_BANK_VIEW HOẶC CONFIG_FEE_VIEW HOẶC CONFIG_INDUSTRY_VIEW.
   { key: 'bankcfg', label: 'Cấu hình ngân hàng', icon: <Landmark className="h-[18px] w-[18px]" />, perms: ['CONFIG_BANK_VIEW', 'CONFIG_FEE_VIEW', 'CONFIG_INDUSTRY_VIEW'] },
   { key: 'warehouse', label: 'Danh mục kho', icon: <WarehouseIcon className="h-[18px] w-[18px]" />, perms: ['CONFIG_WAREHOUSE_VIEW'] },
-  { key: 'revdebt', label: 'Quản Lý Doanh Thu & Công Nợ', icon: <TrendingUp className="h-[18px] w-[18px]" />, perms: ['REVENUE_VIEW', 'DEBT_VIEW'] },
+  { key: 'revdebt', label: 'Quản Lý Doanh Thu & Công Nợ', icon: <TrendingUp className="h-[18px] w-[18px]" />, perms: ['REVENUE_VIEW', 'DEBT_VIEW', 'DEVICE_SALE_VIEW'] },
   // R31: "Quản Lý Tài Khoản Nhận Tiền" đã gộp thành tab trong Quản Lý Nhân Sự (cạnh Vai trò & Quyền).
   { key: 'dossier', label: 'Quản Lý Hồ Sơ HKD', icon: <FolderKanban className="h-[18px] w-[18px]" />, perms: ['CONFIG_DOSSIER_VIEW'] },
   { key: 'finance', label: 'Quản Lý Tài Chính', icon: <Wallet className="h-[18px] w-[18px]" />, perms: ['CASHENTRY_VIEW', 'FUND_VIEW', 'CASHCAT_VIEW'] },

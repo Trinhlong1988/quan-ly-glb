@@ -1,8 +1,11 @@
 // R48 — Hardening backup: C5 re-insert đủ log sau restore (bug B20 mở rộng) + C2 watchdog quá hạn +
 // C1 báo lỗi khi backup tự động thất bại. Self-test (GLB_SELFTEST=36). Cần pg_dump/pg_restore (DB throwaway).
+import { tmpdir } from 'node:os';
+import { join, basename } from 'node:path';
+import { readdirSync, writeFileSync } from 'node:fs';
 import { login, logout } from './auth-service.js';
 import { getDb } from './db.js';
-import { createBackup, restoreBackup } from './backup-service.js';
+import { createBackup, restoreBackup, setBackupMirrorConfig } from './backup-service.js';
 import { backupWatchdog, systemBackupIfDue } from './storage-service.js';
 
 let pass = 0, fail = 0;
@@ -35,6 +38,34 @@ export async function runBackupSelfTest(): Promise<number> {
 
   // Restore có thể đã revert session (login_sessions) — re-login cho các bước sau (dùng db trực tiếp là chính).
   await login('adminroot', PW);
+
+  // ═══ C6 (R48 Pha 5): Sao lưu TẦNG 2 — bật mirror, nhân bản, rotation, lỗi mirror KHÔNG hỏng backup gốc ═══
+  const mirrorDir = join(tmpdir(), `glb_mirror_${process.pid}_${Date.now()}`);
+  const SUFFIX = '_ims_backup.zip';
+  const setCfg = await setBackupMirrorConfig({ mirrorDir, keep: 2 }, PW);
+  ok('C6: bật mirror (probe ghi được thư mục) ok', setCfg.ok === true, setCfg);
+  const mBefore = await db.auditLog.count({ where: { action: 'BACKUP_MIRRORED' } });
+  const bm1 = await createBackup('mirror-1');
+  const mf1 = readdirSync(mirrorDir).filter((f) => f.endsWith(SUFFIX));
+  ok('C6: backup được NHÂN BẢN sang mirror', bm1.ok === true && mf1.includes(basename(bm1.filePath!)), { mf1, file: bm1.filePath && basename(bm1.filePath) });
+  ok('C6: ghi audit BACKUP_MIRRORED', (await db.auditLog.count({ where: { action: 'BACKUP_MIRRORED' } })) > mBefore);
+  // rotation keep=2: tạo thêm 2 bản (pg_dump giãn cách >1s → tên file khác nhau) → mirror giữ ≤2, còn bản mới nhất
+  await createBackup('mirror-2');
+  const bm3 = await createBackup('mirror-3');
+  const mf2 = readdirSync(mirrorDir).filter((f) => f.endsWith(SUFFIX));
+  ok('C6: rotation giữ ≤ keep(2) bản trong mirror', mf2.length <= 2, mf2);
+  ok('C6: bản mới nhất vẫn còn trong mirror sau rotation', mf2.includes(basename(bm3.filePath!)), { newest: basename(bm3.filePath!), have: mf2 });
+  // lỗi mirror: trỏ mirrorDir vào đường dẫn KHÔNG tạo được (nằm dưới 1 FILE) — set TRỰC TIẾP (bỏ qua probe của setter)
+  const blocker = join(tmpdir(), `glb_blk_${process.pid}_${Date.now()}`);
+  writeFileSync(blocker, 'x');
+  const badDir = join(blocker, 'sub');
+  await db.appSetting.upsert({ where: { key: 'backup.mirrorDir' }, update: { value: badDir }, create: { key: 'backup.mirrorDir', value: badDir } });
+  const fBefore = await db.auditLog.count({ where: { action: 'BACKUP_MIRROR_FAILED' } });
+  const bmFail = await createBackup('mirror-fail');
+  ok('C6: mirror LỖI nhưng BACKUP GỐC vẫn thành công (non-fatal)', bmFail.ok === true, bmFail);
+  ok('C6: ghi audit BACKUP_MIRROR_FAILED (không lặng)', (await db.auditLog.count({ where: { action: 'BACKUP_MIRROR_FAILED' } })) > fBefore);
+  // dọn: tắt mirror để không ảnh hưởng C1/C2
+  await db.appSetting.deleteMany({ where: { key: { in: ['backup.mirrorDir', 'backup.mirrorKeep'] } } });
 
   // ═══ C2: watchdog — đặt lastBackupAt cũ (>2×chu kỳ) → stale + ghi audit BACKUP_STALE ═══
   await db.appSetting.upsert({ where: { key: 'backup.lastAt' }, update: { value: new Date(Date.now() - 1000 * 3600 * 1000).toISOString() }, create: { key: 'backup.lastAt', value: new Date(Date.now() - 1000 * 3600 * 1000).toISOString() } });

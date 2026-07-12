@@ -115,6 +115,9 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: 'USER_CANCEL_REQUEST', name: 'Tạo yêu cầu hủy (xóa) nhân sự', group: 'USER' },
   { code: 'USER_CANCEL_APPROVE', name: 'Duyệt / từ chối yêu cầu hủy nhân sự', group: 'USER' },
   { code: 'USER_CANCEL_APPROVE_ELEVATED', name: 'Duyệt yêu cầu hủy nhân sự do Quản lý/Admin tạo (cấp Admin)', group: 'USER' },
+  // ── #3 (Mr.Long 12/7) — Bán máy/TID + công nợ mua thiết bị (đúng vai trò: hành động tiền) ──
+  { code: 'DEVICE_SALE_VIEW', name: 'Xem bán thiết bị & công nợ mua thiết bị', group: 'Doanh thu & Công nợ' },
+  { code: 'DEVICE_SALE_MANAGE', name: 'Bán máy/TID + thu nợ mua thiết bị', group: 'Doanh thu & Công nợ' },
   // ── Nhóm E — Bảo trì & Bộ nhớ (chống tràn, dọn dẹp, backup định kỳ) ──
   { code: 'STORAGE_VIEW', name: 'Xem tình trạng bộ nhớ & bảo trì', group: 'Bảo trì hệ thống' },
   { code: 'STORAGE_CLEANUP', name: 'Dọn dẹp bộ nhớ (lịch sử + thùng rác) & backup thủ công', group: 'Bảo trì hệ thống' }
@@ -194,6 +197,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'REVENUE_MANAGE',
     'DEBT_VIEW',
     'DEBT_SETTLE',
+    // #3: managers bán máy/TID + thu nợ mua thiết bị.
+    'DEVICE_SALE_VIEW',
+    'DEVICE_SALE_MANAGE',
     // PHASE H2b: managers phân loại chất lượng công nợ + ghi giảm nợ xấu (quyền cao).
     'DEBT_CLASSIFY',
     'DEBT_WRITEOFF',
@@ -214,8 +220,10 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'STORAGE_VIEW',
     'STORAGE_CLEANUP'
   ],
-  D_MANAGER: ['DASHBOARD_VIEW', 'USER_READ', 'ROLE_READ', 'CUSTOMER_VIEW', 'POS_VIEW', 'TID_VIEW', 'CONFIG_BANK_VIEW', 'CONFIG_WAREHOUSE_VIEW'],
+  D_MANAGER: ['DASHBOARD_VIEW', 'USER_READ', 'ROLE_READ', 'CUSTOMER_VIEW', 'POS_VIEW', 'TID_VIEW', 'CONFIG_BANK_VIEW', 'CONFIG_WAREHOUSE_VIEW', 'DEVICE_SALE_VIEW'],
   ACCOUNTANT: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW', 'CONFIG_BANK_VIEW', 'CONFIG_FEE_VIEW', 'CONFIG_FEE_MANAGE', 'CONFIG_RCV_ACCT_VIEW', 'CONFIG_RCV_ACCT_MANAGE', 'CONFIG_DOSSIER_VIEW', 'CONFIG_DOSSIER_MANAGE', 'REVENUE_VIEW', 'REVENUE_MANAGE', 'DEBT_VIEW', 'DEBT_SETTLE', 'DEBT_CLASSIFY', 'BILL_CANCEL_REQUEST',
+    // #3: kế toán = vai tiền chính → bán máy/TID + thu nợ mua thiết bị.
+    'DEVICE_SALE_VIEW', 'DEVICE_SALE_MANAGE',
     // PHASE H2-core: kế toán = vai chính thu-chi (quỹ + phiếu thu/chi + báo cáo dòng tiền).
     'FUND_VIEW', 'FUND_CREATE', 'FUND_UPDATE', 'FUND_DELETE', 'CASHENTRY_VIEW', 'CASHENTRY_CREATE', 'CASHENTRY_CANCEL'],
   TECHNICIAN: ['DASHBOARD_VIEW', 'POS_VIEW'],
@@ -223,6 +231,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
   WAREHOUSE: ['DASHBOARD_VIEW', 'POS_VIEW', 'TID_VIEW', 'CONFIG_POS_SUPPLY_VIEW', 'CONFIG_POS_SUPPLY_MANAGE', 'CONFIG_TID_VIEW', 'CONFIG_TID_MANAGE',
     // R27: kho vận quản lý danh mục kho.
     'CONFIG_WAREHOUSE_VIEW', 'CONFIG_WAREHOUSE_MANAGE',
+    // #3: kho vận CHỈ XEM bán thiết bị (bán = vai tiền, không cho kho tự bán).
+    'DEVICE_SALE_VIEW',
     // R34: kho vận hành TID/POS → được TẠO yêu cầu hủy (duyệt vẫn do Admin/Manager).
     'TID_CANCEL_REQUEST', 'POS_CANCEL_REQUEST'],
   SALES: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW', 'CUSTOMER_CREATE'],

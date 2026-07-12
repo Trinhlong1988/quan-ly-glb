@@ -235,6 +235,9 @@ model PosDevice {
   currentCustomerId Int?     @map("current_customer_id")
   currentTid        String?  @map("current_tid")
   warehouseLoc      String?  @map("warehouse_loc")
+  // #6 (Mr.Long 12/7) — hủy khách giữ máy: true = khách đã hủy nhưng máy CHƯA thu về (còn ở chỗ khách) →
+  // hiện trong danh sách "Cần thu hồi". Đặt false lại khi recall (về kho) / redeploy (giao khách mới).
+  recallPending     Boolean  @default(false) @map("recall_pending")
   note              String?
   // ── PHASE K1 §2.1 — cột nhập di trú từ PosIntake (nullable) ──
   posModelId        Int?      @map("pos_model_id") // FK PosModel (§C7) — thay model text (Q-P4)
@@ -447,6 +450,50 @@ model PosTidBinding {
   @@index([posSerial])
   @@index([tid])
   @@map("pos_tid_bindings")
+}
+
+// #3 (Mr.Long 12/7) — CHỨNG TỪ BÁN máy/TID (bất biến, giống bill). Doanh thu ghi nhận ĐỦ NGAY = salePrice
+// (accrual ⓵A) qua CashEntry SALE_POS/SALE_TID fundId=null; tiền thu vào quỹ qua CashEntry DEBT_CUSTOMER +
+// DeviceSaleSettlement. Công nợ mua thiết bị của khách = Σ salePrice − Σ settlement.amount.
+model DeviceSale {
+  id            Int       @id @default(autoincrement())
+  code          String?   @unique // BS##### (Bán − Sale)
+  saleKind      String    @map("sale_kind") // POS | TID
+  deviceSerial  String?   @map("device_serial") // khi bán máy (kèm TID nếu có)
+  tid           String? // khi bán TID (riêng, hoặc TID bán kèm máy)
+  customerId    Int       @map("customer_id") // khách MUA
+  salePrice     BigInt    @map("sale_price") // giá bán (VND, > 0) — doanh thu ghi nhận đủ ngay
+  warehouseId   Int?      @map("warehouse_id") // kho xuất (bán máy)
+  soldByUserId  Int?      @map("sold_by_user_id") // người bán
+  occurredAt    DateTime  @map("occurred_at") @db.Timestamptz(3)
+  note          String?
+  status        String    @default("POSTED") // POSTED (CANCELLED = pha sau, qua duyệt)
+  createdBy     Int?      @map("created_by")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedBy     Int?      @map("updated_by")
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(3)
+  deletedBy     Int?      @map("deleted_by")
+
+  @@index([customerId])
+  @@index([saleKind])
+  @@index([deviceSerial])
+  @@index([tid])
+  @@index([status])
+  @@map("device_sales")
+}
+
+// Áp phiếu thu (CashEntry DEBT_CUSTOMER) vào 1 chứng từ bán → giảm công nợ mua thiết bị (mirror CashDebtSettlement).
+model DeviceSaleSettlement {
+  id           Int      @id @default(autoincrement())
+  deviceSaleId Int      @map("device_sale_id")
+  cashEntryId  Int      @map("cash_entry_id")
+  amount       BigInt // VND áp vào chứng từ bán này (> 0)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([deviceSaleId])
+  @@index([cashEntryId])
+  @@map("device_sale_settlements")
 }
 
 // Bộ đếm sinh mã atomic (§D) — NV/KH/POS... zero-pad ≥2.
