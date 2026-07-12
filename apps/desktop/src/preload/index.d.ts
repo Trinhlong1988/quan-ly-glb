@@ -179,11 +179,13 @@ export interface TimelineEventDto {
   fromAgentId: number | null;
   toAgentId: number | null;
   customerId: number | null;
+  customerName: string | null; // tên khách của sự kiện (giao/đổi-khách/bán) — biệt danh||họ tên
   actorUserId: number | null;
+  actorName: string | null; // AI thao tác sự kiện — họ tên||tài khoản
   occurredAt: string;
   note: string | null;
-  tid: string | null;
-  fromWarehouseId: number | null;
+  tid: string | null; // chỉ timeline POS (null ở timeline TID)
+  fromWarehouseId: number | null; // chỉ timeline POS
   warehouseName: string | null;
   deliveryAddress: string | null;
 }

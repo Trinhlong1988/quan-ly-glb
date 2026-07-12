@@ -153,8 +153,8 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
               onClick={() =>
                 exportCsv(
                   'tid',
-                  ['TID', 'MID', 'HKD', 'Ngành nghề', 'Ngân hàng', 'Đối tác', 'Gán máy POS', 'Giao cho khách', 'Khách hàng đang giữ', 'Vòng đời'],
-                  rows.map((t) => [t.tid, t.mid ?? '', t.hkdName ?? '', t.industryName ?? '', t.bankCode ?? t.bank ?? '', t.partnerName ?? '', t.deviceAssigned ? (t.posSerial ?? 'Đã gán') : (t.customerDeviceSerial ? 'Máy khách' : 'Chưa gán'), t.delivered ? 'Đã giao' : 'Chưa giao', t.holdingCustomerName ?? '', statusLabel(t.status)])
+                  ['TID', 'MID', 'HKD', 'Ngân hàng', 'Ngành nghề', 'Đối tác', 'Gán máy POS', 'Giao cho khách', 'Khách hàng đang giữ', 'Vòng đời'],
+                  rows.map((t) => [t.tid, t.mid ?? '', t.hkdName ?? '', t.bankCode ?? t.bank ?? '', t.industryName ?? '', t.partnerName ?? '', t.deviceAssigned ? (t.posSerial ?? 'Đã gán') : (t.customerDeviceSerial ? 'Máy khách' : 'Chưa gán'), t.delivered ? 'Đã giao' : 'Chưa giao', t.holdingCustomerName ?? '', statusLabel(t.status)])
                 )
               }
             >
@@ -276,8 +276,8 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
               <tr>
                 <th className="px-4 py-3 whitespace-nowrap">TID</th>
                 <th className="px-4 py-3 whitespace-nowrap">HKD</th>
-                <th className="px-4 py-3 whitespace-nowrap">Ngành nghề</th>
                 <th className="px-4 py-3 whitespace-nowrap">Ngân hàng</th>
+                <th className="px-4 py-3 whitespace-nowrap">Ngành nghề</th>
                 <th className="px-4 py-3 whitespace-nowrap">Gán máy POS</th>
                 <th className="px-4 py-3 whitespace-nowrap">Giao cho khách</th>
                 <th className="px-4 py-3 whitespace-nowrap">Khách hàng đang giữ</th>
@@ -314,8 +314,8 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
                 <tr key={t.id} className={tab === 'undelivered' && (t as UndeliveredTidDto).agingDays >= 30 ? 'bg-danger/5' : 'hover:bg-appbg/60'}>
                   <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700 whitespace-nowrap">{t.tid}</td>
                   <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{t.hkdName ?? '—'}</td>
-                  <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{t.industryName ?? '—'}</td>
                   <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{t.bankCode ?? t.bank ?? '—'}</td>
+                  <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{t.industryName ?? '—'}</td>
                   <td className="px-4 py-3">
                     <AssignCell t={t} />
                   </td>
@@ -1075,16 +1075,32 @@ function TidActionModal({ tid, kind, onClose, onDone }: { tid: TidDto; kind: 'as
 
 const TID_EVENT_LABELS: Record<string, string> = {
   STOCK_IN: 'Nhập kho',
-  TID_ASSIGN: 'Gán lên máy',
-  TID_DELIVERED: 'Giao cho khách',
+  TID_ASSIGN: 'Gán TID lên máy',
+  TID_DELIVERED: 'Giao TID cho khách',
+  TID_SELL: 'Bán TID',
+  TID_UNBIND: 'Gỡ TID khỏi máy',
   TID_RECALL: 'Thu hồi TID',
   TID_DEAD: 'TID chết (đổi)',
+  TID_CLOSE: 'Đóng TID',
   TID_REPLACE: 'TID mới thay thế',
-  TID_UNBIND: 'Gỡ khỏi máy',
-  DEPLOY: 'Triển khai máy',
+  DEPLOY: 'Giao máy',
   RECALL: 'Thu hồi máy',
+  SELL: 'Bán máy',
   RETIRE: 'Thanh lý'
 };
+
+// Nhãn trạng thái TID cho dòng "fromState → toState" trong vòng đời.
+const TID_STATE_LABELS: Record<string, string> = {
+  UNASSIGNED: 'Chưa gán máy',
+  ACTIVE: 'Đang hoạt động',
+  DEAD: 'Chết',
+  CLOSED: 'Đã đóng',
+  RECALLED: 'Đã thu hồi',
+  SOLD: 'Đã bán'
+};
+
+// eventType có "khách" mang ý nghĩa giao/bán cho khách (dòng "Khách: …") trong vòng đời TID.
+const TID_CUSTOMER_EVENT_TYPES = new Set(['DEPLOY', 'CHANGE_CUSTOMER', 'TID_DELIVERED', 'SELL', 'TID_SELL']);
 
 // R30 — Phí bán THỰC TẾ theo TID × loại thẻ. Nhập khi giao máy; cột "Niêm yết" (FeeRate.phiBan hiệu lực)
 // để đối chiếu tránh điền sai. Để trống = dùng niêm yết. Doanh thu GD sau đó ưu tiên phí thực tế này.
@@ -1228,13 +1244,19 @@ function TidTimelineModal({ tid, onClose }: { tid: TidDto; onClose: () => void }
                 <span className="rounded bg-brand-tint px-1.5 py-0.5 text-xs font-medium text-brand">{TID_EVENT_LABELS[e.eventType] ?? e.eventType}</span>
                 {e.fromState && (
                   <span className="text-xs text-slate-400">
-                    {e.fromState} → {e.toState}
+                    {TID_STATE_LABELS[e.fromState] ?? e.fromState} → {e.toState ? (TID_STATE_LABELS[e.toState] ?? e.toState) : ''}
                   </span>
                 )}
               </div>
               <div className="mt-1 text-xs text-slate-500">{fmtDate(e.occurredAt)}</div>
-              {e.customerId != null && (
-                <div className="mt-0.5 text-xs text-slate-500">Khách #{e.customerId}</div>
+              {e.customerName && TID_CUSTOMER_EVENT_TYPES.has(e.eventType) && (
+                <div className="mt-0.5 text-xs text-slate-500">Khách: <span className="font-medium text-slate-700">{e.customerName}</span></div>
+              )}
+              {e.warehouseName && (
+                <div className="mt-0.5 text-xs text-slate-500">Về kho: <span className="font-medium text-slate-700">{e.warehouseName}</span>{e.deliveryAddress ? ` — ${e.deliveryAddress}` : ''}</div>
+              )}
+              {e.actorName && (
+                <div className="mt-0.5 text-xs text-slate-500">Người thực hiện: <span className="font-medium text-slate-700">{e.actorName}</span></div>
               )}
               {e.note && <div className="mt-0.5 text-sm text-slate-600">{e.note}</div>}
             </li>

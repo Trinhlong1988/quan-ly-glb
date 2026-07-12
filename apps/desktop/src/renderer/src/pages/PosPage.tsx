@@ -454,6 +454,49 @@ const NEXT: Record<string, { key: string; label: string }[]> = {
   RETIRED: []
 };
 
+// Nhãn tiếng Việt cho vòng đời máy (phủ HẾT eventType AssetEvent gắn máy — gồm cả sự kiện TID trên máy).
+const POS_TIMELINE_EVENT_LABELS: Record<string, string> = {
+  STOCK_IN: 'Nhập kho',
+  DEPLOY: 'Giao máy',
+  RECALL: 'Thu hồi về kho',
+  TRANSFER_AGENT: 'Chuyển đại lý',
+  CHANGE_CUSTOMER: 'Đổi khách giữ máy',
+  CANCEL_CUSTOMER: 'Hủy khách giữ máy',
+  SELL: 'Bán máy',
+  REPORT_DAMAGE: 'Báo hỏng',
+  SEND_REPAIR: 'Gửi bảo trì',
+  RECEIVE_REPAIRED: 'Nhận sửa xong',
+  RETIRE: 'Thanh lý',
+  TID_ASSIGN: 'Gán TID lên máy',
+  TID_DELIVERED: 'Giao TID cho khách',
+  TID_SELL: 'Bán TID',
+  TID_UNBIND: 'Gỡ TID khỏi máy',
+  TID_DEAD: 'TID chết (đổi)',
+  TID_CLOSE: 'Đóng TID',
+  TID_RECALL: 'Thu hồi TID',
+  TID_REPLACE: 'TID mới thay thế'
+};
+
+// Nhãn trạng thái (POS + TID — vòng đời máy có thể ghi cả state TID khi gán/gỡ TID).
+const POS_STATE_LABELS: Record<string, string> = {
+  IN_STOCK: 'Trong kho',
+  DEPLOYED: 'Đã giao',
+  IN_REPAIR: 'Đang sửa',
+  DAMAGED: 'Hỏng',
+  RETIRED: 'Đã thanh lý',
+  SOLD: 'Đã bán',
+  UNASSIGNED: 'Chưa gán máy',
+  ACTIVE: 'Đang hoạt động',
+  DEAD: 'Chết',
+  CLOSED: 'Đã đóng',
+  RECALLED: 'Đã thu hồi'
+};
+
+// eventType có "khách" mang ý nghĩa giao/bán cho khách (dòng "Khách: …").
+const CUSTOMER_EVENT_TYPES = new Set(['DEPLOY', 'CHANGE_CUSTOMER', 'TID_DELIVERED', 'SELL', 'TID_SELL']);
+// eventType máy VỀ kho (nhãn "Về kho:" thay vì "Từ kho:" khi có warehouseName).
+const RETURN_WAREHOUSE_EVENT_TYPES = new Set(['RECALL', 'RECEIVE_REPAIRED']);
+
 function TimelineModal({ device, onClose }: { device: PosDto; onClose: () => void }): JSX.Element {
   const [events, setEvents] = useState<TimelineEventDto[] | null>(null);
   useEffect(() => {
@@ -470,16 +513,22 @@ function TimelineModal({ device, onClose }: { device: PosDto; onClose: () => voi
             <li key={e.id} className="mb-5 ml-5">
               <span className="absolute -left-[7px] mt-1 h-3 w-3 rounded-full bg-brand" />
               <div className="flex items-center gap-2">
-                <span className="rounded bg-brand-tint px-1.5 py-0.5 text-xs font-medium text-brand">{e.eventType}</span>
+                <span className="rounded bg-brand-tint px-1.5 py-0.5 text-xs font-medium text-brand">{POS_TIMELINE_EVENT_LABELS[e.eventType] ?? e.eventType}</span>
                 {e.fromState && (
                   <span className="text-xs text-slate-400">
-                    {e.fromState} → {e.toState}
+                    {POS_STATE_LABELS[e.fromState] ?? e.fromState} → {e.toState ? (POS_STATE_LABELS[e.toState] ?? e.toState) : ''}
                   </span>
                 )}
               </div>
               <div className="mt-1 text-xs text-slate-500">{fmtDate(e.occurredAt)} {fmtTimeSec(e.occurredAt)}</div>
+              {e.customerName && CUSTOMER_EVENT_TYPES.has(e.eventType) && (
+                <div className="mt-0.5 text-xs text-slate-500">Khách: <span className="font-medium text-slate-700">{e.customerName}</span></div>
+              )}
               {e.warehouseName && (
-                <div className="mt-0.5 text-xs text-slate-500">Từ kho: <span className="font-medium text-slate-700">{e.warehouseName}</span>{e.deliveryAddress ? ` — ${e.deliveryAddress}` : ''}</div>
+                <div className="mt-0.5 text-xs text-slate-500">{RETURN_WAREHOUSE_EVENT_TYPES.has(e.eventType) ? 'Về kho: ' : 'Từ kho: '}<span className="font-medium text-slate-700">{e.warehouseName}</span>{e.deliveryAddress ? ` — ${e.deliveryAddress}` : ''}</div>
+              )}
+              {e.actorName && (
+                <div className="mt-0.5 text-xs text-slate-500">Người thực hiện: <span className="font-medium text-slate-700">{e.actorName}</span></div>
               )}
               {e.note && <div className="mt-0.5 text-sm text-slate-600">{e.note}</div>}
             </li>

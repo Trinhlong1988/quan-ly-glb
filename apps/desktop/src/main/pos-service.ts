@@ -41,7 +41,9 @@ export interface TimelineEventDto {
   fromAgentId: number | null;
   toAgentId: number | null;
   customerId: number | null;
+  customerName: string | null; // tên khách của sự kiện (giao/đổi-khách/bán) — biệt danh||họ tên
   actorUserId: number | null;
+  actorName: string | null; // AI thao tác sự kiện — họ tên||tài khoản
   occurredAt: string;
   note: string | null;
   tid: string | null;
@@ -170,10 +172,18 @@ export async function getDeviceTimeline(
     where: { deviceSerial: serial },
     orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }]
   });
-  // Resolve tên kho (join tại service layer — resilient soft-delete).
+  // Resolve tên kho + tên khách + tên người thao tác (join tại service layer — batch, KHÔNG N+1).
   const whIds = [...new Set(events.map((e) => e.fromWarehouseId).filter((x): x is number => x != null))];
   const whMap = new Map(
     (await g.db.warehouse.findMany({ where: { id: { in: whIds } }, select: { id: true, code: true, name: true } })).map((w) => [w.id, `${w.code} · ${w.name}`])
+  );
+  const custIds = [...new Set(events.map((e) => e.customerId).filter((x): x is number => x != null))];
+  const custMap = new Map(
+    (await g.db.customer.findMany({ where: { id: { in: custIds } }, select: { id: true, nickname: true, fullName: true } })).map((c) => [c.id, c.nickname || c.fullName])
+  );
+  const actorIds = [...new Set(events.map((e) => e.actorUserId).filter((x): x is number => x != null))];
+  const actorMap = new Map(
+    (await g.db.user.findMany({ where: { id: { in: actorIds } }, select: { id: true, fullName: true, username: true } })).map((u) => [u.id, u.fullName || u.username])
   );
   return {
     ok: true,
@@ -185,7 +195,9 @@ export async function getDeviceTimeline(
       fromAgentId: e.fromAgentId,
       toAgentId: e.toAgentId,
       customerId: e.customerId,
+      customerName: e.customerId != null ? custMap.get(e.customerId) ?? null : null,
       actorUserId: e.actorUserId,
+      actorName: e.actorUserId != null ? actorMap.get(e.actorUserId) ?? null : null,
       occurredAt: e.occurredAt.toISOString(),
       note: e.note,
       tid: e.tid,

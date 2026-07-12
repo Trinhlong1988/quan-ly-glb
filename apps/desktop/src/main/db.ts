@@ -734,11 +734,23 @@ export async function seedIfEmpty(db: Db): Promise<void> {
 export async function initDb(): Promise<Db> {
   const url = resolveDatabaseUrl();
   prisma = createPrisma(url);
-  // G10 model A: CHỈ máy chủ seed (1 lần). Client chỉ connect (DB đã được server migrate+seed).
-  // Client seed mỗi boot lên DB dùng chung = churn/deadlock (bài học HIGH-4). Migrate KHÔNG chạy
-  // từ .exe (Prisma 7 prisma-client thiếu migrate engine) — máy chủ migrate bằng prisma CLI.
+  // G10 model A: máy chủ seed FATAL (bắt buộc). Client cũng seed để ĐỒNG BỘ catalog quyền/role mới
+  // khi auto-update (fix "quyền mới không vào DB dùng chung → menu bị ẩn"), nhưng bọc advisory lock
+  // (serialize nhiều client) + NON-FATAL (lỗi seed không sập app client). Migrate KHÔNG chạy từ .exe
+  // (Prisma 7 prisma-client thiếu migrate engine) — máy chủ migrate bằng prisma CLI.
   if (isServerRole()) {
     await seedIfEmpty(prisma);
+  } else {
+    // Client cũng ĐỒNG BỘ catalog quyền/role khi boot (seedIfEmpty idempotent+additive) để quyền
+    // MỚI (thêm ở bản cập nhật) tự vào DB dùng chung → menu/tính năng không bị ẩn. Advisory lock cho
+    // Postgres serialize nhiều client; lỗi seed client là NON-FATAL (không sập app).
+    try {
+      await prisma.$executeRaw`SELECT pg_advisory_lock(918273645)`;
+      try { await seedIfEmpty(prisma); }
+      finally { await prisma.$executeRaw`SELECT pg_advisory_unlock(918273645)`; }
+    } catch (e) {
+      console.error('[seed] client catalog sync bỏ qua (non-fatal):', e instanceof Error ? e.message : e);
+    }
   }
   return prisma;
 }
