@@ -785,6 +785,7 @@ export interface PosIntakeDto extends AuditTrail {
   posModelCode: string | null;
   posModelName: string | null;
   serial: string;
+  bankId: number | null;
   bankCode: string | null;
   intakeStatusId: number;
   intakeStatusName: string | null;
@@ -822,6 +823,7 @@ export interface UpdatePosIntakeInput {
   importPrice?: number;
   importedAt?: string;
   note?: string | null;
+  bankId?: number | null;
   expectedUpdatedAt?: string | null;
 }
 export interface LiteRef {

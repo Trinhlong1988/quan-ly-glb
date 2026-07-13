@@ -218,6 +218,20 @@ export async function runPosUnifySelfTest(): Promise<number> {
   const devOk = await db.posDevice.findUnique({ where: { serial: sOk } });
   assert('CÀI APP(c): máy cùng-bank → DEPLOYED + currentTid', devOk?.status === 'DEPLOYED' && devOk?.currentTid === 'TID-K1-APPOK', { st: devOk?.status, tid: devOk?.currentTid });
 
+  // (d) SỬA NHẬP KHO đổi Cài APP → ĐỒNG BỘ bankId sang MÁY (Mr.Long "sửa nhập kho không đồng bộ").
+  const sEdit = 'SN-K1-APPEDIT';
+  const iEdit = await supplySvc.createPosIntake({ posModelId: modelId, serial: sEdit, intakeStatusId: statusId!, supplierId, importPrice: 500_000, importedAt: '2026-07-01', bankId: bankXId });
+  const devEdit0 = await db.posDevice.findUnique({ where: { serial: sEdit } });
+  assert('CÀI APP(d): tạo máy app bankX', devEdit0?.bankId === bankXId, { got: devEdit0?.bankId });
+  const upY = await supplySvc.updatePosIntake(iEdit.id!, { bankId: bankY.id! });
+  assert('CÀI APP(d): updatePosIntake đổi app ok', upY.ok === true, upY.error);
+  const devEditY = await db.posDevice.findUnique({ where: { serial: sEdit } });
+  assert('CÀI APP(d): SỬA nhập kho → MÁY đồng bộ bankId = bankY', devEditY?.bankId === bankY.id, { got: devEditY?.bankId, want: bankY.id });
+  const upBlank = await supplySvc.updatePosIntake(iEdit.id!, { bankId: null });
+  assert('CÀI APP(d): updatePosIntake về máy trắng ok', upBlank.ok === true, upBlank.error);
+  const devEditBlank = await db.posDevice.findUnique({ where: { serial: sEdit } });
+  assert('CÀI APP(d): SỬA về máy trắng → MÁY bankId null', devEditBlank?.bankId === null, { got: devEditBlank?.bankId });
+
   await logout();
   // eslint-disable-next-line no-console
   console.log(`SELFTEST29 SUMMARY | failures=${failures}`);

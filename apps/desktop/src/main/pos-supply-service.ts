@@ -413,7 +413,8 @@ export interface PosIntakeDto extends AuditTrail {
   posModelCode: string | null;
   posModelName: string | null;
   serial: string;
-  bankCode: string | null; // Cài APP — app ngân hàng của máy (resolve từ PosDevice theo serial). null = máy trắng.
+  bankId: number | null; // Cài APP — id app ngân hàng của máy (để prefill form Sửa). null = máy trắng.
+  bankCode: string | null; // Cài APP — mã app ngân hàng của máy (resolve từ PosDevice theo serial). null = máy trắng.
   intakeStatusId: number;
   intakeStatusName: string | null;
   supplierId: number;
@@ -450,6 +451,7 @@ export interface UpdatePosIntakeInput {
   importPrice?: number;
   importedAt?: string;
   note?: string | null;
+  bankId?: number | null; // Cài APP — sửa app ngân hàng của MÁY (sync sang PosDevice theo serial). null/0 = máy trắng.
   expectedUpdatedAt?: string | null; // R48 #2 optimistic-lock — mốc updatedAt client giữ lúc mở form
 }
 
@@ -488,6 +490,7 @@ export async function listPosIntakes(filter: PosIntakeFilter = {}): Promise<{ ok
   const devs = await g.db.posDevice.findMany({ where: { serial: { in: [...new Set(rows.map((r) => r.serial))] } }, select: { serial: true, bankId: true } });
   const bankIds = [...new Set(devs.map((d) => d.bankId).filter((x): x is number => x != null))];
   const bankCodeMap = new Map((await g.db.bank.findMany({ where: { id: { in: bankIds } }, select: { id: true, code: true } })).map((b) => [b.id, b.code]));
+  const serialBankIdMap = new Map(devs.map((d) => [d.serial, d.bankId]));
   const serialBankMap = new Map(devs.map((d) => [d.serial, d.bankId != null ? bankCodeMap.get(d.bankId) ?? null : null]));
   return {
     ok: true,
@@ -497,6 +500,7 @@ export async function listPosIntakes(filter: PosIntakeFilter = {}): Promise<{ ok
       posModelCode: modelMap.get(r.posModelId)?.code ?? null,
       posModelName: modelMap.get(r.posModelId)?.name ?? null,
       serial: r.serial,
+      bankId: serialBankIdMap.get(r.serial) ?? null,
       bankCode: serialBankMap.get(r.serial) ?? null,
       intakeStatusId: r.intakeStatusId,
       intakeStatusName: stMap.get(r.intakeStatusId)?.name ?? null,
@@ -629,12 +633,25 @@ export async function updatePosIntake(id: number, input: UpdatePosIntakeInput): 
     const dup = dupResult(await db.posIntake.findFirst({ where: { serial, NOT: { id } } }), 'Seri number', serial);
     if (dup) return dup;
   }
+  // Cài APP — nếu sửa app ngân hàng (bankId>0) phải tồn tại + còn dùng (ACTIVE). null/0 = máy trắng.
+  if (input.bankId != null && input.bankId > 0) {
+    const bk = await db.bank.findFirst({ where: { id: input.bankId, deletedAt: null }, select: { id: true, status: true } });
+    if (!bk) return { ok: false, error: 'NOT_FOUND', message: 'Ngân hàng (app) đã chọn không tồn tại.' };
+    if (bk.status !== 'ACTIVE') return { ok: false, error: 'VALIDATION', message: 'Ngân hàng (app) đã ngừng sử dụng — không thể cài lên máy.' };
+  }
   const before = auditSnapshot({ serial: row.serial, posModelId: row.posModelId, supplierId: row.supplierId, intakeStatusId: row.intakeStatusId, importPrice: row.importPrice });
   let updated;
   try {
-    updated = await db.posIntake.update({
-      where: { id },
-      data: { posModelId, serial, intakeStatusId, supplierId, importPrice: price, importedAt, note: input.note !== undefined ? input.note?.trim() || null : row.note, updatedBy: user.id }
+    updated = await db.$transaction(async (tx) => {
+      const up = await tx.posIntake.update({
+        where: { id },
+        data: { posModelId, serial, intakeStatusId, supplierId, importPrice: price, importedAt, note: input.note !== undefined ? input.note?.trim() || null : row.note, updatedBy: user.id }
+      });
+      // ĐỒNG BỘ Cài APP sang MÁY (bankId sống trên PosDevice, không trên PosIntake) — chỉ khi form gửi bankId.
+      if (input.bankId !== undefined) {
+        await tx.posDevice.updateMany({ where: { serial }, data: { bankId: input.bankId && input.bankId > 0 ? input.bankId : null, updatedBy: user.id } });
+      }
+      return up;
     });
   } catch (e) {
     if (isUniqueViolation(e)) return { ok: false, error: 'DUPLICATE', message: `Seri number "${serial}" đã tồn tại.` };

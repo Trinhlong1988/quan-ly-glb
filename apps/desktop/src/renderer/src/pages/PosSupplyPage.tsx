@@ -574,16 +574,15 @@ function IntakeForm({ mode, row, models, suppliers, statuses, onClose, onSaved }
   const [note, setNote] = useState(row?.note ?? '');
   const [warehouseId, setWarehouseId] = useState(''); // Model 1 — nhập vào kho nào (chỉ khi nhập kho mới)
   const [warehouses, setWarehouses] = useState<WarehouseLite[]>([]);
-  // Cài APP (Mr.Long 13/7) — app ngân hàng cài sẵn trên máy MỚI ('' = MÁY TRẮNG, mặc định).
-  const [bankId, setBankId] = useState('');
+  // Cài APP (Mr.Long 13/7) — app ngân hàng của máy ('' = MÁY TRẮNG). Sửa được ở CẢ tạo mới LẪN sửa (prefill từ máy).
+  const [bankId, setBankId] = useState(row?.bankId != null ? String(row.bankId) : '');
   const [banks, setBanks] = useState<BankLite[]>([]);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (mode === 'create') {
-      window.api.warehouseLite().then((r) => r.ok && r.data && setWarehouses(r.data));
-      window.api.bankLite().then((r) => r.ok && r.data && setBanks(r.data));
-    }
+    // Ngân hàng: nạp ở CẢ 2 mode (edit cũng sửa Cài APP được). Kho: chỉ khi nhập mới.
+    window.api.bankLite().then((r) => r.ok && r.data && setBanks(r.data));
+    if (mode === 'create') window.api.warehouseLite().then((r) => r.ok && r.data && setWarehouses(r.data));
   }, [mode]);
 
   async function save(): Promise<void> {
@@ -597,7 +596,7 @@ function IntakeForm({ mode, row, models, suppliers, statuses, onClose, onSaved }
     setBusy(true);
     const payload = { posModelId: Number(posModelId), serial: serial.trim(), intakeStatusId: Number(intakeStatusId), supplierId: Number(supplierId), importPrice: priceNum, importedAt, note: note || null };
     const res = mode === 'edit' && row
-      ? await window.api.posIntakeUpdate(row.id, { ...payload, expectedUpdatedAt: row.updatedAt })
+      ? await window.api.posIntakeUpdate(row.id, { ...payload, bankId: bankId ? Number(bankId) : null, expectedUpdatedAt: row.updatedAt })
       : await window.api.posIntakeCreate({ ...payload, warehouseId: warehouseId ? Number(warehouseId) : null, bankId: bankId ? Number(bankId) : null });
     setBusy(false);
     if (res.ok) { toast.success(mode === 'edit' ? 'Đã cập nhật máy POS' : `Đã nhập kho máy ${serial}`); onSaved(); }
@@ -623,14 +622,12 @@ function IntakeForm({ mode, row, models, suppliers, statuses, onClose, onSaved }
             </select>
           </Field>
         )}
-        {mode === 'create' && (
-          <Field label="Cài APP (ngân hàng)" hint="Máy trắng = chưa cài app. Gán TID chỉ được khi TID cùng ngân hàng với app.">
-            <select className={inputCls} value={bankId} onChange={(e) => setBankId(e.target.value)}>
-              <option value="">— Máy trắng (chưa cài app) —</option>
-              {banks.map((b) => <option key={b.id} value={b.id}>{b.code} · {b.name}</option>)}
-            </select>
-          </Field>
-        )}
+        <Field label="Cài APP (ngân hàng)" hint="Máy trắng = chưa cài app. Gán TID chỉ được khi TID cùng ngân hàng với app. Sửa ở đây đồng bộ sang máy.">
+          <select className={inputCls} value={bankId} onChange={(e) => setBankId(e.target.value)}>
+            <option value="">— Máy trắng (chưa cài app) —</option>
+            {banks.map((b) => <option key={b.id} value={b.id}>{b.code} · {b.name}</option>)}
+          </select>
+        </Field>
         <div className="col-span-2"><Field label="Ghi chú"><input className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} /></Field></div>
       </div>
       <div className="mt-6 flex justify-end gap-2">
