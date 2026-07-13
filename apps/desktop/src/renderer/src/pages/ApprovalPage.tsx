@@ -29,6 +29,7 @@ type Dialog =
   | { kind: 'rejectBulk' }
   | { kind: 'approveEntity'; row: EntityCancelRequestDto }
   | { kind: 'rejectEntity'; row: EntityCancelRequestDto }
+  | { kind: 'approveEntityBulk' }
   | null;
 
 /**
@@ -46,6 +47,7 @@ export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [dialog, setDialog] = useState<Dialog>(null);
   const sel = useRowSelection();
+  const selEnt = useRowSelection(); // R34 — chọn nhiều phiếu hủy DỮ LIỆU (TID/POS/Khách/NS) để duyệt hàng loạt
 
   async function reload(): Promise<void> {
     setLoading(true);
@@ -72,6 +74,7 @@ export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
       else if (ent.message) toast.alert(ent.message);
     }
     sel.clear();
+    selEnt.clear();
     setLoading(false);
   }
   useEffect(() => {
@@ -129,6 +132,20 @@ export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
     const res = await window.api.entityCancelReject(row.entityType, row.id, note);
     if (res.ok) toast.success(`Đã từ chối yêu cầu hủy ${row.entityTypeLabel} ${row.entityLabel ?? ''}.`);
     else toast.alert(res.message ?? 'Không từ chối được yêu cầu.', 'Từ chối thất bại');
+    setDialog(null);
+    await reload();
+  }
+  // R34 — duyệt HÀNG LOẠT phiếu hủy dữ liệu đã chọn (mật khẩu nhập 1 lần, lặp per phiếu; backend tự bỏ qua cái không đủ quyền).
+  async function doApproveEntityBulk(password: string): Promise<void> {
+    const chosen = entityRows.filter((r) => selEnt.selected.has(r.id) && r.canApprove);
+    let done = 0;
+    const skipped: { id: number; reason: string; message?: string }[] = [];
+    for (const r of chosen) {
+      const res = await window.api.entityCancelApprove(r.entityType, r.id, password);
+      if (res.ok) done++;
+      else skipped.push({ id: r.id, reason: res.error ?? 'ERROR', message: res.message });
+    }
+    summarize('Đã duyệt', done, skipped.length ? skipped : undefined);
     setDialog(null);
     await reload();
   }
@@ -235,14 +252,22 @@ export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
       {/* R34 — Yêu cầu hủy dữ liệu (TID / POS / Khách hàng / Nhân sự) */}
       {canEntity && (
         <div className={canBill ? 'mt-6' : ''}>
-          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Yêu cầu hủy dữ liệu (TID · Máy POS · Khách hàng · Nhân sự)</div>
+          <div className="mb-2 flex items-center justify-between">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Yêu cầu hủy dữ liệu (TID · Máy POS · Khách hàng · Nhân sự)</div>
+            {selEnt.count > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500">Đã chọn {selEnt.count}</span>
+                <Button variant="soft" onClick={() => selEnt.clear()}>Bỏ chọn</Button>
+                <Button variant="confirm" onClick={() => setDialog({ kind: 'approveEntityBulk' })}>Duyệt đã chọn ({selEnt.count})</Button>
+              </div>
+            )}
+          </div>
           <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
-            {/* Mr.Long 12/7 — colgroup KHỚP bảng hủy bill: Loại(6rem)+Đối tượng(15rem)=21rem = chọn+Mã bill+Số tiền
-                → 4 cột chung (Lý do hủy·Người tạo·Thời gian·Thao tác) THẲNG HÀNG với bảng trên. */}
             <table className="w-full table-fixed text-sm">
               <colgroup>
+                <col className="w-10" />
                 <col className="w-24" />
-                <col className="w-60" />
+                <col className="w-56" />
                 <col />
                 <col className="w-44" />
                 <col className="w-40" />
@@ -250,6 +275,7 @@ export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
               </colgroup>
               <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
                 <tr>
+                  <SelectAllCell ids={entityRows.filter((r) => r.canApprove).map((r) => r.id)} sel={selEnt} />
                   <th className="px-3 py-3">Loại</th>
                   <th className="px-3 py-3">Đối tượng</th>
                   <th className="px-3 py-3 pl-5">Lý do hủy</th>
@@ -259,12 +285,13 @@ export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {loading && <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+                {loading && <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
                 {!loading && entityRows.length === 0 && (
-                  <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400"><Trash2 className="mx-auto mb-2 h-6 w-6" /> Không có yêu cầu hủy dữ liệu nào chờ bạn duyệt.</td></tr>
+                  <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400"><Trash2 className="mx-auto mb-2 h-6 w-6" /> Không có yêu cầu hủy dữ liệu nào chờ bạn duyệt.</td></tr>
                 )}
                 {!loading && entityRows.map((r) => (
-                  <tr key={`${r.entityType}-${r.id}`} className="hover:bg-appbg/60">
+                  <tr key={`${r.entityType}-${r.id}`} className={'hover:bg-appbg/60 ' + (selEnt.isSelected(r.id) ? 'bg-brand-tint/40' : '')}>
+                    {r.canApprove ? <SelectCell id={r.id} sel={selEnt} /> : <td className="px-3 py-3" />}
                     <td className="px-3 py-3"><span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">{r.entityTypeLabel}</span></td>
                     <td className="px-3 py-3 text-slate-700">{r.entityLabel ?? `#${r.entityId}`}</td>
                     <td className="px-3 py-3 pl-5 text-slate-600">{r.reason}</td>
@@ -327,6 +354,14 @@ export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
           message={`Duyệt hủy ${dialog.row.entityTypeLabel} "${dialog.row.entityLabel ?? '#' + dialog.row.entityId}"? Dữ liệu sẽ bị XÓA khỏi hệ thống (xóa mềm, có thể phục hồi ở Thùng rác). Nhập mật khẩu của bạn để xác nhận.`}
           onClose={() => setDialog(null)}
           onSubmit={(password, note) => doApproveEntity(dialog.row, password, note)}
+        />
+      )}
+      {dialog?.kind === 'approveEntityBulk' && (
+        <ApprovePasswordModal
+          title={`Duyệt ${selEnt.count} yêu cầu hủy dữ liệu đã chọn`}
+          message={`Duyệt hủy ${selEnt.count} mục đã chọn? Dữ liệu tương ứng sẽ bị XÓA (xóa mềm, phục hồi được ở Thùng rác). Yêu cầu nào bạn không đủ thẩm quyền sẽ được bỏ qua kèm lý do. Nhập mật khẩu của bạn để xác nhận.`}
+          onClose={() => setDialog(null)}
+          onSubmit={(password) => doApproveEntityBulk(password)}
         />
       )}
       {dialog?.kind === 'rejectEntity' && (
