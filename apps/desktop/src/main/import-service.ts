@@ -179,9 +179,22 @@ function makeRefResolver(label: string, items: { id: number; keys: (string | nul
 async function buildResolvers(db: Db, keys: string[]): Promise<Resolvers> {
   const r: Resolvers = {};
   const need = new Set(keys);
-  if (need.has('bank')) {
+  if (need.has('bank') || need.has('bankApp')) {
     const rows = await db.bank.findMany({ where: { deletedAt: null }, select: { id: true, code: true, name: true } });
-    r.bank = makeRefResolver('ngân hàng', rows.map((x) => ({ id: x.id, keys: [x.code, x.name] })));
+    // Khớp RỘNG (Mr.Long 13/7 "có NH mã hợp lệ load được, có NH không"): nhận MÃ (EIB) + TÊN ĐẦY ĐỦ
+    // ("Ngân hàng Exim") + TÊN BỎ TIỀN TỐ "Ngân hàng" ("Exim","VP","MB","An Bình") → gõ kiểu nào cũng ra.
+    const stripPrefix = (n: string): string => n.replace(/^\s*ngân\s*hàng\s+/i, '').trim();
+    const items = rows.map((x) => ({ id: x.id, keys: [x.code, x.name, stripPrefix(x.name)] }));
+    if (need.has('bank')) r.bank = makeRefResolver('ngân hàng', items);
+    if (need.has('bankApp')) {
+      // Cài APP (máy POS): "Máy trắng"/trống/-/không = CHƯA cài app → bankId=0 (createPosIntake coi 0 = máy trắng).
+      const base = makeRefResolver('ngân hàng (app)', items);
+      r.bankApp = (raw: string) => {
+        const k = raw.trim().replace(/\s+/g, ' ').toLowerCase();
+        if (!k || k === 'máy trắng' || k === 'may trang' || k === 'trắng' || k === 'trang' || k === '-' || k === 'không' || k === 'khong') return { id: 0 };
+        return base(raw);
+      };
+    }
   }
   if (need.has('partner')) {
     const rows = await db.partner.findMany({ where: { deletedAt: null }, select: { id: true, code: true, name: true } });
@@ -274,11 +287,11 @@ export const IMPORT_REGISTRY: Record<string, ImportEntity> = {
   posIntake: {
     label: 'POS nhập kho',
     permission: 'CONFIG_POS_SUPPLY_MANAGE',
-    resolverKeys: ['posModel', 'supplier', 'intakeStatus', 'bank'],
+    resolverKeys: ['posModel', 'supplier', 'intakeStatus', 'bankApp'],
     templateColumns: [
       { header: 'Số seri', field: 'serial', required: true, kind: 'text' },
       { header: 'Chủng loại', field: 'posModelId', required: true, kind: 'ref', ref: 'posModel', hint: 'Tên hoặc mã chủng loại' },
-      { header: 'Cài APP (ngân hàng)', field: 'bankId', required: false, kind: 'ref', ref: 'bank', hint: 'Mã/tên ngân hàng app (để TRỐNG = máy trắng)' },
+      { header: 'Cài APP (ngân hàng)', field: 'bankId', required: false, kind: 'ref', ref: 'bankApp', hint: 'Mã/tên ngân hàng (EIB, Exim, VP…) — để TRỐNG hoặc ghi "Máy trắng" = chưa cài app' },
       { header: 'Nhà cung cấp', field: 'supplierId', required: true, kind: 'ref', ref: 'supplier', hint: 'Tên hoặc mã NCC' },
       { header: 'Trạng thái nhập', field: 'intakeStatusId', required: true, kind: 'ref', ref: 'intakeStatus', hint: 'Tên trạng thái nhập' },
       { header: 'Giá nhập', field: 'importPrice', required: true, kind: 'money' },

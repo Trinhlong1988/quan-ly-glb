@@ -267,11 +267,12 @@ async function approveOne(db: Db, cfg: EntityConfig, user: AuthUser, requestId: 
   let selfNote: string | null = null;
 
   if (isSelf) {
-    const elevatedCount = await countUsersWithPerm(db, cfg.perms.elevated);
-    if (approverElevated && elevatedCount === 1) selfNote = 'tự duyệt do Admin duy nhất';
+    // Mr.Long 13/7: ADMIN (elevated) ĐƯỢC tự duyệt yêu cầu của mình — chốt kiểm soát = nhập mật khẩu khi duyệt
+    // (approveEntityCancel đã verifyActorPassword). Manager/không-elevated vẫn KHÔNG tự duyệt được.
+    if (approverElevated) selfNote = 'Admin tự duyệt (đã nhập mật khẩu)';
     else {
       await writeAudit(db, { actorUserId: user.id, action: cfg.auditApproved, targetType: 'ApprovalRequest', targetId: String(req.id), after: { denied: true, reason: 'SELF_APPROVAL_FORBIDDEN' } });
-      return { ok: false, error: 'SELF_APPROVAL_FORBIDDEN', message: 'Không được tự duyệt yêu cầu của chính mình (cần người khác duyệt).' };
+      return { ok: false, error: 'SELF_APPROVAL_FORBIDDEN', message: 'Chỉ Admin mới được tự duyệt yêu cầu của chính mình (cần nhập mật khẩu).' };
     }
   } else if (requesterIsApprover && !approverElevated) {
     await writeAudit(db, { actorUserId: user.id, action: cfg.auditApproved, targetType: 'ApprovalRequest', targetId: String(req.id), after: { denied: true, reason: 'NEED_ELEVATED', requestedBy: req.requestedBy } });
@@ -392,7 +393,9 @@ export async function listEntityCancelRequests(status = 'PENDING', entityTypeFil
     const approverElevated = hasPermission(user, cfg.perms.elevated);
     const isSelf = user.id === r.requestedBy;
     let canApprove = true;
-    if (isSelf) canApprove = false;
+    // Mr.Long 13/7: ADMIN (elevated) ĐƯỢC tự duyệt yêu cầu của mình (chốt = nhập mật khẩu khi duyệt).
+    // Manager/không-elevated: vẫn KHÔNG tự duyệt (cần Admin) + yêu cầu của approver cần Admin duyệt.
+    if (isSelf) canApprove = approverElevated;
     else if (requesterIsApprover && !approverElevated) canApprove = false;
     data.push({
       id: r.id,

@@ -32,6 +32,7 @@ export async function runImportSelfTest(): Promise<number> {
   await bankSvc.createBank({ name: 'Ngân Hàng Chung', code: 'NHA' }); // trùng TÊN (chỉ mã @unique) → dùng test mơ hồ
   await bankSvc.createBank({ name: 'Ngân Hàng Chung', code: 'NHB' });
   await bankSvc.createBank({ name: 'Vietcombank', code: 'VCB' }); // tên duy nhất → dùng cho dòng hợp lệ
+  await bankSvc.createBank({ name: 'Ngân hàng Á Châu', code: 'ACB' }); // có tiền tố → test khớp tên NGẮN "Á Châu" (Cài APP)
   await bankSvc.createPartner({ name: 'Đối Tác X', code: 'DTX' });
   await industrySvc.createIndustry({ name: 'Ăn uống' }); // active mặc định
   await posSupplySvc.createPosModel({ code: 'MDA', name: 'Model A' });
@@ -114,6 +115,28 @@ export async function runImportSelfTest(): Promise<number> {
     { 'Số seri': 'SERP3', 'Chủng loại': 'Model A', 'Nhà cung cấp': 'NCC Zét', 'Trạng thái nhập': 'Máy mới', 'Giá nhập': '1000', 'Ngày nhập': '2026-01-17' }
   ]);
   ok('posIntake (e) partial 2 ok + 1 ngày sai', r.summary?.created === 2 && r.summary?.skipped === 1, r.summary);
+
+  // (g) Cài APP (ngân hàng) — Mr.Long 13/7: khớp MÃ / TÊN NGẮN (bỏ tiền tố) / "Máy trắng" / trống; NH lạ → skip.
+  const db31 = getDb();
+  r = await runImport('posIntake', [
+    { 'Số seri': 'SAPP1', 'Chủng loại': 'Model A', 'Cài APP (ngân hàng)': 'VCB', 'Nhà cung cấp': 'NCC Zét', 'Trạng thái nhập': 'Máy mới', 'Giá nhập': '1000', 'Ngày nhập': '2026-01-15' },
+    { 'Số seri': 'SAPP2', 'Chủng loại': 'Model A', 'Cài APP (ngân hàng)': 'Á Châu', 'Nhà cung cấp': 'NCC Zét', 'Trạng thái nhập': 'Máy mới', 'Giá nhập': '1000', 'Ngày nhập': '2026-01-15' },
+    { 'Số seri': 'SAPP3', 'Chủng loại': 'Model A', 'Cài APP (ngân hàng)': 'Máy trắng', 'Nhà cung cấp': 'NCC Zét', 'Trạng thái nhập': 'Máy mới', 'Giá nhập': '1000', 'Ngày nhập': '2026-01-15' },
+    { 'Số seri': 'SAPP4', 'Chủng loại': 'Model A', 'Cài APP (ngân hàng)': '', 'Nhà cung cấp': 'NCC Zét', 'Trạng thái nhập': 'Máy mới', 'Giá nhập': '1000', 'Ngày nhập': '2026-01-15' }
+  ]);
+  ok('posIntake Cài APP: 4 dòng created', r.summary?.created === 4, r.summary);
+  const vcbId = (await db31.bank.findFirst({ where: { code: 'VCB' } }))?.id;
+  const acbId = (await db31.bank.findFirst({ where: { code: 'ACB' } }))?.id;
+  const dA1 = await db31.posDevice.findUnique({ where: { serial: 'SAPP1' } });
+  const dA2 = await db31.posDevice.findUnique({ where: { serial: 'SAPP2' } });
+  const dA3 = await db31.posDevice.findUnique({ where: { serial: 'SAPP3' } });
+  const dA4 = await db31.posDevice.findUnique({ where: { serial: 'SAPP4' } });
+  ok('Cài APP mã "VCB" → bankId đúng', dA1?.bankId === vcbId, { got: dA1?.bankId, want: vcbId });
+  ok('Cài APP tên ngắn "Á Châu" (bỏ tiền tố) → bankId ACB', dA2?.bankId === acbId, { got: dA2?.bankId, want: acbId });
+  ok('Cài APP "Máy trắng" → bankId null', dA3?.bankId === null, { got: dA3?.bankId });
+  ok('Cài APP trống → bankId null', dA4?.bankId === null, { got: dA4?.bankId });
+  r = await runImport('posIntake', [{ 'Số seri': 'SAPP9', 'Chủng loại': 'Model A', 'Cài APP (ngân hàng)': 'NH Không Tồn Tại', 'Nhà cung cấp': 'NCC Zét', 'Trạng thái nhập': 'Máy mới', 'Giá nhập': '1000', 'Ngày nhập': '2026-01-15' }]);
+  ok('Cài APP NH không tồn tại → skipped', r.summary?.skipped === 1 && /Không tìm thấy ngân hàng/.test(r.results?.[0]?.message ?? ''), r.results?.[0]);
 
   // ═══════════ (4) HỘ KINH DOANH ═══════════
   r = await runImport('dossier', [

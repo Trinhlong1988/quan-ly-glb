@@ -186,12 +186,12 @@ async function approveOne(db: Db, user: AuthUser, requestId: number, decisionNot
   let selfNote: string | null = null;
 
   if (isSelf) {
-    const elevatedCount = await countUsersWithPerm(db, ELEVATED);
-    if (approverElevated && elevatedCount === 1) {
-      selfNote = 'tự duyệt do Admin duy nhất';
+    // Mr.Long 13/7: ADMIN (elevated) ĐƯỢC tự duyệt yêu cầu của mình (chốt = nhập mật khẩu khi duyệt).
+    if (approverElevated) {
+      selfNote = 'Admin tự duyệt (đã nhập mật khẩu)';
     } else {
       await writeAudit(db, { actorUserId: user.id, action: 'BILL_CANCEL_APPROVED', targetType: 'ApprovalRequest', targetId: String(req.id), after: { denied: true, reason: 'SELF_APPROVAL_FORBIDDEN' } });
-      return { ok: false, error: 'SELF_APPROVAL_FORBIDDEN', message: 'Không được tự duyệt yêu cầu của chính mình (cần người khác duyệt).' };
+      return { ok: false, error: 'SELF_APPROVAL_FORBIDDEN', message: 'Chỉ Admin mới được tự duyệt yêu cầu của chính mình.' };
     }
   } else if (requesterIsApprover && !approverElevated) {
     // Yêu cầu do Manager/Admin tạo → cần cấp Admin (ELEVATED) duyệt.
@@ -363,9 +363,9 @@ export async function listCancelRequests(status = 'PENDING'): Promise<{ ok: bool
     const requesterPerms = await userPermSet(db, r.requestedBy);
     const requesterIsApprover = requesterPerms.has(APPROVE);
     const isSelf = user.id === r.requestedBy;
-    // canApprove theo phân vai (bỏ qua fallback 1-Admin cho gọn hiển thị; backend vẫn xử lý khi bấm).
+    // Mr.Long 13/7: ADMIN (elevated) được tự duyệt yêu cầu của mình (chốt = nhập mật khẩu khi duyệt).
     let canApprove = true;
-    if (isSelf) canApprove = false;
+    if (isSelf) canApprove = approverElevated;
     else if (requesterIsApprover && !approverElevated) canApprove = false;
     const t = txs.get(r.entityId);
     data.push({

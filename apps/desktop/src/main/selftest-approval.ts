@@ -166,7 +166,7 @@ export async function runApprovalSelfTest(): Promise<number> {
   ok('fallback: Admin DUY NHẤT tự duyệt yêu cầu của mình → OK', soloApprove.ok === true, soloApprove);
   const bSoloRow = await db.transaction.findUnique({ where: { id: bSolo } });
   const reqSoloRow = await db.approvalRequest.findUnique({ where: { id: reqSolo.id! } });
-  ok('fallback: bill CANCELLED + decisionNote ghi "tự duyệt do Admin duy nhất"', bSoloRow?.status === 'CANCELLED' && (reqSoloRow?.decisionNote ?? '').includes('Admin duy nhất'), { note: reqSoloRow?.decisionNote });
+  ok('Admin tự duyệt bill của mình → CANCELLED + decisionNote ghi "Admin tự duyệt"', bSoloRow?.status === 'CANCELLED' && (reqSoloRow?.decisionNote ?? '').includes('Admin tự duyệt'), { note: reqSoloRow?.decisionNote });
 
   // ═══ 11) BULK XÓA USER (§7.1 #10): trộn user hợp lệ + chính-mình → hợp lệ xóa, tự-mình bị skip ═══
   // adminroot đang đăng nhập & là Admin DUY NHẤT còn lại (admin2 đã xóa mềm ở bước fallback).
