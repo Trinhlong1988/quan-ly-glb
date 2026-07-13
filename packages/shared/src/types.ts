@@ -206,6 +206,12 @@ export type AuditAction =
   | 'BILL_CANCEL_REQUESTED'
   | 'BILL_CANCEL_APPROVED'
   | 'BILL_CANCEL_REJECTED'
+  // ── PHASE 1 (Mr.Long 13/7) — Yêu cầu xuất kho POS/TID → Duyệt → đối trừ tồn kho ──
+  | 'EXPORT_REQUEST_CREATED'
+  | 'EXPORT_REQUEST_APPROVED'
+  | 'EXPORT_REQUEST_REJECTED'
+  | 'EXPORT_REQUEST_CANCELLED'
+  | 'EXPORT_REQ_PERMS_GRANTED'
   // ── Nhóm E — Bảo trì & Bộ nhớ ──
   | 'AUTO_BACKUP'
   | 'AUTO_BACKUP_FAILED'

@@ -101,7 +101,7 @@ export async function listBanks(filter: BankFilter = {}): Promise<{ ok: boolean;
       createdAt: dateRange(filter.fromDate, filter.toDate),
       OR: filter.search ? [{ code: { contains: filter.search, mode: 'insensitive' } }, { name: { contains: filter.search, mode: 'insensitive' } }] : undefined
     },
-    orderBy: [{ seq: 'asc' }, { name: 'asc' }] // NH01, NH02... trước; bản chưa có seq (hiếm) rơi cuối theo tên
+    orderBy: [{ name: 'asc' }, { code: 'asc' }] // Mr.Long 13/7 — sắp NGÂN HÀNG theo TÊN A→Z (không theo seq NH01/NH02 nữa)
   });
   const names = await resolveUserNames(g.db, rows.flatMap((r) => [r.createdBy, r.updatedBy]));
   return { ok: true, data: rows.map((r) => ({ id: r.id, seq: r.seq, seqCode: bankSeqCode(r.seq), name: r.name, code: r.code, status: r.status, ...trail(r, names) })) };
@@ -268,18 +268,19 @@ export async function listCardTypes(filter: CardTypeFilter = {}): Promise<{ ok: 
   const bankIds = [...new Set(rows.map((r) => r.bankId))];
   const banks = await g.db.bank.findMany({ where: { id: { in: bankIds } }, select: { id: true, name: true, code: true } });
   const bankMap = new Map(banks.map((b) => [b.id, b]));
-  return {
-    ok: true,
-    data: rows.map((r) => ({
-      id: r.id,
-      bankId: r.bankId,
-      bankName: bankMap.get(r.bankId)?.name ?? null,
-      bankCode: bankMap.get(r.bankId)?.code ?? null,
-      name: r.name,
-      code: r.code,
-      ...trail(r, names)
-    }))
-  };
+  const data = rows.map((r) => ({
+    id: r.id,
+    bankId: r.bankId,
+    bankName: bankMap.get(r.bankId)?.name ?? null,
+    bankCode: bankMap.get(r.bankId)?.code ?? null,
+    name: r.name,
+    code: r.code,
+    ...trail(r, names)
+  }));
+  // Mr.Long 13/7 — "ưu tiên cùng 1 ngân hàng rồi mới đến ngân hàng khác": nhóm theo TÊN NGÂN HÀNG A→Z, trong mỗi
+  // ngân hàng sắp theo tên loại thẻ. (orderBy DB không sort được theo bankName vì là join → sort tại service.)
+  data.sort((a, b) => (a.bankName ?? '').localeCompare(b.bankName ?? '', 'vi') || a.name.localeCompare(b.name, 'vi'));
+  return { ok: true, data };
 }
 
 export async function createCardType(input: CreateCardTypeInput): Promise<MutationResult> {

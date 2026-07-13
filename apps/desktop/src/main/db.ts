@@ -151,6 +151,36 @@ export async function grantHandoverPermsToExistingRoles(db: Db): Promise<number>
   return granted;
 }
 
+// ── PHASE 1 (Mr.Long 13/7) — Yêu cầu xuất kho: bug class "DB tiến hóa" (H7) ───
+// Quyền yêu cầu xuất kho MỚI (EXPORT_REQUEST_*) phải cấp cho role ĐÃ TỒN TẠI trên DB cũ. Cùng khuôn kho:
+// APPROVE cho MANAGER + WAREHOUSE (ADMIN tự đủ mỗi boot); VIEW+CREATE cho MỌI role vận hành (trừ CUSTOMER).
+const EXPORT_REQ_FULL_CODES = ['EXPORT_REQUEST_VIEW', 'EXPORT_REQUEST_CREATE', 'EXPORT_REQUEST_APPROVE'];
+const EXPORT_REQ_BASE_CODES = ['EXPORT_REQUEST_VIEW', 'EXPORT_REQUEST_CREATE'];
+const EXPORT_REQ_FULL_ROLES = ['MANAGER', 'WAREHOUSE'];
+const EXPORT_REQ_BASE_ROLES = ['D_MANAGER', 'ACCOUNTANT', 'TECHNICIAN', 'SUPPORT', 'SALES'];
+const EXPORT_REQ_GRANT_FLAG = 'seed.exportReqPermsGrantedV1';
+
+/** Cấp (idempotent) quyền yêu cầu xuất kho cho role đã có sẵn (db-evolution). MANAGER/WAREHOUSE view+create+approve;
+ * D_MANAGER/ACCOUNTANT/TECHNICIAN/SUPPORT/SALES chỉ view+create. Trả số (role×quyền) vừa thêm. Cờ guard ở seedIfEmpty. */
+export async function grantExportReqPermsToExistingRoles(db: Db): Promise<number> {
+  const allPerms = await db.permission.findMany({ where: { code: { in: EXPORT_REQ_FULL_CODES } }, select: { id: true, code: true } });
+  const basePerms = allPerms.filter((p) => EXPORT_REQ_BASE_CODES.includes(p.code));
+  let granted = 0;
+  const grantSet = async (roleCode: string, perms: { id: number }[]): Promise<void> => {
+    const role = await db.role.findUnique({ where: { code: roleCode }, select: { id: true } });
+    if (!role) return;
+    for (const perm of perms) {
+      const existing = await db.rolePermission.findUnique({ where: { roleId_permissionId: { roleId: role.id, permissionId: perm.id } } });
+      if (existing) continue;
+      await db.rolePermission.create({ data: { roleId: role.id, permissionId: perm.id } });
+      granted++;
+    }
+  };
+  for (const roleCode of EXPORT_REQ_FULL_ROLES) await grantSet(roleCode, allPerms);
+  for (const roleCode of EXPORT_REQ_BASE_ROLES) await grantSet(roleCode, basePerms);
+  return granted;
+}
+
 // ── LOẠI GIAO MÁY (Mr.Long) — seed 4 loại giao builtin (idempotent theo name, ADDITIVE mỗi boot) ──
 // moneyKind quyết định mô hình tiền: SALE (bán đứt → device-sale), RENT (cho thuê → thu 1 lần doanh thu),
 // NONE (mượn → 0đ), DEPOSIT (cọc → nợ phải trả, hoàn khi thu máy về). isBuiltin=true: cấm xóa + khóa
@@ -666,6 +696,28 @@ export async function seedIfEmpty(db: Db): Promise<void> {
           action: 'HANDOVER_PERMS_GRANTED',
           targetType: 'System',
           after: { granted, fullRoles: HANDOVER_FULL_ROLES, viewRoles: HANDOVER_VIEW_ROLES, perms: HANDOVER_FULL_CODES }
+        });
+      }
+    }
+  }
+
+  // db-evolution (PHASE 1 yêu cầu xuất kho): cấp quyền EXPORT_REQUEST_* cho role CŨ 1 lần/DB (cờ
+  // AppSetting). DB mới → role vừa tạo đã có quyền qua DEFAULT_ROLE_PERMISSIONS → grant=0 (no-op an toàn).
+  {
+    const flag = await db.appSetting.findUnique({ where: { key: EXPORT_REQ_GRANT_FLAG } });
+    if (!flag) {
+      const granted = await grantExportReqPermsToExistingRoles(db);
+      await db.appSetting.upsert({
+        where: { key: EXPORT_REQ_GRANT_FLAG },
+        update: {},
+        create: { key: EXPORT_REQ_GRANT_FLAG, value: new Date().toISOString() }
+      });
+      if (granted > 0) {
+        await writeAudit(db, {
+          actorUserId: null,
+          action: 'EXPORT_REQ_PERMS_GRANTED',
+          targetType: 'System',
+          after: { granted, fullRoles: EXPORT_REQ_FULL_ROLES, baseRoles: EXPORT_REQ_BASE_ROLES, perms: EXPORT_REQ_FULL_CODES }
         });
       }
     }

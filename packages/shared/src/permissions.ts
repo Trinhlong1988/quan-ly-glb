@@ -121,6 +121,12 @@ export const PERMISSIONS: PermissionDef[] = [
   // ── #3 (Mr.Long 12/7) — Bán máy/TID + công nợ mua thiết bị (đúng vai trò: hành động tiền) ──
   { code: 'DEVICE_SALE_VIEW', name: 'Xem bán thiết bị & công nợ mua thiết bị', group: 'Doanh thu & Công nợ' },
   { code: 'DEVICE_SALE_MANAGE', name: 'Bán máy/TID + thu nợ mua thiết bị', group: 'Doanh thu & Công nợ' },
+  // ── PHASE 1 (Mr.Long 13/7) — Yêu cầu xuất kho POS/TID → Duyệt → đối trừ tồn kho ──
+  // User thường TẠO yêu cầu (chưa seri); người có quyền Kho DUYỆT + chọn seri/TID cụ thể lúc duyệt
+  // (tiền + tồn kho trừ LÚC DUYỆT). APPROVE gán ADMIN/MANAGER/WAREHOUSE; VIEW/CREATE cho mọi role vận hành.
+  { code: 'EXPORT_REQUEST_VIEW', name: 'Xem yêu cầu xuất kho POS/TID', group: 'Yêu cầu xuất kho' },
+  { code: 'EXPORT_REQUEST_CREATE', name: 'Tạo yêu cầu xuất kho POS/TID', group: 'Yêu cầu xuất kho' },
+  { code: 'EXPORT_REQUEST_APPROVE', name: 'Duyệt / từ chối yêu cầu xuất kho (chọn seri/TID + trừ tồn kho)', group: 'Yêu cầu xuất kho' },
   // ── Nhóm E — Bảo trì & Bộ nhớ (chống tràn, dọn dẹp, backup định kỳ) ──
   { code: 'STORAGE_VIEW', name: 'Xem tình trạng bộ nhớ & bảo trì', group: 'Bảo trì hệ thống' },
   { code: 'STORAGE_CLEANUP', name: 'Dọn dẹp bộ nhớ (lịch sử + thùng rác) & backup thủ công', group: 'Bảo trì hệ thống' }
@@ -224,7 +230,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'USER_CANCEL_APPROVE',
     // Nhóm E: managers xem tình trạng bộ nhớ & dọn dẹp bảo trì.
     'STORAGE_VIEW',
-    'STORAGE_CLEANUP'
+    'STORAGE_CLEANUP',
+    // PHASE 1: managers = người duyệt yêu cầu xuất kho (VIEW/CREATE cấp qua vòng lặp chung bên dưới).
+    'EXPORT_REQUEST_APPROVE'
   ],
   D_MANAGER: ['DASHBOARD_VIEW', 'USER_READ', 'ROLE_READ', 'CUSTOMER_VIEW', 'POS_VIEW', 'TID_VIEW', 'CONFIG_BANK_VIEW', 'CONFIG_WAREHOUSE_VIEW', 'CONFIG_HANDOVER_VIEW', 'DEVICE_SALE_VIEW'],
   ACCOUNTANT: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW', 'CONFIG_BANK_VIEW', 'CONFIG_FEE_VIEW', 'CONFIG_FEE_MANAGE', 'CONFIG_HANDOVER_VIEW', 'CONFIG_RCV_ACCT_VIEW', 'CONFIG_RCV_ACCT_MANAGE', 'CONFIG_DOSSIER_VIEW', 'CONFIG_DOSSIER_MANAGE', 'REVENUE_VIEW', 'REVENUE_MANAGE', 'DEBT_VIEW', 'DEBT_SETTLE', 'DEBT_CLASSIFY', 'BILL_CANCEL_REQUEST',
@@ -242,7 +250,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     // #3: kho vận CHỈ XEM bán thiết bị (bán = vai tiền, không cho kho tự bán).
     'DEVICE_SALE_VIEW',
     // R34: kho vận hành TID/POS → được TẠO yêu cầu hủy (duyệt vẫn do Admin/Manager).
-    'TID_CANCEL_REQUEST', 'POS_CANCEL_REQUEST'],
+    'TID_CANCEL_REQUEST', 'POS_CANCEL_REQUEST',
+    // PHASE 1: kho vận = người DUYỆT yêu cầu xuất kho (chọn seri/TID + trừ tồn). VIEW/CREATE cấp qua vòng lặp chung.
+    'EXPORT_REQUEST_APPROVE'],
   SALES: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW', 'CUSTOMER_CREATE'],
   CUSTOMER: []
 };
@@ -251,6 +261,16 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
 // và có thùng rác riêng (chỉ thấy đồ MÌNH xóa; Admin/Manager thấy TỔNG qua TRASH_VIEW_ALL).
 for (const roleCode of Object.keys(DEFAULT_ROLE_PERMISSIONS)) {
   for (const code of ['MESSAGE_VIEW', 'MESSAGE_SEND', 'TRASH_VIEW']) {
+    if (!DEFAULT_ROLE_PERMISSIONS[roleCode].includes(code)) DEFAULT_ROLE_PERMISSIONS[roleCode].push(code);
+  }
+}
+
+// PHASE 1 (Mr.Long 13/7): MỌI role vận hành đều XEM + TẠO được yêu cầu xuất kho ("user thường tạo yêu cầu").
+// Quyền DUYỆT (EXPORT_REQUEST_APPROVE) chỉ ADMIN/MANAGER/WAREHOUSE (gán riêng ở trên). CUSTOMER (role ngoài,
+// rỗng) KHÔNG nhận — không phải người dùng nội bộ vận hành kho.
+for (const roleCode of Object.keys(DEFAULT_ROLE_PERMISSIONS)) {
+  if (roleCode === 'CUSTOMER') continue;
+  for (const code of ['EXPORT_REQUEST_VIEW', 'EXPORT_REQUEST_CREATE']) {
     if (!DEFAULT_ROLE_PERMISSIONS[roleCode].includes(code)) DEFAULT_ROLE_PERMISSIONS[roleCode].push(code);
   }
 }

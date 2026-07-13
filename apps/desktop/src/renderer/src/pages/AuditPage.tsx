@@ -63,7 +63,8 @@ const ACTION_LABEL: Record<AuditAction, string> = {
   DEBT_CLASSIFIED: 'Phân loại chất lượng công nợ', DEBT_WRITTEN_OFF: 'Ghi giảm nợ xấu', DEBT_QUALITY_PERMS_GRANTED: 'Cấp quyền chất lượng công nợ',
   MESSAGE_SENT: 'Gửi tin nhắn',
   TRANSACTION_CREATED: 'Tạo giao dịch', TRANSACTION_UPDATED: 'Sửa giao dịch', TRANSACTION_DELETED: 'Xóa giao dịch', DEBT_SETTLED: 'Tất toán công nợ',
-  BILL_CANCEL_REQUESTED: 'Yêu cầu hủy bill', BILL_CANCEL_APPROVED: 'Duyệt hủy bill', BILL_CANCEL_REJECTED: 'Từ chối hủy bill'
+  BILL_CANCEL_REQUESTED: 'Yêu cầu hủy bill', BILL_CANCEL_APPROVED: 'Duyệt hủy bill', BILL_CANCEL_REJECTED: 'Từ chối hủy bill',
+  EXPORT_REQUEST_CREATED: 'Tạo yêu cầu xuất kho', EXPORT_REQUEST_APPROVED: 'Duyệt yêu cầu xuất kho', EXPORT_REQUEST_REJECTED: 'Từ chối yêu cầu xuất kho', EXPORT_REQUEST_CANCELLED: 'Hủy yêu cầu xuất kho', EXPORT_REQ_PERMS_GRANTED: 'Cấp quyền yêu cầu xuất kho'
 };
 // Danh sách filter = KHÓA của map (1 nguồn sự thật duy nhất — không còn mảng ACTIONS lệch pha), sắp theo nhãn Việt.
 const ACTIONS = (Object.keys(ACTION_LABEL) as AuditAction[]).sort((a, b) => ACTION_LABEL[a].localeCompare(ACTION_LABEL[b], 'vi'));

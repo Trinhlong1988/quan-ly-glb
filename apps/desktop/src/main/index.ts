@@ -416,6 +416,13 @@ app.whenReady().then(async () => {
     app.exit(code);
     return;
   }
+  // PHASE 1 (Mr.Long 13/7): Yêu cầu xuất kho POS/TID → Duyệt → đối trừ tồn kho (money-exact).
+  if (process.env['GLB_SELFTEST'] === '43') {
+    const { runExportRequestSelfTest } = await import('./selftest-export-request.js');
+    const code = await runExportRequestSelfTest();
+    app.exit(code);
+    return;
+  }
 
   await createWindow();
   startHousekeeping();

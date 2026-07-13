@@ -215,8 +215,9 @@ export async function sellTid(tid: string, input: SellTidInput, password: string
 }
 
 /** Ghi bút toán bán trong CÙNG transaction: doanh thu (SALE_POS/SALE_TID, fundId=null) + tiền thu ngay
- * (SALE_COLLECT vào quỹ) + settlement. Dùng chung cho sellPos/sellTid. */
-async function bookSaleCashEntries(
+ * (SALE_COLLECT vào quỹ) + settlement. Dùng chung cho sellPos/sellTid.
+ * EXPORT: PHASE 1 (yêu cầu xuất kho) TÁI DÙNG NGUYÊN money-model bán máy — KHÔNG nhân bản semantics tiền. */
+export async function bookSaleCashEntries(
   tx: Prisma.TransactionClient,
   a: { saleId: number; saleKind: 'POS' | 'TID'; salePrice: bigint; paid: bigint; fundId: number | null; method: string; entryDate: Date; customerId: number; userId: number }
 ): Promise<void> {

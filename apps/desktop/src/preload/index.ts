@@ -294,6 +294,11 @@ const api = {
   entityCancelList: (status?: string, entityType?: string) => ipcRenderer.invoke('entityCancel:list', { status, entityType }),
   entityCancelApprove: (entityType: string, requestId: number, password: string, note?: string) => ipcRenderer.invoke('entityCancel:approve', { entityType, requestId, password, note }),
   entityCancelReject: (entityType: string, requestId: number, note: string) => ipcRenderer.invoke('entityCancel:reject', { entityType, requestId, note }),
+  exportReqCreate: (input: unknown) => ipcRenderer.invoke('exportReq:create', input),
+  exportReqList: (filter?: unknown) => ipcRenderer.invoke('exportReq:list', filter),
+  exportReqApprove: (requestId: number, lines: unknown, password: string, note?: string) => ipcRenderer.invoke('exportReq:approve', { requestId, lines, password, note }),
+  exportReqReject: (requestId: number, note: string) => ipcRenderer.invoke('exportReq:reject', { requestId, note }),
+  exportReqCancel: (requestId: number, note?: string) => ipcRenderer.invoke('exportReq:cancel', { requestId, note }),
 
   // Bảo trì & Bộ nhớ (Nhóm E — Storage-Guard)
   storageStatus: () => ipcRenderer.invoke('storage:status'),

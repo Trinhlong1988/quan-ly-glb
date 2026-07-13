@@ -41,6 +41,7 @@ import * as dashboardSvc from './dashboard-service.js';
 import * as txnSvc from './transaction-service.js';
 import * as approvalSvc from './approval-service.js';
 import * as entityCancelSvc from './entity-cancel-service.js';
+import * as exportReqSvc from './export-request-service.js';
 import * as storageSvc from './storage-service.js';
 import * as healthSvc from './health-scan.js';
 import { getRemembered, saveRemembered, clearRemembered } from './remember.js';
@@ -442,6 +443,13 @@ export function registerIpc(): void {
   ipcMain.handle('entityCancel:list', async (_e, a?: { status?: string; entityType?: string }) => entityCancelSvc.listEntityCancelRequests(a?.status, a?.entityType));
   ipcMain.handle('entityCancel:approve', async (_e, a: { entityType: string; requestId: number; password: string; note?: string }) => entityCancelSvc.approveEntityCancel(a.entityType, a.requestId, a.password, a.note));
   ipcMain.handle('entityCancel:reject', async (_e, a: { entityType: string; requestId: number; note: string }) => entityCancelSvc.rejectEntityCancel(a.entityType, a.requestId, a.note));
+
+  // PHASE 1 — Yêu cầu xuất kho POS/TID → Duyệt → đối trừ tồn kho.
+  ipcMain.handle('exportReq:create', async (_e, input: exportReqSvc.CreateExportRequestInput) => exportReqSvc.createExportRequest(input));
+  ipcMain.handle('exportReq:list', async (_e, filter?: exportReqSvc.ExportRequestFilter) => exportReqSvc.listExportRequests(filter ?? {}));
+  ipcMain.handle('exportReq:approve', async (_e, a: { requestId: number; lines: exportReqSvc.ApproveLineInput[]; password: string; note?: string }) => exportReqSvc.approveExportRequest(a.requestId, a.lines, a.password, a.note));
+  ipcMain.handle('exportReq:reject', async (_e, a: { requestId: number; note: string }) => exportReqSvc.rejectExportRequest(a.requestId, a.note));
+  ipcMain.handle('exportReq:cancel', async (_e, a: { requestId: number; note?: string }) => exportReqSvc.cancelExportRequest(a.requestId, a.note));
 
   // ── Nhóm E — Bảo trì & Bộ nhớ (Storage-Guard) ──
   ipcMain.handle('storage:status', async () => storageSvc.getStorageStatus());

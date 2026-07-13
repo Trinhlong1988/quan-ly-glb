@@ -69,7 +69,7 @@ const FONT = 'Times New Roman';
 const C_TITLE = 'FF2E75B6';
 const C_SUMMARY = 'FFFFF2CC';
 const C_HEADER = 'FFBDD7EE';
-const C_ZEBRA = 'FFF5F7FA';
+const C_ZEBRA = 'FFDEEBF7'; // Mr.Long 13/7 "mỗi hàng 1 màu xanh và trắng" — xanh nhạt rõ (trước là xám gần trắng)
 const THIN = { style: 'thin' as const, color: { argb: 'FFBFBFBF' } };
 const BORDER = { top: THIN, left: THIN, bottom: THIN, right: THIN };
 
