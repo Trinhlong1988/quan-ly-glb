@@ -62,15 +62,15 @@ const MENU: MenuItem[] = [
   // PHASE Nhóm 1 — "Danh mục kho" gộp thành TAB ĐẦU của Quản Lý Máy POS → thêm CONFIG_WAREHOUSE_VIEW vào
   // điều kiện hiện menu (ai chỉ có quyền kho vẫn vào được trang POS để thấy tab Kho).
   { key: 'pos', label: 'Quản Lý Máy POS', icon: <HardDrive className="h-[18px] w-[18px]" />, perms: ['POS_VIEW', 'CONFIG_POS_SUPPLY_VIEW', 'CONFIG_WAREHOUSE_VIEW'] },
-  // R3: "Cấu hình ngân hàng" nay gồm tab "Phí mua-cài máy-bán" (gộp Cấu hình % phí POS cũ) + tab "Ngành nghề"
-  // + tab "Loại giao" (LOẠI GIAO MÁY, Mr.Long) → menu hiện với CONFIG_BANK_VIEW HOẶC CONFIG_FEE_VIEW HOẶC
-  // CONFIG_INDUSTRY_VIEW HOẶC CONFIG_HANDOVER_VIEW (ai chỉ có quyền loại giao vẫn vào được để thấy tab).
-  { key: 'bankcfg', label: 'Cấu hình ngân hàng', icon: <Landmark className="h-[18px] w-[18px]" />, perms: ['CONFIG_BANK_VIEW', 'CONFIG_FEE_VIEW', 'CONFIG_INDUSTRY_VIEW', 'CONFIG_HANDOVER_VIEW'] },
+  // Mr.Long 13/7 — thứ tự: Máy POS → TID → Doanh thu (cụm vận hành liền nhau).
+  { key: 'tid', label: 'Quản Lý TID', icon: <CreditCard className="h-[18px] w-[18px]" />, perms: ['TID_VIEW', 'CONFIG_TID_VIEW'], badge: 'undeliveredTid' },
   { key: 'revdebt', label: 'Quản Lý Doanh Thu & Công Nợ', icon: <TrendingUp className="h-[18px] w-[18px]" />, perms: ['REVENUE_VIEW', 'DEBT_VIEW', 'DEVICE_SALE_VIEW'] },
   // R31: "Quản Lý Tài Khoản Nhận Tiền" đã gộp thành tab trong Quản Lý Nhân Sự (cạnh Vai trò & Quyền).
   { key: 'dossier', label: 'Quản Lý Hồ Sơ HKD', icon: <FolderKanban className="h-[18px] w-[18px]" />, perms: ['CONFIG_DOSSIER_VIEW'] },
   { key: 'finance', label: 'Quản Lý Tài Chính', icon: <Wallet className="h-[18px] w-[18px]" />, perms: ['CASHENTRY_VIEW', 'FUND_VIEW', 'CASHCAT_VIEW'] },
-  { key: 'tid', label: 'Quản Lý TID', icon: <CreditCard className="h-[18px] w-[18px]" />, perms: ['TID_VIEW', 'CONFIG_TID_VIEW'], badge: 'undeliveredTid' },
+  // Mr.Long 13/7 — "Cấu hình ngân hàng" → "Quản Lý Ngân Hàng - Đối Tác", đưa xuống DƯỚI Quản Lý Tài Chính.
+  // Gồm tab Ngân hàng/Đối tác + "Phí mua-cài máy-bán" + "Ngành nghề" + "Loại giao" → menu hiện với 1 trong các quyền.
+  { key: 'bankcfg', label: 'Quản Lý Ngân Hàng - Đối Tác', icon: <Landmark className="h-[18px] w-[18px]" />, perms: ['CONFIG_BANK_VIEW', 'CONFIG_FEE_VIEW', 'CONFIG_INDUSTRY_VIEW', 'CONFIG_HANDOVER_VIEW'] },
   // R34: "Duyệt Hủy" gộp yêu cầu hủy bill + hủy dữ liệu (TID/POS/Khách/Nhân sự). Hiện với ai có bất kỳ quyền duyệt.
   { key: 'approval', label: 'Quản lý dữ liệu yêu cầu duyệt hủy', icon: <ClipboardCheck className="h-[18px] w-[18px]" />, perms: ['BILL_CANCEL_APPROVE', 'TID_CANCEL_APPROVE', 'POS_CANCEL_APPROVE', 'CUSTOMER_CANCEL_APPROVE', 'USER_CANCEL_APPROVE'], badge: 'pendingCancels' },
   { key: 'system', label: 'Quản Lý Cấu Hình Hệ Thống', icon: <Settings className="h-[18px] w-[18px]" />, perms: ['AUDIT_LOG_VIEW', 'SYSTEM_SETTING_VIEW', 'BACKUP_CREATE', 'BACKUP_RESTORE', 'STORAGE_VIEW', 'TRASH_VIEW'] }

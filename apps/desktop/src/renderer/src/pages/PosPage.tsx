@@ -75,6 +75,24 @@ export function PosPage({ user }: { user: AuthUser }): JSX.Element {
   );
 }
 
+/** Nút thao tác CHỈ ICON (chống tràn cột Thao tác) — hover hiện nhãn chữ TO RÕ (Mr.Long 13/7). */
+function IconAction({ label, tone, onClick, children }: { label: string; tone: 'slate' | 'warning' | 'emerald' | 'danger'; onClick: () => void; children: JSX.Element }): JSX.Element {
+  const toneCls: Record<string, string> = {
+    slate: 'border-line text-slate-600 hover:bg-appbg',
+    warning: 'border-warning/40 bg-warning/5 text-warning hover:brightness-110',
+    emerald: 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:brightness-105',
+    danger: 'border-danger/30 bg-danger/5 text-danger hover:brightness-110'
+  };
+  return (
+    <button onClick={onClick} title={label} aria-label={label} className={`group relative rounded-md border p-1.5 ${toneCls[tone]}`}>
+      {children}
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-md bg-slate-800 px-3 py-1.5 text-sm font-bold text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">
+        {label}
+      </span>
+    </button>
+  );
+}
+
 /** Tab [Danh sách máy] — nguồn PosDevice. StatBar theo status + hành động vòng đời máy. */
 function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
   const toast = useToast();
@@ -225,7 +243,7 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
       {canCancelReq && <SelectionBar count={sel.count} entityLabel="máy POS" onClear={sel.clear} onDelete={() => setBulkCancel(true)} actionLabel={`Yêu cầu hủy (${sel.count})`} />}
       <StaleBanner domain="Pos" onReload={reload} className="mb-2" />
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
-        <table className="w-full text-sm">
+        <table className="w-full text-[13px]">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
               {canCancelReq && <SelectAllCell ids={filteredRows.map((r) => r.id)} sel={sel} />}
@@ -237,7 +255,7 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
               <th className="px-4 py-3">Ngày nhập</th>
               <th className="px-4 py-3">Trạng thái</th>
               <th className="px-4 py-3">Kho</th>
-              <th className="px-4 py-3">TID hiện tại</th>
+              <th className="px-4 py-3 whitespace-nowrap">TID hiện tại</th>
               <th className="px-4 py-3">Khách</th>
               <th className="px-4 py-3 text-right">Thao tác</th>
             </tr>
@@ -276,32 +294,20 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
                     <StatusBadge entity="POS_DEVICE" code={d.status} />
                   </td>
                   <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{d.warehouseName ?? (d.status === 'IN_STOCK' ? <span className="text-amber-500">Chưa gán kho</span> : '—')}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-slate-500 whitespace-nowrap">{d.currentTid ?? '—'}</td>
+                  <td className="px-4 py-3 font-mono text-[13px] font-semibold text-slate-600 whitespace-nowrap">{d.currentTid ?? '—'}</td>
                   <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{d.customerName ?? '—'}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => setTimelineOf(d)}
-                        title="Dòng thời gian"
-                        className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-xs text-slate-600 hover:bg-appbg"
-                      >
-                        <History className="h-3.5 w-3.5" /> Vòng đời
-                      </button>
+                  <td className="px-3 py-3 whitespace-nowrap">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <IconAction label="Vòng đời" tone="slate" onClick={() => setTimelineOf(d)}><History className="h-5 w-5" /></IconAction>
                       {d.recallPending && (
                         <span title="Khách đã hủy — máy chưa thu về" className="rounded-full bg-warning/15 px-2 py-0.5 text-xs font-semibold text-warning whitespace-nowrap">Cần thu hồi</span>
                       )}
                       {canManage && (
-                        <button
-                          onClick={() => setEditTarget(d)}
-                          title="Sửa thông tin hồ sơ máy"
-                          className="flex items-center gap-1 rounded-md border border-warning/40 bg-warning/5 px-2 py-1 text-xs font-semibold text-warning hover:brightness-110"
-                        >
-                          <Pencil className="h-3.5 w-3.5" /> Sửa
-                        </button>
+                        <IconAction label="Sửa hồ sơ máy" tone="warning" onClick={() => setEditTarget(d)}><Pencil className="h-5 w-5" /></IconAction>
                       )}
                       {canManage && (NEXT[d.status]?.length ?? 0) > 0 && (
                         <select
-                          className="rounded-md border border-line px-2 py-1 text-xs text-slate-600 hover:bg-appbg"
+                          className="rounded-md border border-line px-2 py-1.5 text-xs text-slate-600 hover:bg-appbg"
                           value=""
                           onChange={(e) => e.target.value && setActionOf({ device: d, event: e.target.value })}
                         >
@@ -314,22 +320,10 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
                         </select>
                       )}
                       {canSell && (d.status === 'IN_STOCK' || d.status === 'DEPLOYED') && (
-                        <button
-                          onClick={() => setSaleTarget(d)}
-                          title="Bán máy (kèm TID nếu có)"
-                          className="flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 hover:brightness-105"
-                        >
-                          <Banknote className="h-3.5 w-3.5" /> Bán máy
-                        </button>
+                        <IconAction label="Bán máy (kèm TID nếu có)" tone="emerald" onClick={() => setSaleTarget(d)}><Banknote className="h-5 w-5" /></IconAction>
                       )}
                       {canCancelReq && (
-                        <button
-                          onClick={() => setCancelTarget({ entityType: 'PosDevice', entityId: d.id, entityLabel: d.serial, typeLabel: 'máy POS' })}
-                          title="Yêu cầu hủy"
-                          className="flex items-center gap-1 rounded-md border border-danger/30 bg-danger/5 px-2 py-1 text-xs font-semibold text-danger hover:brightness-110"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" /> Yêu cầu hủy
-                        </button>
+                        <IconAction label="Yêu cầu hủy" tone="danger" onClick={() => setCancelTarget({ entityType: 'PosDevice', entityId: d.id, entityLabel: d.serial, typeLabel: 'máy POS' })}><Trash2 className="h-5 w-5" /></IconAction>
                       )}
                     </div>
                   </td>

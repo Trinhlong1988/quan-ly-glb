@@ -490,7 +490,7 @@ export function IntakeTab({ canManage }: { canManage: boolean }): JSX.Element {
       <div className="mb-3 flex items-center justify-between">
         <div className="text-sm text-slate-500">{visibleRows.length} máy POS trong kho</div>
         <div className="flex gap-2">
-          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('nhap_kho_pos', ['Số thứ tự', 'Chủng loại', 'Số seri', 'Nhà cung cấp', 'Giá nhập', 'Ngày nhập', 'Trạng thái'], visibleRows.map((r, i) => [i + 1, `${r.posModelCode} · ${r.posModelName}`, r.serial, r.supplierName, r.importPrice, fmtDate(r.importedAt), r.intakeStatusName]))}>Xuất Excel</Button>
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('nhap_kho_pos', ['Số thứ tự', 'Chủng loại', 'Cài APP', 'Số seri', 'Nhà cung cấp', 'Giá nhập', 'Ngày nhập', 'Trạng thái'], visibleRows.map((r, i) => [i + 1, `${r.posModelCode} · ${r.posModelName}`, r.bankCode ?? 'Máy trắng', r.serial, r.supplierName, r.importPrice, fmtDate(r.importedAt), r.intakeStatusName]))}>Xuất Excel</Button>
           {canManage && <ImportButton entityKey="posIntake" label="POS nhập kho" onImported={reload} />}
           {canManage && <Button variant="confirm" icon={<PackagePlus className="h-4 w-4" />} onClick={() => canAdd ? setForm({ mode: 'create' }) : toast.alert(prereqMessage(prereqDefs) ?? 'Thiếu dữ liệu nền để nhập kho.', 'Thiếu dữ liệu nền')}>Nhập kho máy POS</Button>}
         </div>
@@ -520,6 +520,7 @@ export function IntakeTab({ canManage }: { canManage: boolean }): JSX.Element {
               {canManage && <SelectAllCell ids={visibleRows.map((r) => r.id)} sel={sel} />}
               <th className="px-4 py-3">Số thứ tự</th>
               <th className="px-4 py-3">Chủng loại</th>
+              <th className="px-4 py-3">Cài APP</th>
               <th className="px-4 py-3">Seri number</th>
               <th className="px-4 py-3">Nhà cung cấp</th>
               <th className="px-4 py-3 text-right">Giá nhập</th>
@@ -529,13 +530,14 @@ export function IntakeTab({ canManage }: { canManage: boolean }): JSX.Element {
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {loading && <tr><td colSpan={canManage ? 9 : 7} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
-            {!loading && visibleRows.length === 0 && <tr><td colSpan={canManage ? 9 : 7} className="px-4 py-10 text-center text-slate-400"><PackagePlus className="mx-auto mb-2 h-6 w-6" /> {statusId ? 'Không có máy POS khớp trạng thái đã lọc.' : 'Chưa có máy POS nào nhập kho.'}</td></tr>}
+            {loading && <tr><td colSpan={canManage ? 10 : 8} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+            {!loading && visibleRows.length === 0 && <tr><td colSpan={canManage ? 10 : 8} className="px-4 py-10 text-center text-slate-400"><PackagePlus className="mx-auto mb-2 h-6 w-6" /> {statusId ? 'Không có máy POS khớp trạng thái đã lọc.' : 'Chưa có máy POS nào nhập kho.'}</td></tr>}
             {!loading && visibleRows.map((pi, i) => (
               <tr key={pi.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(pi.id) ? 'bg-brand-tint/40' : '')}>
                 {canManage && <SelectCell id={pi.id} sel={sel} />}
                 <td className="px-4 py-3 text-slate-500">{i + 1}</td>
                 <td className="px-4 py-3"><span className="font-mono text-xs font-semibold text-brand whitespace-nowrap">{pi.posModelCode}</span> <span className="text-slate-700">{pi.posModelName}</span></td>
+                <td className="px-4 py-3 whitespace-nowrap">{pi.bankCode ? <span className="rounded-full bg-brand-tint/60 px-2 py-0.5 text-xs font-semibold text-brand">{pi.bankCode}</span> : <span className="text-xs text-slate-400">Máy trắng</span>}</td>
                 <td className="px-4 py-3 font-mono text-xs font-medium text-slate-800 whitespace-nowrap">{pi.serial}</td>
                 <td className="px-4 py-3 text-slate-600">{pi.supplierCode ? `${pi.supplierCode} · ${pi.supplierName}` : (pi.supplierName ?? '—')}</td>
                 <td className="px-4 py-3 text-right font-medium text-slate-800 whitespace-nowrap">{fmtVnd(pi.importPrice)}</td>

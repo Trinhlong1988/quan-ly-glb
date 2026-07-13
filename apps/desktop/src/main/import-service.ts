@@ -274,10 +274,11 @@ export const IMPORT_REGISTRY: Record<string, ImportEntity> = {
   posIntake: {
     label: 'POS nhập kho',
     permission: 'CONFIG_POS_SUPPLY_MANAGE',
-    resolverKeys: ['posModel', 'supplier', 'intakeStatus'],
+    resolverKeys: ['posModel', 'supplier', 'intakeStatus', 'bank'],
     templateColumns: [
       { header: 'Số seri', field: 'serial', required: true, kind: 'text' },
       { header: 'Chủng loại', field: 'posModelId', required: true, kind: 'ref', ref: 'posModel', hint: 'Tên hoặc mã chủng loại' },
+      { header: 'Cài APP (ngân hàng)', field: 'bankId', required: false, kind: 'ref', ref: 'bank', hint: 'Mã/tên ngân hàng app (để TRỐNG = máy trắng)' },
       { header: 'Nhà cung cấp', field: 'supplierId', required: true, kind: 'ref', ref: 'supplier', hint: 'Tên hoặc mã NCC' },
       { header: 'Trạng thái nhập', field: 'intakeStatusId', required: true, kind: 'ref', ref: 'intakeStatus', hint: 'Tên trạng thái nhập' },
       { header: 'Giá nhập', field: 'importPrice', required: true, kind: 'money' },
@@ -292,6 +293,7 @@ export const IMPORT_REGISTRY: Record<string, ImportEntity> = {
         intakeStatusId: r.intakeStatusId,
         importPrice: r.importPrice,
         importedAt: r.importedAt,
+        bankId: (r.bankId as number | undefined) ?? null,
         note: (r.note as string | undefined) ?? null
       } as CreatePosIntakeInput
     }),

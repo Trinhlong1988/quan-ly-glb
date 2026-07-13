@@ -413,6 +413,7 @@ export interface PosIntakeDto extends AuditTrail {
   posModelCode: string | null;
   posModelName: string | null;
   serial: string;
+  bankCode: string | null; // Cài APP — app ngân hàng của máy (resolve từ PosDevice theo serial). null = máy trắng.
   intakeStatusId: number;
   intakeStatusName: string | null;
   supplierId: number;
@@ -483,6 +484,11 @@ export async function listPosIntakes(filter: PosIntakeFilter = {}): Promise<{ ok
   const modelMap = new Map((await g.db.posModel.findMany({ where: { id: { in: [...new Set(rows.map((r) => r.posModelId))] } }, select: { id: true, code: true, name: true } })).map((m) => [m.id, m]));
   const supMap = new Map((await g.db.supplier.findMany({ where: { id: { in: [...new Set(rows.map((r) => r.supplierId))] } }, select: { id: true, code: true, name: true } })).map((s) => [s.id, s]));
   const stMap = new Map((await g.db.posIntakeStatus.findMany({ where: { id: { in: [...new Set(rows.map((r) => r.intakeStatusId))] } }, select: { id: true, name: true } })).map((s) => [s.id, s]));
+  // Cài APP — resolve app ngân hàng của máy theo serial (bankId sống trên PosDevice, không trên PosIntake).
+  const devs = await g.db.posDevice.findMany({ where: { serial: { in: [...new Set(rows.map((r) => r.serial))] } }, select: { serial: true, bankId: true } });
+  const bankIds = [...new Set(devs.map((d) => d.bankId).filter((x): x is number => x != null))];
+  const bankCodeMap = new Map((await g.db.bank.findMany({ where: { id: { in: bankIds } }, select: { id: true, code: true } })).map((b) => [b.id, b.code]));
+  const serialBankMap = new Map(devs.map((d) => [d.serial, d.bankId != null ? bankCodeMap.get(d.bankId) ?? null : null]));
   return {
     ok: true,
     data: rows.map((r) => ({
@@ -491,6 +497,7 @@ export async function listPosIntakes(filter: PosIntakeFilter = {}): Promise<{ ok
       posModelCode: modelMap.get(r.posModelId)?.code ?? null,
       posModelName: modelMap.get(r.posModelId)?.name ?? null,
       serial: r.serial,
+      bankCode: serialBankMap.get(r.serial) ?? null,
       intakeStatusId: r.intakeStatusId,
       intakeStatusName: stMap.get(r.intakeStatusId)?.name ?? null,
       supplierId: r.supplierId,

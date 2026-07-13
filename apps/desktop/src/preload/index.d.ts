@@ -782,6 +782,7 @@ export interface PosIntakeDto extends AuditTrail {
   posModelCode: string | null;
   posModelName: string | null;
   serial: string;
+  bankCode: string | null;
   intakeStatusId: number;
   intakeStatusName: string | null;
   supplierId: number;
