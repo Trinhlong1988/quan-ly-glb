@@ -64,15 +64,20 @@ export function SearchSelect({
   return (
     <div className="relative" ref={boxRef}>
       <div className="relative">
+        {/* Kính lúp bên trái → nhìn là biết Ô TÌM KIẾM (Mr.Long "phải có box tìm kiếm chứ"). */}
+        <svg viewBox="0 0 20 20" className={'pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 ' + (disabled ? 'text-slate-300' : 'text-slate-400')} fill="none" stroke="currentColor" strokeWidth={2}>
+          <circle cx="9" cy="9" r="6" /><path d="M14 14l3.5 3.5" strokeLinecap="round" />
+        </svg>
         <input
-          className={inputCls + ' w-full pr-8' + (disabled ? ' cursor-not-allowed bg-slate-50 text-slate-400' : '')}
+          className={inputCls + ' w-full pl-9 pr-8' + (disabled ? ' cursor-not-allowed bg-slate-50 text-slate-400' : '')}
           value={open ? query : selectedLabel}
-          placeholder={placeholder}
+          placeholder={disabled ? placeholder : (placeholder ? placeholder + ' — gõ để tìm' : 'Gõ để tìm…')}
           disabled={disabled}
           onFocus={() => { if (!disabled) { setOpen(true); setQuery(''); } }}
+          onClick={() => { if (!disabled && !open) { setOpen(true); setQuery(''); } }}
           onChange={(e) => { setQuery(e.target.value); if (!open) setOpen(true); }}
         />
-        {value && !disabled && (
+        {value && !disabled ? (
           <button
             type="button"
             title="Xóa lựa chọn"
@@ -82,6 +87,8 @@ export function SearchSelect({
           >
             <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2}><path d="M6 6l8 8M14 6l-8 8" strokeLinecap="round" /></svg>
           </button>
+        ) : (
+          !disabled && <svg viewBox="0 0 20 20" className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" strokeWidth={2}><path d="M6 8l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" /></svg>
         )}
       </div>
       {open && (
