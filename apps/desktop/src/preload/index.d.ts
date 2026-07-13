@@ -243,6 +243,7 @@ export interface TidSellFeeRowDto {
   cardTypeId: number;
   cardTypeCode: string | null;
   cardTypeName: string;
+  phiMuaNiemYet: number | null; // % phí MUA niêm yết (FeeRate, tham chiếu)
   phiBanNiemYet: number | null; // % niêm yết (FeeSellQuote loại phí này, hiệu lực hôm nay)
   phiCaiMayNiemYet: number | null; // % phí cài máy niêm yết (FeeRate, tham chiếu)
   phiBanThucTe: number | null; // % override, null = dùng niêm yết
@@ -700,6 +701,7 @@ export interface CancelRequestDto {
   requestedByName: string | null;
   requestedAt: string;
   canApprove: boolean;
+  isSelf: boolean;
 }
 
 /** R34 — 1 yêu cầu hủy (xóa) TID/POS/Khách/Nhân sự đang chờ duyệt (trung tâm Duyệt Hủy gộp). */
@@ -715,6 +717,7 @@ export interface EntityCancelRequestDto {
   requestedByName: string | null;
   requestedAt: string;
   canApprove: boolean;
+  isSelf: boolean;
 }
 
 // ── G-CFG.2 DTOs (Cấu hình cung ứng POS §C6–C8) ──
@@ -1098,6 +1101,8 @@ export interface ConfigTidDto extends AuditTrail {
   configStatusName: string | null;
   dossierSourceId: number | null;
   dossierSourceCode: string | null;
+  customerId: number | null; // khách được giao TID (Tid.customerId) — GD tự liên kết theo TID
+  customerName: string | null; // nickname||fullName của khách theo TID
   note: string | null;
 }
 export interface ConfigTidFilter {

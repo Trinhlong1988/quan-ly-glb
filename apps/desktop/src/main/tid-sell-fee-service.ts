@@ -26,6 +26,7 @@ export interface TidSellFeeRowDto {
   cardTypeId: number;
   cardTypeCode: string | null;
   cardTypeName: string;
+  phiMuaNiemYet: number | null; // % — phí MUA niêm yết (FeeRate hiệu lực; tham chiếu chênh mua = mua − cài máy)
   phiBanNiemYet: number | null; // % — phí bán niêm yết (FeeSellQuote loại phí này, hiệu lực hôm nay), null nếu chưa cấu hình
   phiCaiMayNiemYet: number | null; // % — phí cài máy niêm yết (FeeRate hiệu lực; tham chiếu CL_KH = bán − cài máy)
   phiBanThucTe: number | null; // % — phí bán THỰC TẾ (override), null = dùng niêm yết
@@ -66,14 +67,15 @@ export async function listTidSellFees(tidId: number, feeTypeId: number): Promise
 
   const rows: TidSellFeeRowDto[] = [];
   for (const c of cards) {
+    let phiMuaNiemYet: number | null = null;
     let phiBanNiemYet: number | null = null;
     let phiCaiMayNiemYet: number | null = null;
     if (tid.partnerId != null) {
-      // FEE_MODEL — phí cài máy niêm yết từ FeeRate (cố định, không loại phí); phí bán niêm yết từ
+      // FEE_MODEL — phí mua + phí cài máy niêm yết từ FeeRate (cố định, không loại phí); phí bán niêm yết từ
       // FeeSellQuote theo LOẠI PHÍ đã chọn (mỗi loại phí 1 % niêm yết).
       const rates = await db.feeRate.findMany({ where: { partnerId: tid.partnerId, cardTypeId: c.id, deletedAt: null } });
       const rate = pickEffectiveRate(rates, now);
-      if (rate) phiCaiMayNiemYet = milliToPct(rate.phiCaiMay);
+      if (rate) { phiMuaNiemYet = milliToPct(rate.phiMua); phiCaiMayNiemYet = milliToPct(rate.phiCaiMay); }
       const quotes = await db.feeSellQuote.findMany({ where: { partnerId: tid.partnerId, cardTypeId: c.id, feeTypeId, deletedAt: null } });
       const quote = pickEffectiveRate(quotes, now);
       if (quote) phiBanNiemYet = milliToPct(quote.phiBan);
@@ -83,6 +85,7 @@ export async function listTidSellFees(tidId: number, feeTypeId: number): Promise
       cardTypeId: c.id,
       cardTypeCode: c.code ?? null,
       cardTypeName: c.name,
+      phiMuaNiemYet,
       phiBanNiemYet,
       phiCaiMayNiemYet,
       phiBanThucTe: ov ? milliToPct(ov.phiBan) : null,

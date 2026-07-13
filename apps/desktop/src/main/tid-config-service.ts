@@ -173,6 +173,8 @@ export interface ConfigTidDto extends AuditTrail {
   configStatusName: string | null;
   dossierSourceId: number | null;
   dossierSourceCode: string | null;
+  customerId: number | null; // khách được giao TID (Tid.customerId) — GD tự liên kết theo TID
+  customerName: string | null; // nickname||fullName của khách theo TID
   note: string | null;
 }
 export interface ConfigTidFilter {
@@ -222,6 +224,8 @@ export async function listConfigTids(filter: ConfigTidFilter = {}): Promise<{ ok
   const accounts = new Map((await db.receiveAccount.findMany({ where: { id: { in: ids(rows.map((r) => r.receiveAccountId)) } }, select: { id: true, accountName: true, accountNumber: true } })).map((a) => [a.id, a]));
   const statuses = new Map((await db.tidConfigStatus.findMany({ where: { id: { in: ids(rows.map((r) => r.configStatusId)) } }, select: { id: true, name: true } })).map((s) => [s.id, s]));
   const dsources = new Map((await db.dossierSource.findMany({ where: { id: { in: ids(rows.map((r) => r.dossierSourceId)) } }, select: { id: true, code: true } })).map((s) => [s.id, s]));
+  // Khách được giao TID (Tid.customerId) — GD tự liên kết khách theo TID (không chọn tay ở form ghi nhận GD).
+  const custs = new Map((await db.customer.findMany({ where: { id: { in: ids(rows.map((r) => r.customerId)) } }, select: { id: true, nickname: true, fullName: true } })).map((c) => [c.id, c]));
   return {
     ok: true,
     data: rows.map((r) => {
@@ -245,6 +249,8 @@ export async function listConfigTids(filter: ConfigTidFilter = {}): Promise<{ ok
         configStatusName: r.configStatusId != null ? statuses.get(r.configStatusId)?.name ?? null : null,
         dossierSourceId: r.dossierSourceId,
         dossierSourceCode: r.dossierSourceId != null ? dsources.get(r.dossierSourceId)?.code ?? null : null,
+        customerId: r.customerId,
+        customerName: r.customerId != null ? (custs.get(r.customerId)?.nickname || custs.get(r.customerId)?.fullName || null) : null,
         note: r.note,
         ...trail(r, names)
       };

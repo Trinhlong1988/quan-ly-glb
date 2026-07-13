@@ -57,7 +57,8 @@ export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
         window.api.cancelRequestList('APPROVED'),
         window.api.cancelRequestList('REJECTED')
       ]);
-      if (pend.ok && pend.data) setRows(pend.data.filter((r) => r.canApprove));
+      // Hiện phiếu bạn ĐƯỢC duyệt HOẶC do CHÍNH bạn tạo (để bạn biết đang chờ người khác duyệt — chống "tạo xong biến mất").
+      if (pend.ok && pend.data) setRows(pend.data.filter((r) => r.canApprove || r.isSelf));
       else if (pend.message) toast.alert(pend.message);
       const pc = pend.ok && pend.data ? pend.data.length : 0;
       const ac = appr.ok && appr.data ? appr.data.length : 0;
@@ -67,7 +68,7 @@ export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
     // R34 — yêu cầu hủy dữ liệu (TID/POS/Khách/Nhân sự) đang chờ bạn duyệt.
     if (canEntity) {
       const ent = await window.api.entityCancelList('PENDING');
-      if (ent.ok && ent.data) setEntityRows(ent.data.filter((r) => r.canApprove));
+      if (ent.ok && ent.data) setEntityRows(ent.data.filter((r) => r.canApprove || r.isSelf));
       else if (ent.message) toast.alert(ent.message);
     }
     sel.clear();
@@ -214,10 +215,14 @@ export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
                 <td className="px-3 py-3 text-slate-600">{r.requestedByName ?? `#${r.requestedBy}`}</td>
                 <td className="px-3 py-3 text-xs text-slate-500">{fmtDate(r.requestedAt)}</td>
                 <td className="px-3 py-3">
-                  <div className="flex justify-end gap-1">
-                    <button title="Duyệt hủy" onClick={() => setDialog({ kind: 'approve', row: r })} className="rounded-md p-1.5 text-success transition hover:bg-success/10"><Check className="h-4 w-4" /></button>
-                    <button title="Từ chối" onClick={() => setDialog({ kind: 'reject', row: r })} className="rounded-md p-1.5 text-danger transition hover:bg-danger/10"><X className="h-4 w-4" /></button>
-                  </div>
+                  {r.canApprove ? (
+                    <div className="flex justify-end gap-1">
+                      <button title="Duyệt hủy" onClick={() => setDialog({ kind: 'approve', row: r })} className="rounded-md p-1.5 text-success transition hover:bg-success/10"><Check className="h-4 w-4" /></button>
+                      <button title="Từ chối" onClick={() => setDialog({ kind: 'reject', row: r })} className="rounded-md p-1.5 text-danger transition hover:bg-danger/10"><X className="h-4 w-4" /></button>
+                    </div>
+                  ) : (
+                    <div className="text-right text-xs font-semibold text-amber-600 whitespace-nowrap" title="Bạn là người tạo yêu cầu này — cần NGƯỜI KHÁC (có quyền) duyệt.">Chờ người khác duyệt</div>
+                  )}
                 </td>
               </tr>
             ))}
@@ -266,10 +271,14 @@ export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
                     <td className="px-3 py-3 text-slate-600">{r.requestedByName ?? `#${r.requestedBy}`}</td>
                     <td className="px-3 py-3 text-xs text-slate-500">{fmtDate(r.requestedAt)}</td>
                     <td className="px-3 py-3">
-                      <div className="flex justify-end gap-1">
-                        <button title="Duyệt hủy" onClick={() => setDialog({ kind: 'approveEntity', row: r })} className="rounded-md p-1.5 text-success transition hover:bg-success/10"><Check className="h-4 w-4" /></button>
-                        <button title="Từ chối" onClick={() => setDialog({ kind: 'rejectEntity', row: r })} className="rounded-md p-1.5 text-danger transition hover:bg-danger/10"><X className="h-4 w-4" /></button>
-                      </div>
+                      {r.canApprove ? (
+                        <div className="flex justify-end gap-1">
+                          <button title="Duyệt hủy" onClick={() => setDialog({ kind: 'approveEntity', row: r })} className="rounded-md p-1.5 text-success transition hover:bg-success/10"><Check className="h-4 w-4" /></button>
+                          <button title="Từ chối" onClick={() => setDialog({ kind: 'rejectEntity', row: r })} className="rounded-md p-1.5 text-danger transition hover:bg-danger/10"><X className="h-4 w-4" /></button>
+                        </div>
+                      ) : (
+                        <div className="text-right text-xs font-semibold text-amber-600 whitespace-nowrap" title="Bạn là người tạo yêu cầu này — cần NGƯỜI KHÁC (có quyền) duyệt, không tự duyệt được.">Chờ người khác duyệt</div>
+                      )}
                     </td>
                   </tr>
                 ))}

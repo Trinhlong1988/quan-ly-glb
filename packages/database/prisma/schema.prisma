@@ -1156,3 +1156,55 @@ model DebtQualityLog {
   @@index([transactionId])
   @@map("debt_quality_logs")
 }
+
+// YÊU CẦU XUẤT KHO (Mr.Long PHASE 1) — user thường tạo phiếu YÊU CẦU giao máy POS/TID cho khách theo
+// hình thức Bán (SALE) / Cho thuê (RENT); người có quyền Kho DUYỆT + chọn N seri/TID cụ thể lúc duyệt.
+// Tiền + tồn kho TRỪ lúc DUYỆT (hàng rời kho khi duyệt), KHÔNG lúc tạo phiếu. 1 phiếu = N đơn vị CHƯA
+// biết seri; mỗi dòng ExportRequestLine = 1 máy ở đơn giá phiếu (amount = unitPrice × quantity). Money
+// dùng lại money-model per-máy đã có (device-sale / applyHandover / device-deposit). Tiền = VND nguyên (BigInt).
+model ExportRequest {
+  id             Int       @id @default(autoincrement())
+  code           String?   @unique // YCXK##### (Yêu Cầu Xuất Kho)
+  kind           String // POS | TID
+  handoverKind   String    @map("handover_kind") // SALE | RENT (chỉ 2 hình thức xuất kho — không Sửa/Đổi)
+  // POS: giao KÈM TID (assign+giao). TID: kèm-máy phải quay về phiếu POS nên luôn false.
+  withTid        Boolean   @default(false) @map("with_tid")
+  requesterUserId Int      @map("requester_user_id")
+  bankId         Int?      @map("bank_id") // app bank của máy POS / bank của TID
+  partnerId      Int?      @map("partner_id") // đối tác (cho TID)
+  customerId     Int       @map("customer_id")
+  cardTypeId     Int?      @map("card_type_id") // loại thẻ (tra phí) — cho TID / khi POS kèm TID
+  feeTypeId      Int?      @map("fee_type_id") // loại phí bán
+  priceMode      String    @default("LISTED") @map("price_mode") // LISTED | CUSTOM
+  unitPrice      BigInt    @map("unit_price") // đơn giá 1 đơn vị (×1 đồng)
+  quantity       Int
+  amount         BigInt // = unitPrice × quantity
+  depositAmount  BigInt    @default(0) @map("deposit_amount") // cọc kèm (nếu có)
+  paidAmount     BigInt    @default(0) @map("paid_amount") // tiền thu khi duyệt (SALE)
+  fundId         Int?      @map("fund_id") // quỹ nhận tiền khi duyệt
+  status         String    @default("PENDING") // PENDING | APPROVED | REJECTED | CANCELLED
+  note           String?
+  requestedAt    DateTime  @default(now()) @map("requested_at") @db.Timestamptz(3)
+  decidedBy      Int?      @map("decided_by")
+  decidedAt      DateTime? @map("decided_at") @db.Timestamptz(3)
+  decisionNote   String?   @map("decision_note")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([status])
+  @@index([kind])
+  @@map("export_requests")
+}
+
+// Dòng gán seri/TID CỤ THỂ khi DUYỆT (N dòng theo quantity). Người duyệt chọn máy/TID lúc duyệt.
+model ExportRequestLine {
+  id              Int      @id @default(autoincrement())
+  exportRequestId Int      @map("export_request_id")
+  seq             Int // 1..N
+  posSerial       String?  @map("pos_serial")
+  tid             String?
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([exportRequestId])
+  @@map("export_request_lines")
+}

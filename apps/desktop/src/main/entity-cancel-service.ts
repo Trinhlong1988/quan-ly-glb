@@ -363,6 +363,7 @@ export interface EntityCancelRequestDto {
   requestedByName: string | null;
   requestedAt: string;
   canApprove: boolean;
+  isSelf: boolean; // bạn là người TẠO yêu cầu này (chặn tự-duyệt R34) → hiện để bạn biết phiếu đang chờ người khác duyệt.
 }
 
 /**
@@ -404,7 +405,8 @@ export async function listEntityCancelRequests(status = 'PENDING', entityTypeFil
       requestedBy: r.requestedBy,
       requestedByName: names.get(r.requestedBy) ?? null,
       requestedAt: r.requestedAt.toISOString(),
-      canApprove
+      canApprove,
+      isSelf
     });
   }
   return { ok: true, data };

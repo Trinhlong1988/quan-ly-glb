@@ -355,6 +355,19 @@ export async function runRevenueSelfTest(): Promise<number> {
   ok('lưu ĐÚNG 50.000.000.000 (không bị cắt xuống int4)', Number(tBig?.amount) === bigAmt, { got: String(tBig?.amount) });
   // 50 tỷ × (2% + 1.5%) = 50 tỷ × 3.5% = 1.750.000.000 (cũng > int4 → chứng minh revenue* BigInt)
   ok('doanh thu 50 tỷ = 1.750.000.000 (revenue* BigInt, không tràn)', Number(tBig?.revenueAmount) === 1_750_000_000, { got: String(tBig?.revenueAmount) });
+
+  // ═══════════ N) FORM Ghi nhận GD (Mr.Long live-test): KHÔNG truyền customerId + txnDate có GIỜ cụ thể ═══════════
+  // #7 — form bỏ dropdown khách: createTransaction KHÔNG nhận customerId (undefined) → khách lấy theo TID (tid.customerId).
+  // #8 — form thêm ô Giờ → txnDate ghép ngày+giờ (đường UI: new Date('...T14:30:00').toISOString()) → PHẢI lưu đúng giờ, KHÔNG ép 00:00.
+  const timeIso = new Date('2026-07-09T14:30:00').toISOString(); // parse LOCAL như UI gửi (ngày + giờ)
+  const midnightIso = new Date('2026-07-09T00:00:00').toISOString();
+  const cForm = await createTransaction({ feeTypeId: ft.id, tidId: tid.id, cardTypeId: card.id, amount: 1_000_000, txnDate: timeIso });
+  ok('#7 GD KHÔNG truyền customerId → tạo ok', cForm.ok === true, cForm);
+  const tForm = await db.transaction.findUnique({ where: { id: cForm.id! } });
+  ok('#7 khách lấy theo TID (customerId = tid.customerId)', tForm?.customerId === cust.id, { got: tForm?.customerId, want: cust.id });
+  ok('#8 txnDate lưu ĐÚNG giờ cụ thể (14:30) — không bị ép 00:00', tForm?.txnDate.toISOString() === timeIso && timeIso !== midnightIso, { got: tForm?.txnDate.toISOString(), want: timeIso });
+  await db.transaction.delete({ where: { id: cForm.id! } }); // dọn để không ảnh hưởng assert đếm khác
+
   await logout();
   // eslint-disable-next-line no-console
   console.log(`REV15 SUMMARY | pass=${pass} fail=${fail}`);

@@ -345,6 +345,7 @@ export interface CancelRequestDto {
   requestedByName: string | null;
   requestedAt: string;
   canApprove: boolean; // approver hiện tại có được duyệt cái này không (phân vai)
+  isSelf: boolean; // bạn là người tạo yêu cầu này → hiện để biết đang chờ người khác duyệt (không tự duyệt được).
 }
 
 export async function listCancelRequests(status = 'PENDING'): Promise<{ ok: boolean; error?: string; message?: string; data?: CancelRequestDto[] }> {
@@ -377,7 +378,8 @@ export async function listCancelRequests(status = 'PENDING'): Promise<{ ok: bool
       requestedBy: r.requestedBy,
       requestedByName: names.get(r.requestedBy) ?? null,
       requestedAt: r.requestedAt.toISOString(),
-      canApprove
+      canApprove,
+      isSelf
     });
   }
   return { ok: true, data };

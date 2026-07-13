@@ -59,6 +59,10 @@ export async function runTidSellFeeSelfTest(): Promise<number> {
   ok('list: 2 loại thẻ của ngân hàng TID', list1.ok && list1.data?.rows.length === 2, list1.data?.rows.map((r) => r.cardTypeCode));
   ok('list: card1 niêm yết 2.5, thực tế null', r1c1?.phiBanNiemYet === 2.5 && r1c1?.phiBanThucTe === null, r1c1);
   ok('list: card2 chưa có biểu phí → niêm yết null', r1c2?.phiBanNiemYet === null, r1c2);
+  // #6 — phí MUA niêm yết trả từ FeeRate hiệu lực (card1 phiMua 3000 → 3.0%); card2 chưa có FeeRate → null.
+  ok('list: card1 phí MUA niêm yết = 3.0 (từ FeeRate)', r1c1?.phiMuaNiemYet === 3.0, { got: r1c1?.phiMuaNiemYet });
+  ok('list: card1 phí cài máy niêm yết = 1.0 (từ FeeRate)', r1c1?.phiCaiMayNiemYet === 1.0, { got: r1c1?.phiCaiMayNiemYet });
+  ok('list: card2 chưa có FeeRate → phí MUA niêm yết null', r1c2?.phiMuaNiemYet === null, { got: r1c2?.phiMuaNiemYet });
 
   // ═══ 3) SET override card1 = 2.0% → doanh thu ưu tiên phí thực tế ═══
   const set1 = await setTidSellFees({ tidId: tid.id, feeTypeId: feeTypeA.id, entries: [{ cardTypeId: card1.id, phiBan: 2.0 }] });

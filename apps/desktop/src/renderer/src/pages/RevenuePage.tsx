@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Plus, Ban, Trash2, Loader2, TrendingUp, Download, Receipt, Handshake, Users, FilterX, RefreshCw } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
-import { hasPermission, fmtDate } from '@glb/shared';
+import { hasPermission, fmtDate, groupDigits } from '@glb/shared';
 import type {
   TransactionDto,
   RevenueSummary,
@@ -11,6 +11,7 @@ import type {
   LiteRef,
   CreateTransactionInput,
   FeeTypeDto,
+  TidSellFeeRowDto,
   RevenueByFeeTypeRow,
   RevenueByHandoverRow,
   DepositHeldRow
@@ -19,6 +20,7 @@ import { useToast } from '../lib/toast.js';
 import { Modal } from '../components/Modal.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { Field, inputCls } from '../components/Field.js';
+import { SearchSelect } from '../components/SearchSelect.js';
 import { Button } from '../components/Button.js';
 import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../components/Selection.js';
 import { StatBar } from '../components/StatBar.js';
@@ -400,7 +402,7 @@ export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
         </div>
       )}
 
-      {showForm && <TransactionForm tids={tids} customers={customers} feeTypes={feeTypes} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); void reload(); }} />}
+      {showForm && <TransactionForm tids={tids} feeTypes={feeTypes} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); void reload(); }} />}
       {del && <ConfirmDialog title="Xóa giao dịch" message={`Giao dịch "${del.code ?? del.id}" (${money(del.amount)}) sẽ vào Thùng rác (có thể phục hồi). Nhập lại mật khẩu để xác nhận.`} confirmLabel="Xóa" danger requirePassword onCancel={() => setDel(null)} onConfirm={(pwd) => doDelete(del, pwd)} />}
       {bulkDel && <ConfirmDialog title="Xóa nhiều giao dịch" message={`${sel.count} giao dịch đã chọn sẽ vào Thùng rác (có thể phục hồi). Nhập lại mật khẩu để xác nhận.`} confirmLabel={`Xóa ${sel.count} mục`} danger requirePassword onCancel={() => setBulkDel(false)} onConfirm={(pwd) => doBulkDelete(pwd)} />}
       {cancelTarget && <CancelReasonModal bill={cancelTarget} onClose={() => setCancelTarget(null)} onSubmit={(reason) => doRequestCancel(cancelTarget, reason)} />}
@@ -432,20 +434,59 @@ function CancelReasonModal({ bill, onClose, onSubmit }: { bill: TransactionDto; 
   );
 }
 
-function TransactionForm({ tids, customers, feeTypes, onClose, onSaved }: { tids: ConfigTidDto[]; customers: CustomerDto[]; feeTypes: FeeTypeDto[]; onClose: () => void; onSaved: () => void }): JSX.Element {
+/** % biểu phí (giá trị đã ÷1000 ở main) — dấu phẩy thập phân kiểu VN, đồng nhất TidPage/TidSellFeeModal. */
+function pctText(p: number | null): string {
+  if (p == null) return 'chưa cấu hình';
+  return `${String(p).replace('.', ',')}%`;
+}
+
+function TransactionForm({ tids, feeTypes, onClose, onSaved }: { tids: ConfigTidDto[]; feeTypes: FeeTypeDto[]; onClose: () => void; onSaved: () => void }): JSX.Element {
   const toast = useToast();
+  // #10 — luồng CASCADING theo thứ tự Mr.Long: Ngân hàng → Tên HKD → TID → Loại thẻ → Loại phí → …
+  const [bankId, setBankId] = useState('');
+  const [hkdName, setHkdName] = useState('');
   const [tidId, setTidId] = useState('');
   const [cardTypeId, setCardTypeId] = useState('');
   // Loại phí: MẶC ĐỊNH phần tử ĐẦU danh sách (Mr.Long "hiển thị theo thứ tự 1").
   const [feeTypeId, setFeeTypeId] = useState(feeTypes[0] ? String(feeTypes[0].id) : '');
   const [amount, setAmount] = useState('');
   const [txnDate, setTxnDate] = useState(new Date().toISOString().slice(0, 10));
-  const [customerId, setCustomerId] = useState('');
+  // #8 — Giờ giao dịch: mặc định GIỜ HIỆN TẠI lúc mở form (HH:mm), cho sửa; ghép ngày+giờ khi lưu.
+  const [txnTime, setTxnTime] = useState(() => new Date().toTimeString().slice(0, 5));
   const [note, setNote] = useState('');
   const [cards, setCards] = useState<CardTypeDto[]>([]);
+  // #6 — biểu phí tham chiếu cho (TID × thẻ × loại phí) đang chọn.
+  const [sellFee, setSellFee] = useState<TidSellFeeRowDto | null>(null);
   const [busy, setBusy] = useState(false);
 
   const selectedTid = tids.find((t) => t.id === Number(tidId));
+
+  // #10/#11 — danh sách CASCADING, mỗi cấp lọc theo cấp trên (nguồn = prop tids đã kèm bank/hkd/khách).
+  // (1) Ngân hàng = distinct theo bankId trong tids.
+  const bankOptions = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const t of tids) if (t.bankId != null && !m.has(t.bankId)) m.set(t.bankId, t.bankName ?? t.bankCode ?? `NH #${t.bankId}`);
+    return [...m.entries()].map(([id, label]) => ({ value: String(id), label }));
+  }, [tids]);
+  // (2) Tên HKD = distinct hkdName của các TID thuộc ngân hàng đã chọn.
+  const hkdOptions = useMemo(() => {
+    if (!bankId) return [];
+    const s = new Set<string>();
+    for (const t of tids) if (String(t.bankId) === bankId && t.hkdName) s.add(t.hkdName);
+    return [...s].map((h) => ({ value: h, label: h }));
+  }, [tids, bankId]);
+  // (3) TID = các TID thuộc ĐÚNG ngân hàng + HKD đã chọn.
+  const tidOptions = useMemo(() => {
+    if (!bankId || !hkdName) return [];
+    return tids
+      .filter((t) => String(t.bankId) === bankId && t.hkdName === hkdName)
+      .map((t) => ({ value: String(t.id), label: t.tid + (t.partnerName ? ` · ${t.partnerName}` : '') }));
+  }, [tids, bankId, hkdName]);
+
+  // Reset cấp dưới khi đổi cấp trên (chống dữ liệu "mồ côi" không còn khớp bộ lọc).
+  function onBank(v: string): void { setBankId(v); setHkdName(''); setTidId(''); setCardTypeId(''); }
+  function onHkd(v: string): void { setHkdName(v); setTidId(''); setCardTypeId(''); }
+  function onTid(v: string): void { setTidId(v); setCardTypeId(''); }
 
   // Nạp loại thẻ theo ngân hàng của TID được chọn.
   useEffect(() => {
@@ -455,17 +496,38 @@ function TransactionForm({ tids, customers, feeTypes, onClose, onSaved }: { tids
     });
   }, [selectedTid?.bankId]);
 
+  // #6 — sau khi chọn đủ TID + Loại thẻ + Loại phí → tra biểu phí (phí mua/cài máy/bán thực tế|niêm yết).
+  useEffect(() => {
+    if (!tidId || !cardTypeId || !feeTypeId) { setSellFee(null); return; }
+    let alive = true;
+    void window.api.tidSellFeeList(Number(tidId), Number(feeTypeId)).then((r) => {
+      if (!alive) return;
+      const row = r.ok && r.data ? r.data.rows.find((x) => x.cardTypeId === Number(cardTypeId)) ?? null : null;
+      setSellFee(row);
+    });
+    return () => { alive = false; };
+  }, [tidId, cardTypeId, feeTypeId]);
+
+  // Phí bán áp dụng = THỰC TẾ (override) nếu có, ngược lại NIÊM YẾT; chênh bán = bán − cài máy.
+  const phiBanApplied = sellFee ? (sellFee.hasOverride ? sellFee.phiBanThucTe : sellFee.phiBanNiemYet) : null;
+  const chenhBan = phiBanApplied != null && sellFee?.phiCaiMayNiemYet != null ? Number((phiBanApplied - sellFee.phiCaiMayNiemYet).toFixed(3)) : null;
+  const showFee = !!(tidId && cardTypeId && feeTypeId);
+
   async function save(): Promise<void> {
+    if (!bankId) return toast.alert('Vui lòng chọn ngân hàng.', 'Thiếu thông tin');
+    if (!hkdName) return toast.alert('Vui lòng chọn Hộ Kinh Doanh.', 'Thiếu thông tin');
     if (!tidId) return toast.alert('Vui lòng chọn TID.', 'Thiếu thông tin');
     if (!cardTypeId) return toast.alert('Vui lòng chọn loại thẻ.', 'Thiếu thông tin');
     if (!feeTypeId) return toast.alert('Vui lòng chọn loại phí.', 'Thiếu thông tin');
     const amt = Number(amount);
     if (!Number.isFinite(amt) || amt < 0 || !Number.isInteger(amt)) return toast.alert('Số tiền phải là số nguyên ≥ 0.', 'Số tiền không hợp lệ');
     if (!txnDate) return toast.alert('Vui lòng chọn ngày giao dịch.', 'Thiếu thông tin');
+    if (!txnTime) return toast.alert('Vui lòng chọn giờ giao dịch.', 'Thiếu thông tin');
     setBusy(true);
-    const iso = new Date(txnDate + 'T00:00:00').toISOString();
+    // #8 — ghép NGÀY + GIỜ (local) → ISO; giữ đúng giờ nhập (không còn ép 00:00).
+    const iso = new Date(txnDate + 'T' + txnTime + ':00').toISOString();
+    // #7 — KHÔNG gửi customerId: backend tự lấy khách theo TID (Tid.customerId).
     const input: CreateTransactionInput = { tidId: Number(tidId), cardTypeId: Number(cardTypeId), feeTypeId: Number(feeTypeId), amount: amt, txnDate: iso, note };
-    if (customerId) input.customerId = Number(customerId);
     const res = await window.api.transactionCreate(input);
     setBusy(false);
     if (res.ok) { toast.success('Đã ghi nhận giao dịch'); onSaved(); }
@@ -473,14 +535,19 @@ function TransactionForm({ tids, customers, feeTypes, onClose, onSaved }: { tids
   }
 
   return (
-    <Modal title="Ghi nhận giao dịch" onClose={onClose} width="max-w-xl">
-      <div className="grid grid-cols-2 gap-4">
-        <Field label="TID" required hint="Đối tác/HKD lấy theo TID">
-          <select className={inputCls} value={tidId} onChange={(e) => { setTidId(e.target.value); setCardTypeId(''); }} autoFocus>
-            <option value="">— Chọn TID —</option>
-            {tids.map((t) => <option key={t.id} value={t.id}>{t.tid}{t.hkdName ? ` · ${t.hkdName}` : ''}{t.partnerName ? ` · ${t.partnerName}` : ''}</option>)}
-          </select>
+    <Modal title="Ghi nhận giao dịch" onClose={onClose} width="max-w-3xl">
+      <div className="grid grid-cols-2 gap-x-5 gap-y-4">
+        {/* #10/#11 — (1) Ngân hàng · (2) Tên HKD · (3) TID: 3 ô TÌM KIẾM ĐỘC LẬP, cascading. */}
+        <Field label="Ngân hàng" required hint="Gõ để tìm nhanh ngân hàng">
+          <SearchSelect value={bankId} onChange={onBank} options={bankOptions} placeholder="— Chọn ngân hàng —" />
         </Field>
+        <Field label="Tên Hộ Kinh Doanh" required hint={bankId ? 'Chỉ HKD có TID thuộc ngân hàng đã chọn' : 'Chọn ngân hàng trước'}>
+          <SearchSelect value={hkdName} onChange={onHkd} options={hkdOptions} placeholder="— Chọn Hộ Kinh Doanh —" disabled={!bankId} />
+        </Field>
+        <Field label="TID" required hint={hkdName ? 'Chỉ TID của HKD + ngân hàng đã chọn' : 'Chọn HKD trước'}>
+          <SearchSelect value={tidId} onChange={onTid} options={tidOptions} placeholder="— Chọn TID —" disabled={!hkdName} />
+        </Field>
+        {/* (4) Loại thẻ · (5) Loại phí: danh sách ngắn → giữ select thường. */}
         <Field label="Loại thẻ" required hint={selectedTid ? `Ngân hàng: ${selectedTid.bankName ?? selectedTid.bankCode ?? '—'}` : 'Chọn TID trước'}>
           <select className={inputCls} value={cardTypeId} onChange={(e) => setCardTypeId(e.target.value)} disabled={!cards.length}>
             <option value="">— Chọn loại thẻ —</option>
@@ -493,9 +560,28 @@ function TransactionForm({ tids, customers, feeTypes, onClose, onSaved }: { tids
             {feeTypes.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
           </select>
         </Field>
-        <Field label="Số tiền giao dịch (VND)" required><input className={inputCls + ' text-right tabular-nums'} inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, ''))} placeholder="0" /></Field>
+        {/* (6) SHOW PHÍ — khối tham chiếu biểu phí đã cài (full-width) ngay dưới Loại phí. */}
+        <div className="col-span-2">
+          {showFee ? (
+            <div className="rounded-lg border border-line bg-appbg/60 px-3 py-2.5 text-sm text-slate-600">
+              <span className="font-medium text-slate-700">Biểu phí đã cài: </span>
+              Phí mua: <b className="tabular-nums text-slate-800">{pctText(sellFee?.phiMuaNiemYet ?? null)}</b>
+              {' · '}Phí cài máy: <b className="tabular-nums text-slate-800">{pctText(sellFee?.phiCaiMayNiemYet ?? null)}</b>
+              {' · '}Phí bán: <b className="tabular-nums text-slate-800">{pctText(phiBanApplied)}</b>
+              {' '}<span className="text-xs text-slate-400">({sellFee?.hasOverride ? 'thực tế' : 'niêm yết'})</span>
+              {' · '}Chênh bán: <b className="tabular-nums text-emerald-600">{pctText(chenhBan)}</b>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-line bg-appbg/40 px-3 py-2.5 text-sm text-slate-400">Chọn TID, loại thẻ và loại phí để xem biểu phí đã cài.</div>
+          )}
+        </div>
+        {/* (7) Số tiền — #5 hiển thị NHÓM NGHÌN kiểu VN (5.000.000); lưu số trần qua replace. */}
+        <Field label="Số tiền giao dịch (VND)" required><input className={inputCls + ' text-right tabular-nums'} inputMode="numeric" value={groupDigits(amount)} onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, ''))} placeholder="0" /></Field>
+        {/* (8) Ngày · (9) Giờ (#8 mặc định giờ hiện tại, cho sửa). */}
         <Field label="Ngày giao dịch" required><input type="date" className={inputCls} value={txnDate} onChange={(e) => setTxnDate(e.target.value)} /></Field>
-        <Field label="Khách hàng" hint="Bỏ trống = theo TID"><select className={inputCls} value={customerId} onChange={(e) => setCustomerId(e.target.value)}><option value="">— Theo TID —</option>{customers.map((c) => <option key={c.id} value={c.id}>{c.nickname} ({c.fullName})</option>)}</select></Field>
+        <Field label="Giờ giao dịch" required hint="Mặc định giờ hiện tại — sửa nếu cần"><input type="time" className={inputCls} value={txnTime} onChange={(e) => setTxnTime(e.target.value)} /></Field>
+        {/* (10) Khách hàng — #7 TỰ liên kết theo TID (read-only), KHÔNG chọn tay. */}
+        <Field label="Khách hàng (theo TID)" hint="Người được giao TID"><input className={inputCls + ' bg-slate-50 text-slate-600'} readOnly value={!selectedTid ? '' : (selectedTid.customerName ?? 'TID chưa giao khách')} placeholder="Chọn TID trước" /></Field>
         <Field label="Ghi chú"><input className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} /></Field>
       </div>
       {selectedTid && !selectedTid.partnerId && <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">TID này chưa gán Đối tác — không tra được biểu phí. Hãy cấu hình TID trước.</div>}
