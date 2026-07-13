@@ -552,8 +552,14 @@ export async function createPosIntake(input: CreatePosIntakeInput): Promise<Muta
     if (!bk) return { ok: false, error: 'NOT_FOUND', message: 'Ngân hàng (app) đã chọn không tồn tại.' };
     if (bk.status !== 'ACTIVE') return { ok: false, error: 'VALIDATION', message: 'Ngân hàng (app) đã ngừng sử dụng — không thể cài lên máy.' };
   }
-  const dup = dupResult(await db.posIntake.findFirst({ where: { serial } }), 'Seri number', serial);
-  if (dup) return dup;
+  // HỒI SINH (Mr.Long "xóa hàng loạt rồi import lại không hiện ở danh sách"): nếu MÁY (PosDevice) của serial này
+  // đã XÓA MỀM → nhập/import lại chính serial đó = hồi sinh máy → BỎ QUA chặn trùng (không phải trùng thật, là khôi phục).
+  const existingDev = await db.posDevice.findUnique({ where: { serial } });
+  const isResurrect = existingDev != null && existingDev.deletedAt != null;
+  if (!isResurrect) {
+    const dup = dupResult(await db.posIntake.findFirst({ where: { serial } }), 'Seri number', serial);
+    if (dup) return dup;
+  }
   // PHASE K1 (Q-P1, desync #22): tạo phiếu nhập + UPSERT PosDevice IN_STOCK + ghi AssetEvent(STOCK_IN)
   // trong CÙNG $transaction. PosDevice = nguồn sự thật DUY NHẤT → máy vừa nhập kho hiện ngay ở
   // "Danh sách máy" + gán TID được. Nếu serial đã là PosDevice đang chạy (DEPLOYED/…): chỉ cập nhật
@@ -561,9 +567,11 @@ export async function createPosIntake(input: CreatePosIntakeInput): Promise<Muta
   let created;
   try {
     created = await db.$transaction(async (tx) => {
-      const intake = await tx.posIntake.create({
-        data: { posModelId: input.posModelId, serial, intakeStatusId: input.intakeStatusId, supplierId: input.supplierId, importPrice: price, importedAt, note: input.note?.trim() || null, createdBy: user.id }
-      });
+      // HỒI SINH → cập nhật PHIẾU NHẬP cũ (un-delete nếu có) thay vì tạo phiếu trùng serial; ngược lại tạo mới.
+      const priorIntake = isResurrect ? await tx.posIntake.findFirst({ where: { serial } }) : null;
+      const intake = priorIntake
+        ? await tx.posIntake.update({ where: { id: priorIntake.id }, data: { posModelId: input.posModelId, intakeStatusId: input.intakeStatusId, supplierId: input.supplierId, importPrice: price, importedAt, note: input.note?.trim() || null, deletedAt: null, deletedBy: null, updatedBy: user.id } })
+        : await tx.posIntake.create({ data: { posModelId: input.posModelId, serial, intakeStatusId: input.intakeStatusId, supplierId: input.supplierId, importPrice: price, importedAt, note: input.note?.trim() || null, createdBy: user.id } });
       // Khóa hàng máy (nếu có) FOR UPDATE trước khi đọc/cập nhật (chống tương tranh với transition).
       await tx.$queryRaw`SELECT id FROM pos_devices WHERE serial = ${serial} FOR UPDATE`;
       const existing = await tx.posDevice.findUnique({ where: { serial } });
@@ -579,6 +587,20 @@ export async function createPosIntake(input: CreatePosIntakeInput): Promise<Muta
         await tx.posDevice.create({ data: { serial, status: 'IN_STOCK', ...intakeCols, warehouseId: input.warehouseId ?? null, bankId: input.bankId && input.bankId > 0 ? input.bankId : null, createdBy: user.id } });
         fromState = null;
         eventType = 'STOCK_IN';
+      } else if (existing.deletedAt != null) {
+        // HỒI SINH (Mr.Long "xóa hàng loạt rồi import lại không hiện ở danh sách, cài app vẫn máy trắng"):
+        // máy ĐÃ XÓA MỀM mà nhập/import lại serial đó → coi như NHẬP MỚI: bỏ deletedAt, về IN_STOCK, gán KHO +
+        // Cài APP theo lần nhập này, XÓA gán cũ (TID/khách/đại lý) để không kéo trạng thái mồ côi từ trước khi xóa.
+        await tx.posDevice.update({
+          where: { id: existing.id },
+          data: {
+            ...intakeCols, deletedAt: null, deletedBy: null, status: 'IN_STOCK',
+            warehouseId: input.warehouseId ?? null, bankId: input.bankId && input.bankId > 0 ? input.bankId : null,
+            currentTid: null, currentCustomerId: null, currentAgentId: null, recallPending: false, updatedBy: user.id
+          }
+        });
+        fromState = existing.status;
+        eventType = 'STOCK_IN';
       } else {
         // GIỮ status/currentTid/currentCustomerId/currentAgentId — chỉ cập nhật cột nhập gần nhất.
         // Kho: CHỈ đổi khi máy đang IN_STOCK (đang ở kho); máy đang DEPLOYED/… thì KHÔNG gán kho (giữ đồng bộ bất biến).
@@ -587,7 +609,7 @@ export async function createPosIntake(input: CreatePosIntakeInput): Promise<Muta
         fromState = existing.status;
         eventType = existing.status === 'IN_STOCK' ? 'STOCK_IN' : 'INTAKE_UPDATE';
       }
-      const toState = existing ? existing.status : 'IN_STOCK';
+      const toState = existing ? (existing.deletedAt != null ? 'IN_STOCK' : existing.status) : 'IN_STOCK';
       await tx.assetEvent.create({
         data: {
           deviceSerial: serial,

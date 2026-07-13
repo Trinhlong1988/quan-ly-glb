@@ -232,6 +232,21 @@ export async function runPosUnifySelfTest(): Promise<number> {
   const devEditBlank = await db.posDevice.findUnique({ where: { serial: sEdit } });
   assert('CÀI APP(d): SỬA về máy trắng → MÁY bankId null', devEditBlank?.bankId === null, { got: devEditBlank?.bankId });
 
+  // (e) HỒI SINH: máy XÓA MỀM → nhập/import lại serial đó → về IN_STOCK + Cài APP mới + HIỆN LẠI ở danh sách
+  //     (Mr.Long "xóa hàng loạt rồi import lại không hiện ở danh sách, cài app vẫn máy trắng").
+  const sRes = 'SN-K1-RESURRECT';
+  await supplySvc.createPosIntake({ posModelId: modelId, serial: sRes, intakeStatusId: statusId!, supplierId, importPrice: 400_000, importedAt: '2026-07-01', bankId: bankXId });
+  await db.posDevice.updateMany({ where: { serial: sRes }, data: { deletedAt: new Date(), status: 'RETIRED' } }); // mô phỏng xóa hàng loạt
+  const listDel = await posSvc.listPosDevices({ search: sRes });
+  assert('HỒI SINH: máy đã xóa KHÔNG hiện ở danh sách', (listDel.data ?? []).every((d) => d.serial !== sRes));
+  const reIntake = await supplySvc.createPosIntake({ posModelId: modelId, serial: sRes, intakeStatusId: statusId!, supplierId, importPrice: 450_000, importedAt: '2026-07-02', bankId: bankY.id! });
+  assert('HỒI SINH: nhập lại serial đã xóa ok', reIntake.ok === true, reIntake.error);
+  const devRes = await db.posDevice.findFirst({ where: { serial: sRes } });
+  assert('HỒI SINH: về IN_STOCK + hết deletedAt', devRes?.deletedAt == null && devRes?.status === 'IN_STOCK', { del: devRes?.deletedAt, st: devRes?.status });
+  assert('HỒI SINH: Cài APP cập nhật bankY (hết máy trắng)', devRes?.bankId === bankY.id, { got: devRes?.bankId, want: bankY.id });
+  const listRes = await posSvc.listPosDevices({ search: sRes });
+  assert('HỒI SINH: máy HIỆN LẠI ở danh sách sau import', (listRes.data ?? []).some((d) => d.serial === sRes));
+
   await logout();
   // eslint-disable-next-line no-console
   console.log(`SELFTEST29 SUMMARY | failures=${failures}`);
