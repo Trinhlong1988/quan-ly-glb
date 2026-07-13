@@ -8,6 +8,8 @@ import { me } from './auth-service.js';
 import { validateRefs as validateConfigRefs } from './tid-config-service.js';
 import { writeAudit } from './audit.js';
 import { dateRange } from './customer-service.js';
+import { resolveHandoverInput, buildHandoverContext } from './handover-service.js';
+import { applyHandoverTx, type HandoverContext } from './deposit-service.js';
 
 // PHASE K2 (Q-T1): TID có 2 CHIỀU ĐỘC LẬP, DERIVE (không cột bool):
 //   • "Gán máy POS"    = deviceAssigned = posSerial != null
@@ -545,6 +547,12 @@ export interface AssignTidInput {
   customerId: number;
   occurredAt?: string | null;
   note?: string | null;
+  // LOẠI GIAO MÁY (Mr.Long) — gán TID KÈM MÁY: loại giao + số tiền + quỹ. RENT/DEPOSIT/NONE áp tiền cùng
+  // $transaction; SALE bị chặn (bán máy kèm TID dùng chức năng Bán máy). Rỗng = giao nội bộ (Mượn 0đ).
+  handoverTypeId?: number | null;
+  handoverAmount?: number | null;
+  fundId?: number | null;
+  method?: string | null; // CK | CASH
 }
 
 /** TID_MANAGE — bind a UNASSIGNED TID to a POS + customer → ACTIVE (§A3). */
@@ -575,6 +583,16 @@ export async function assignTid(tid: string, input: AssignTidInput): Promise<Mut
   if (devPre.status === 'RETIRED') return { ok: false, error: 'INVALID_STATE', message: `Máy POS "${serial}" đã thanh lý, không thể gán TID.` };
 
   const occurredAt = parseWhen(input.occurredAt);
+
+  // LOẠI GIAO MÁY — gán TID kèm máy: giải mã loại giao + số tiền + quỹ TRƯỚC $transaction (validate).
+  // Bán (SALE) kèm TID cần mật khẩu → CHẶN, hướng dùng chức năng Bán máy. Rỗng = Mượn 0đ (giao nội bộ cũ).
+  const hr = await resolveHandoverInput(db, { handoverTypeId: input.handoverTypeId, amount: input.handoverAmount, fundId: input.fundId, method: input.method });
+  if (!hr.ok) return { ok: false, error: hr.error, message: hr.message };
+  if (hr.moneyKind === 'SALE') {
+    return { ok: false, error: 'USE_SALE_FLOW', message: 'Bán máy kèm TID cần xác nhận mật khẩu — hãy dùng chức năng Bán máy.' };
+  }
+  const handover: HandoverContext = buildHandoverContext(hr, { deviceSerial: serial, tid, customerId: input.customerId, occurredAt, actorId: user.id });
+
   let devAgentId: number | null = null;
   try {
     await db.$transaction(async (tx) => {
@@ -608,12 +626,17 @@ export async function assignTid(tid: string, input: AssignTidInput): Promise<Mut
           toState: 'ACTIVE',
           customerId: input.customerId,
           toAgentId: devAgentId,
+          // LOẠI GIAO MÁY — chỉ ghi khi gán TID kèm máy CÓ chọn loại giao (timeline hiện hình thức + số tiền).
+          handoverTypeId: handover.handoverTypeId != null ? handover.handoverTypeId : null,
+          handoverAmount: handover.handoverTypeId != null ? handover.amount : null,
           actorUserId: user.id,
           occurredAt,
           note: input.note ?? null,
           afterJson: JSON.stringify(auditSnapshot({ tid, posSerial: serial, status: 'ACTIVE' }))
         }
       });
+      // LOẠI GIAO MÁY — áp mô hình tiền (RENT/DEPOSIT/NONE) trong CÙNG $transaction. SALE đã chặn ở trên.
+      await applyHandoverTx(tx, handover);
     });
   } catch (e) {
     if (e instanceof TidTxAbort) return e.result;
@@ -858,6 +881,10 @@ export interface TimelineEventDto {
   note: string | null;
   warehouseName: string | null; // "MÃ · Tên" kho (nếu sự kiện có gắn kho)
   deliveryAddress: string | null; // địa chỉ kho (snapshot lúc sự kiện)
+  // LOẠI GIAO MÁY (Mr.Long) — gán TID kèm máy: loại giao + số tiền.
+  handoverTypeId: number | null;
+  handoverName: string | null;
+  handoverAmount: number | null;
 }
 
 export async function tidTimeline(tid: string): Promise<{ ok: boolean; data?: TimelineEventDto[]; error?: string; message?: string }> {
@@ -882,6 +909,10 @@ export async function tidTimeline(tid: string): Promise<{ ok: boolean; data?: Ti
   const whMap = new Map(
     (await g.db.warehouse.findMany({ where: { id: { in: whIds } }, select: { id: true, code: true, name: true } })).map((w) => [w.id, `${w.code} · ${w.name}`])
   );
+  const htIds = [...new Set(events.map((e) => e.handoverTypeId).filter((x): x is number => x != null))];
+  const htMap = new Map(
+    (await g.db.handoverType.findMany({ where: { id: { in: htIds } }, select: { id: true, name: true } })).map((h) => [h.id, h.name])
+  );
   return {
     ok: true,
     data: events.map((e) => ({
@@ -898,7 +929,10 @@ export async function tidTimeline(tid: string): Promise<{ ok: boolean; data?: Ti
       occurredAt: e.occurredAt.toISOString(),
       note: e.note,
       warehouseName: e.fromWarehouseId != null ? whMap.get(e.fromWarehouseId) ?? null : null,
-      deliveryAddress: e.deliveryAddress
+      deliveryAddress: e.deliveryAddress,
+      handoverTypeId: e.handoverTypeId,
+      handoverName: e.handoverTypeId != null ? htMap.get(e.handoverTypeId) ?? null : null,
+      handoverAmount: e.handoverAmount != null ? Number(e.handoverAmount) : null
     }))
   };
 }

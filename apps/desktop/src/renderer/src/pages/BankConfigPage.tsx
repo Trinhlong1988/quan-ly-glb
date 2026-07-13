@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2, Loader2, Landmark, CreditCard, Building2, Download, Link2, Percent, Tags, CircleDot } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, Landmark, CreditCard, Building2, Download, Link2, Percent, Tags, CircleDot, HandCoins } from 'lucide-react';
 import { FeeConfigPage } from './FeeConfigPage.js';
 import { IndustryConfigPage } from './IndustryConfigPage.js';
 import { StatusConfigPage } from './StatusConfigPage.js';
+import { HandoverConfigPage } from './HandoverConfigPage.js';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate, fmtTime } from '@glb/shared';
 import type { BankDto, CardTypeDto, PartnerDto, PartnerBankMatrix } from '../../../preload/index.d';
@@ -21,7 +22,7 @@ import { StatusBadge, useStatusOptions, statusSelectOptions, toneCls } from '../
 import { TabBar, TabButton } from '../components/Tabs.js';
 import { exportCsv } from '../lib/exportCsv.js';
 
-type Tab = 'bank' | 'cardtype' | 'partner' | 'industry' | 'status' | 'fee';
+type Tab = 'bank' | 'cardtype' | 'partner' | 'industry' | 'status' | 'fee' | 'handover';
 
 // Nút icon theo quy ước màu (R_BUTTON_SEMANTICS): sửa=vàng, xóa=đỏ.
 function IconBtn({ children, title, variant, onClick }: { children: JSX.Element; title: string; variant?: 'edit' | 'danger'; onClick: () => void }): JSX.Element {
@@ -38,13 +39,14 @@ export function BankConfigPage({ user }: { user: AuthUser }): JSX.Element {
   const canFee = hasPermission(user, 'CONFIG_FEE_VIEW');
   const canIndustry = hasPermission(user, 'CONFIG_INDUSTRY_VIEW');
   const canStatus = hasPermission(user, 'SYSTEM_SETTING_VIEW');
-  const [tab, setTab] = useState<Tab>(canBank ? 'bank' : canFee ? 'fee' : canIndustry ? 'industry' : canStatus ? 'status' : 'bank');
+  const canHandover = hasPermission(user, 'CONFIG_HANDOVER_VIEW');
+  const [tab, setTab] = useState<Tab>(canBank ? 'bank' : canFee ? 'fee' : canIndustry ? 'industry' : canStatus ? 'status' : canHandover ? 'handover' : 'bank');
   const canManage = hasPermission(user, 'CONFIG_BANK_MANAGE');
   return (
     <div>
       <div className="mb-4">
         <h2 className="text-lg font-semibold text-slate-800">Cấu hình ngân hàng</h2>
-        <p className="text-sm text-slate-500">Ngân hàng · Loại thẻ dùng trên máy POS · Đối tác và liên kết ngân hàng · Ngành nghề · Phí mua-cài máy-bán · Trạng thái.</p>
+        <p className="text-sm text-slate-500">Ngân hàng · Loại thẻ dùng trên máy POS · Đối tác và liên kết ngân hàng · Ngành nghề · Phí mua-cài máy-bán · Trạng thái · Loại giao.</p>
       </div>
       <TabBar>
         {canBank && <TabButton active={tab === 'bank'} onClick={() => setTab('bank')} icon={<Landmark className="h-4 w-4" />}>Ngân hàng</TabButton>}
@@ -53,6 +55,7 @@ export function BankConfigPage({ user }: { user: AuthUser }): JSX.Element {
         {canIndustry && <TabButton active={tab === 'industry'} onClick={() => setTab('industry')} icon={<Tags className="h-4 w-4" />}>Ngành nghề</TabButton>}
         {canFee && <TabButton active={tab === 'fee'} onClick={() => setTab('fee')} icon={<Percent className="h-4 w-4" />}>Phí mua-cài máy-bán</TabButton>}
         {canStatus && <TabButton active={tab === 'status'} onClick={() => setTab('status')} icon={<CircleDot className="h-4 w-4" />}>Trạng thái</TabButton>}
+        {canHandover && <TabButton active={tab === 'handover'} onClick={() => setTab('handover')} icon={<HandCoins className="h-4 w-4" />}>Loại giao</TabButton>}
       </TabBar>
       {tab === 'bank' && canBank && <BankTab canManage={canManage} />}
       {tab === 'cardtype' && canBank && <CardTypeTab canManage={canManage} />}
@@ -60,6 +63,7 @@ export function BankConfigPage({ user }: { user: AuthUser }): JSX.Element {
       {tab === 'industry' && canIndustry && <IndustryConfigPage user={user} />}
       {tab === 'fee' && canFee && <FeeConfigPage user={user} />}
       {tab === 'status' && canStatus && <StatusConfigPage user={user} />}
+      {tab === 'handover' && canHandover && <HandoverConfigPage user={user} />}
     </div>
   );
 }

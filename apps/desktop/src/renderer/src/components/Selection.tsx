@@ -67,14 +67,14 @@ export function SelectCell({ id, sel }: { id: number; sel: ReturnType<typeof use
  * Thanh thao tác hàng loạt — hiện khi đã tích ≥1 dòng: "Đã chọn N · Bỏ tích · Xóa đã chọn".
  * Nút Xóa mở ConfirmDialog nhập lại mật khẩu ở component cha (qua onDelete).
  */
-export function SelectionBar({ count, entityLabel, onClear, onDelete }: { count: number; entityLabel: string; onClear: () => void; onDelete: () => void }): JSX.Element | null {
+export function SelectionBar({ count, entityLabel, onClear, onDelete, actionLabel = 'Xóa đã chọn' }: { count: number; entityLabel: string; onClear: () => void; onDelete: () => void; actionLabel?: string }): JSX.Element | null {
   if (count === 0) return null;
   return (
     <div className="mb-3 flex items-center gap-3 rounded-lg border border-brand/30 bg-brand-tint px-4 py-2.5">
       <span className="text-sm font-medium text-brand">Đã chọn {count} {entityLabel}</span>
       <div className="flex-1" />
-      <Button variant="neutral" onClick={onClear}>Bỏ tích</Button>
-      <Button variant="danger" onClick={onDelete}>Xóa đã chọn</Button>
+      <Button variant="neutral" onClick={onClear}>Bỏ chọn</Button>
+      <Button variant="danger" onClick={onDelete}>{actionLabel}</Button>
     </div>
   );
 }

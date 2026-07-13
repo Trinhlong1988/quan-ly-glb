@@ -20,6 +20,8 @@ import * as saleSvc from './device-sale-service.js';
 import * as statusSvc from './status-catalog-service.js';
 import * as posSupplySvc from './pos-supply-service.js';
 import * as feeCfgSvc from './fee-config-service.js';
+import * as handoverSvc from './handover-service.js';
+import * as depositSvc from './deposit-service.js';
 import * as rcvAcctSvc from './receive-account-service.js';
 import * as dossierSvc from './dossier-service.js';
 import * as tidCfgSvc from './tid-config-service.js';
@@ -157,6 +159,7 @@ export function registerIpc(): void {
   ipcMain.handle('pos:list', async (_e, filter: posSvc.PosFilter) => posSvc.listPosDevices(filter));
   ipcMain.handle('pos:timeline', async (_e, serial: string) => posSvc.getDeviceTimeline(serial));
   ipcMain.handle('pos:create', async (_e, input: posSvc.CreatePosInput) => posSvc.createPos(input));
+  ipcMain.handle('pos:update', async (_e, args: { id: number; input: posSvc.UpdatePosInput }) => posSvc.updatePos(args.id, args.input));
   ipcMain.handle('pos:deploy', async (_e, args: { serial: string; input: posSvc.TransitionInput }) => posSvc.deployPos(args.serial, args.input));
   ipcMain.handle('pos:recall', async (_e, args: { serial: string; input: posSvc.TransitionInput }) => posSvc.recallPos(args.serial, args.input));
   ipcMain.handle('pos:transferAgent', async (_e, args: { serial: string; input: posSvc.TransitionInput }) => posSvc.transferPosAgent(args.serial, args.input));
@@ -187,7 +190,7 @@ export function registerIpc(): void {
   ipcMain.handle('tid:recall', async (_e, args: { tid: string; input: tidSvc.RecallTidInput }) => tidSvc.recallTid(args.tid, args.input));
   ipcMain.handle('tid:markDelivered', async (_e, args: { tid: string; input: tidSvc.MarkDeliveredInput }) => tidSvc.markTidDelivered(args.tid, args.input));
   // R30 — phí bán thực tế theo TID × loại thẻ (set khi giao máy, hiện phí niêm yết để đối chiếu).
-  ipcMain.handle('tid:sellFeeList', async (_e, tidId: number) => tidSellFeeSvc.listTidSellFees(tidId));
+  ipcMain.handle('tid:sellFeeList', async (_e, args: { tidId: number; feeTypeId: number }) => tidSellFeeSvc.listTidSellFees(args.tidId, args.feeTypeId));
   ipcMain.handle('tid:sellFeeSet', async (_e, input: tidSellFeeSvc.SetTidSellFeesInput) => tidSellFeeSvc.setTidSellFees(input));
 
   // ---- Dashboard (Nhóm B — KPI realtime + tăng trưởng) ------------------
@@ -201,6 +204,7 @@ export function registerIpc(): void {
   // ---- Cấu hình ngân hàng (G-CFG.1 §C1–C4) ------------------------------
   ipcMain.handle('warehouse:list', async (_e, filter: whSvc.WarehouseFilter) => whSvc.listWarehouses(filter));
   ipcMain.handle('warehouse:lite', async () => whSvc.listWarehousesLite());
+  ipcMain.handle('warehouse:managerCandidates', async () => whSvc.listWarehouseManagerCandidates());
   ipcMain.handle('warehouse:create', async (_e, input: whSvc.CreateWarehouseInput) => whSvc.createWarehouse(input));
   ipcMain.handle('warehouse:update', async (_e, args: { id: number; input: whSvc.UpdateWarehouseInput }) => whSvc.updateWarehouse(args.id, args.input));
   ipcMain.handle('warehouse:delete', async (_e, args: { ids: number[]; password: string }) => whSvc.deleteWarehouses(args.ids, args.password));
@@ -260,9 +264,20 @@ export function registerIpc(): void {
   ipcMain.handle('feeType:update', async (_e, args: { id: number; input: feeCfgSvc.UpdateFeeTypeInput }) => feeCfgSvc.updateFeeType(args.id, args.input));
   ipcMain.handle('feeType:delete', async (_e, args: { ids: number[]; password: string }) => feeCfgSvc.deleteFeeTypes(args.ids, args.password));
 
+  // ---- LOẠI GIAO MÁY (Mr.Long) — danh mục loại giao + báo cáo cọc/doanh thu theo loại giao ----
+  ipcMain.handle('handoverType:list', async () => handoverSvc.listHandoverTypes());
+  ipcMain.handle('handoverType:listLite', async () => handoverSvc.listHandoverTypesLite());
+  ipcMain.handle('handoverType:create', async (_e, input: handoverSvc.CreateHandoverTypeInput) => handoverSvc.createHandoverType(input));
+  ipcMain.handle('handoverType:update', async (_e, args: { id: number; input: handoverSvc.UpdateHandoverTypeInput }) => handoverSvc.updateHandoverType(args.id, args.input));
+  ipcMain.handle('handoverType:delete', async (_e, args: { ids: number[]; password: string }) => handoverSvc.deleteHandoverTypes(args.ids, args.password));
+  ipcMain.handle('deposit:held', async (_e, customerId?: number) => depositSvc.depositsHeld(customerId));
+  ipcMain.handle('deposit:revenueByHandover', async (_e, filter: depositSvc.RevenueByHandoverFilter) => depositSvc.revenueByHandoverType(filter));
+
   ipcMain.handle('feeRate:list', async (_e, filter: feeCfgSvc.FeeRateFilter) => feeCfgSvc.listFeeRates(filter));
   ipcMain.handle('feeRate:set', async (_e, input: feeCfgSvc.SetFeeRateInput) => feeCfgSvc.setFeeRate(input));
   ipcMain.handle('feeRate:delete', async (_e, args: { ids: number[]; password: string }) => feeCfgSvc.deleteFeeRates(args.ids, args.password));
+  // FEE_MODEL — phí bán niêm yết hiệu lực theo loại phí (tham chiếu khi đặt phí bán TID).
+  ipcMain.handle('feeSellQuote:list', async (_e, args: { partnerId: number; cardTypeId: number; at?: string }) => feeCfgSvc.listSellQuotes(args.partnerId, args.cardTypeId, args.at));
 
   // ── G-CFG.4 Tài khoản nhận tiền – ủy quyền (§8) ──
   ipcMain.handle('rcvSource:list', async () => rcvAcctSvc.listSources());
@@ -401,6 +416,8 @@ export function registerIpc(): void {
   // ── Nhóm B — Doanh thu & Công nợ ──
   ipcMain.handle('transaction:list', async (_e, filter: txnSvc.TransactionFilter) => txnSvc.listTransactions(filter));
   ipcMain.handle('transaction:create', async (_e, input: txnSvc.CreateTransactionInput) => txnSvc.createTransaction(input));
+  // FEE_TYPE — báo cáo doanh thu tách theo LOẠI PHÍ (Ủy quyền/Đối ứng/Tiền chờ…).
+  ipcMain.handle('transaction:revenueByFeeType', async (_e, filter: txnSvc.TransactionFilter) => txnSvc.revenueByFeeType(filter));
   // Bill BẤT BIẾN: không có wire 'transaction:update' (updateTransaction chỉ còn là guard BILL_IMMUTABLE, test trực tiếp). Sửa GD = hủy + tạo lại.
   ipcMain.handle('transaction:delete', async (_e, args: { ids: number[]; password: string }) => txnSvc.deleteTransactions(args.ids, args.password));
   // H5 — GỠ handler 'transaction:settle' (toggle settled thủ công vô hiệu hóa). settled chỉ đổi qua

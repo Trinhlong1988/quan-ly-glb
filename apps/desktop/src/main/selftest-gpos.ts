@@ -82,13 +82,15 @@ export async function runGposSelfTest(): Promise<number> {
   assert('countCustomers byAgent: đại lý test đúng 2 (Active + Locked, bỏ null)', a.byAgent.find((x) => x.agentId === agentCC.id)?.count === 2, { byAgent: a.byAgent });
 
   // ── §A: POS lifecycle produces asset_events with occurredAt ─────────────
+  // #5 — kho có ĐỊA CHỈ để làm "Từ kho" khi giao khách (deploy BẮT BUỘC kho có địa chỉ). Cũng dùng cho nhận-sửa về kho.
+  const whG = await warehouseSvc.createWarehouse({ code: 'GPK0', name: 'Kho GPOS', address: 'Kho GPOS · 1 Đường X' });
   const serial = 'SN-SELFTEST-001';
   const posC = await posSvc.createPos({ serial, occurredAt: '2026-06-01T09:00:00Z' });
   assert('POS create ok', posC.ok === true, posC.error);
   const dupSerial = await posSvc.createPos({ serial });
   assert('duplicate serial blocked with specific message', dupSerial.ok === false && dupSerial.error === 'DUPLICATE' && !!dupSerial.message?.includes(serial), { message: dupSerial.message });
 
-  const dep = await posSvc.deployPos(serial, { customerId: c1.id!, occurredAt: '2026-07-01T09:00:00Z', note: 'giao khách' });
+  const dep = await posSvc.deployPos(serial, { customerId: c1.id!, fromWarehouseId: whG.id!, occurredAt: '2026-07-01T09:00:00Z', note: 'giao khách' });
   assert('deploy ok', dep.ok === true, dep.error);
   const badRecall = await posSvc.receivePosRepaired(serial, {}); // invalid from DEPLOYED
   assert('invalid transition blocked (DEPLOYED cannot receiveRepaired)', badRecall.ok === false && badRecall.error === 'INVALID_STATE', { message: badRecall.message });
@@ -96,7 +98,6 @@ export async function runGposSelfTest(): Promise<number> {
   assert('reportDamage ok', dmg.ok === true, dmg.error);
   const snd = await posSvc.sendPosRepair(serial, { occurredAt: '2026-07-03T09:00:00Z' });
   assert('sendRepair ok', snd.ok === true, snd.error);
-  const whG = await warehouseSvc.createWarehouse({ code: 'GPK0', name: 'Kho GPOS' }); // Model 1 — nhận-sửa BẮT BUỘC có kho
   const rcv = await posSvc.receivePosRepaired(serial, { toWarehouseId: whG.id!, occurredAt: '2026-07-04T09:00:00Z' });
   assert('receiveRepaired ok (về kho)', rcv.ok === true, rcv.error);
 

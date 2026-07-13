@@ -1,22 +1,27 @@
 import { useEffect, useState } from 'react';
-import { Loader2, HardDrive, History, Wrench, Download, List, PackagePlus, Building2, Cpu, Tag, Trash2, Banknote, Undo2 } from 'lucide-react';
+import { Loader2, HardDrive, History, Wrench, Download, List, PackagePlus, Building2, Cpu, Tag, Trash2, Banknote, Undo2, Pencil, Warehouse as WarehouseIcon } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate, fmtTimeSec } from '@glb/shared';
-import type { PosDto, TimelineEventDto, CustomerDto, FundDto, LiteRef, WarehouseLite } from '../../../preload/index.d';
+import type { PosDto, TimelineEventDto, CustomerDto, FundDto, LiteRef, WarehouseLite, UpdatePosInput, HandoverTypeLite } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
+import { isStaleWrite, STALE_TITLE } from '../lib/optlock.js';
 import { Modal } from '../components/Modal.js';
 import { Button } from '../components/Button.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
-import { RequestCancelModal, type RequestCancelTarget } from '../components/RequestCancelModal.js';
+import { RequestCancelModal, BulkRequestCancelModal, type RequestCancelTarget } from '../components/RequestCancelModal.js';
+import { MONEY_KIND_LABEL } from './HandoverConfigPage.js';
 import { StatusBadge, useStatusOptions, toneCls } from '../components/StatusBadge.js';
 import { StatBar } from '../components/StatBar.js';
 import { StaleBanner } from '../lib/realtime.js';
 import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
 import { TabBar, TabButton } from '../components/Tabs.js';
+import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../components/Selection.js';
 import { exportCsv } from '../lib/exportCsv.js';
 // PHASE K1 — hợp nhất: các tab cấu hình cung ứng POS dùng lại nguyên các panel của PosSupplyPage.
 import { SupplierTab, ModelTab, StatusTab, IntakeTab } from './PosSupplyPage.js';
+// Nhóm 1 — "Danh mục kho" gộp thành TAB ĐẦU của trang này (tái dùng nguyên component, không viết lại).
+import { WarehousePage } from './WarehousePage.js';
 
 /** Định dạng tiền VND (nhóm 3 chữ số kiểu Việt Nam) — không dùng toLocaleString. */
 function fmtVnd(n: number | null): string {
@@ -24,7 +29,7 @@ function fmtVnd(n: number | null): string {
   return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ' ₫';
 }
 
-type PosTab = 'devices' | 'intake' | 'supplier' | 'model' | 'status';
+type PosTab = 'warehouse' | 'devices' | 'intake' | 'supplier' | 'model' | 'status';
 
 /** PHASE K1 (§2.3) — 1 trang "Quản Lý Máy POS" nhiều tab. Danh sách máy (POS_*) + cấu hình cung ứng
  * (CONFIG_POS_SUPPLY_*). Ẩn/hiện từng tab theo quyền (rủi ro #4: quyền lệch sau gộp menu). */
@@ -32,8 +37,10 @@ export function PosPage({ user }: { user: AuthUser }): JSX.Element {
   const canView = hasPermission(user, 'POS_VIEW');
   const canConfigView = hasPermission(user, 'CONFIG_POS_SUPPLY_VIEW');
   const canConfigManage = hasPermission(user, 'CONFIG_POS_SUPPLY_MANAGE');
+  const canWarehouseView = hasPermission(user, 'CONFIG_WAREHOUSE_VIEW');
 
   const allTabs: { key: PosTab; label: string; icon: JSX.Element; show: boolean }[] = [
+    { key: 'warehouse', label: 'Danh mục kho', icon: <WarehouseIcon className="h-4 w-4" />, show: canWarehouseView },
     { key: 'devices', label: 'Danh sách máy', icon: <List className="h-4 w-4" />, show: canView },
     { key: 'intake', label: 'Nhập kho', icon: <PackagePlus className="h-4 w-4" />, show: canConfigView },
     { key: 'supplier', label: 'Nhà cung cấp', icon: <Building2 className="h-4 w-4" />, show: canConfigView },
@@ -57,6 +64,7 @@ export function PosPage({ user }: { user: AuthUser }): JSX.Element {
           </TabButton>
         ))}
       </TabBar>
+      {tab === 'warehouse' && <WarehousePage user={user} />}
       {tab === 'devices' && <DeviceListTab user={user} />}
       {tab === 'intake' && <IntakeTab canManage={canConfigManage} />}
       {tab === 'supplier' && <SupplierTab canManage={canConfigManage} />}
@@ -84,7 +92,10 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
   const [actionOf, setActionOf] = useState<{ device: PosDto; event: string } | null>(null);
   const [saleTarget, setSaleTarget] = useState<PosDto | null>(null);
   const [cancelTarget, setCancelTarget] = useState<RequestCancelTarget | null>(null);
+  const [editTarget, setEditTarget] = useState<PosDto | null>(null); // Nhóm 1 — sửa hồ sơ máy
+  const [bulkCancel, setBulkCancel] = useState(false); // Nhóm 1 — yêu cầu hủy hàng loạt (qua Duyệt Hủy)
   const [onlyRecall, setOnlyRecall] = useState(false); // #6 — lọc "cần thu hồi"
+  const sel = useRowSelection();
 
   const canManage = hasPermission(user, 'POS_MANAGE');
   const canSell = hasPermission(user, 'DEVICE_SALE_MANAGE');
@@ -104,6 +115,7 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
     });
     if (res.ok && res.data) setRows(res.data);
     else if (res.message) toast.alert(res.message);
+    sel.clear();
     setLoading(false);
   }
   useEffect(() => {
@@ -202,11 +214,13 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
         ]}
       />
 
+      {canCancelReq && <SelectionBar count={sel.count} entityLabel="máy POS" onClear={sel.clear} onDelete={() => setBulkCancel(true)} actionLabel={`Yêu cầu hủy (${sel.count})`} />}
       <StaleBanner domain="Pos" onReload={reload} className="mb-2" />
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
+              {canCancelReq && <SelectAllCell ids={filteredRows.map((r) => r.id)} sel={sel} />}
               <th className="px-4 py-3">Serial</th>
               <th className="px-4 py-3">Chủng loại</th>
               <th className="px-4 py-3">Nhà cung cấp</th>
@@ -222,14 +236,14 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
           <tbody className="divide-y divide-line">
             {loading && (
               <tr>
-                <td colSpan={10} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={10 + (canCancelReq ? 1 : 0)} className="px-4 py-8 text-center text-slate-400">
                   <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                 </td>
               </tr>
             )}
             {!loading && filteredRows.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-4 py-10 text-center text-slate-400">
+                <td colSpan={10 + (canCancelReq ? 1 : 0)} className="px-4 py-10 text-center text-slate-400">
                   <HardDrive className="mx-auto mb-2 h-6 w-6" />
                   {rows.length === 0 ? 'Chưa có máy POS.' : 'Không có máy POS khớp bộ lọc.'}
                 </td>
@@ -237,7 +251,8 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
             )}
             {!loading &&
               filteredRows.map((d) => (
-                <tr key={d.id} className="hover:bg-appbg/60">
+                <tr key={d.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(d.id) ? 'bg-brand-tint/40' : '')}>
+                  {canCancelReq && <SelectCell id={d.id} sel={sel} />}
                   <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700 whitespace-nowrap">{d.serial}</td>
                   <td className="px-4 py-3 text-slate-600">{d.posModelName ?? '—'}</td>
                   <td className="px-4 py-3 text-slate-600">{d.supplierName ?? '—'}</td>
@@ -260,6 +275,15 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
                       </button>
                       {d.recallPending && (
                         <span title="Khách đã hủy — máy chưa thu về" className="rounded-full bg-warning/15 px-2 py-0.5 text-xs font-semibold text-warning whitespace-nowrap">Cần thu hồi</span>
+                      )}
+                      {canManage && (
+                        <button
+                          onClick={() => setEditTarget(d)}
+                          title="Sửa thông tin hồ sơ máy"
+                          className="flex items-center gap-1 rounded-md border border-warning/40 bg-warning/5 px-2 py-1 text-xs font-semibold text-warning hover:brightness-110"
+                        >
+                          <Pencil className="h-3.5 w-3.5" /> Sửa
+                        </button>
                       )}
                       {canManage && (NEXT[d.status]?.length ?? 0) > 0 && (
                         <select
@@ -311,6 +335,15 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
             setActionOf(null);
             await reload();
           }}
+          onOpenSell={
+            canSell
+              ? () => {
+                  const d = actionOf.device;
+                  setActionOf(null);
+                  setSaleTarget(d);
+                }
+              : undefined
+          }
         />
       )}
       {saleTarget && (
@@ -333,7 +366,110 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
           }}
         />
       )}
+      {editTarget && (
+        <EditDeviceModal
+          device={editTarget}
+          onClose={() => setEditTarget(null)}
+          onDone={async () => {
+            setEditTarget(null);
+            await reload();
+          }}
+        />
+      )}
+      {bulkCancel && (
+        <BulkRequestCancelModal
+          entityType="PosDevice"
+          ids={[...sel.selected]}
+          typeLabel="máy POS"
+          onClose={() => setBulkCancel(false)}
+          onDone={() => {
+            setBulkCancel(false);
+            void reload();
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+/** Nhóm 1 — Sửa THÔNG TIN HỒ SƠ máy POS (không đụng trạng thái/gán — luồng thao tác riêng). Serial bất biến. */
+function EditDeviceModal({ device, onClose, onDone }: { device: PosDto; onClose: () => void; onDone: () => void }): JSX.Element {
+  const toast = useToast();
+  const [models, setModels] = useState<LiteRef[]>([]);
+  const [suppliers, setSuppliers] = useState<LiteRef[]>([]);
+  const [posModelId, setPosModelId] = useState(device.posModelId ? String(device.posModelId) : '');
+  const [supplierId, setSupplierId] = useState(device.supplierId ? String(device.supplierId) : '');
+  const [bank, setBank] = useState(device.bank ?? '');
+  const [importPrice, setImportPrice] = useState(device.importPrice != null ? String(device.importPrice) : '');
+  const [importedAt, setImportedAt] = useState(device.importedAt ? device.importedAt.slice(0, 10) : '');
+  const [warehouseLoc, setWarehouseLoc] = useState(device.warehouseLoc ?? '');
+  const [note, setNote] = useState(device.note ?? '');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    window.api.posModelLite().then((r) => r.ok && r.data && setModels(r.data));
+    window.api.supplierLite().then((r) => r.ok && r.data && setSuppliers(r.data));
+  }, []);
+
+  async function save(): Promise<void> {
+    setBusy(true);
+    const input: UpdatePosInput = {
+      posModelId: posModelId ? Number(posModelId) : null,
+      supplierId: supplierId ? Number(supplierId) : null,
+      bank: bank.trim() || null,
+      importPrice: importPrice ? Number(importPrice) : null,
+      importedAt: importedAt ? new Date(importedAt).toISOString() : null,
+      warehouseLoc: warehouseLoc.trim() || null,
+      note: note.trim() || null
+    };
+    const res = await window.api.posUpdate(device.id, input);
+    setBusy(false);
+    if (res.ok) { toast.success(`Đã cập nhật hồ sơ máy ${device.serial}`); onDone(); }
+    else if (isStaleWrite(res)) { toast.alert(res.message ?? 'Bản ghi đã được người khác cập nhật, vui lòng mở lại.', STALE_TITLE); onDone(); }
+    else toast.alert(res.message ?? 'Lưu thất bại', 'Không lưu được');
+  }
+
+  return (
+    <Modal title={`Sửa hồ sơ máy ${device.serial}`} onClose={onClose} width="max-w-lg">
+      <div className="mb-2 rounded-md bg-appbg px-3 py-2 text-xs text-slate-500">
+        Serial <b className="font-mono text-slate-700">{device.serial}</b> là định danh cố định — không sửa ở đây. Trạng thái / gán khách / TID / kho vật lý đổi qua nút <b>Thao tác</b>.
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="Chủng loại POS">
+          <select className={inputCls} value={posModelId} onChange={(e) => setPosModelId(e.target.value)}>
+            <option value="">— Không chọn —</option>
+            {models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+          </select>
+        </Field>
+        <Field label="Nhà cung cấp">
+          <select className={inputCls} value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
+            <option value="">— Không chọn —</option>
+            {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </Field>
+        <Field label="Ngân hàng (ghi chú)">
+          <input className={inputCls} value={bank} onChange={(e) => setBank(e.target.value)} />
+        </Field>
+        <Field label="Giá nhập (VND)">
+          <input className={inputCls + ' text-right tabular-nums'} inputMode="numeric" value={importPrice} onChange={(e) => setImportPrice(e.target.value.replace(/[^\d]/g, ''))} placeholder="0" />
+        </Field>
+        <Field label="Ngày nhập">
+          <input type="date" className={inputCls} value={importedAt} onChange={(e) => setImportedAt(e.target.value)} />
+        </Field>
+        <Field label="Vị trí kho (ghi chú)">
+          <input className={inputCls} value={warehouseLoc} onChange={(e) => setWarehouseLoc(e.target.value)} />
+        </Field>
+        <div className="col-span-2">
+          <Field label="Ghi chú">
+            <input className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} />
+          </Field>
+        </div>
+      </div>
+      <div className="mt-6 flex justify-end gap-2">
+        <Button variant="neutral" onClick={onClose}>Hủy</Button>
+        <Button variant="confirm" onClick={save} disabled={busy} icon={busy ? <Loader2 className="h-4 w-4 animate-spin" /> : undefined}>Lưu thay đổi</Button>
+      </div>
+    </Modal>
   );
 }
 
@@ -527,6 +663,12 @@ function TimelineModal({ device, onClose }: { device: PosDto; onClose: () => voi
               {e.warehouseName && (
                 <div className="mt-0.5 text-xs text-slate-500">{RETURN_WAREHOUSE_EVENT_TYPES.has(e.eventType) ? 'Về kho: ' : 'Từ kho: '}<span className="font-medium text-slate-700">{e.warehouseName}</span>{e.deliveryAddress ? ` — ${e.deliveryAddress}` : ''}</div>
               )}
+              {e.handoverName && (
+                <div className="mt-0.5 text-xs text-slate-500">
+                  · <span className="font-medium text-slate-700">{e.handoverName}</span>
+                  {e.handoverAmount != null && <span className="ml-1 font-medium text-slate-700">{fmtVnd(e.handoverAmount)}</span>}
+                </div>
+              )}
               {e.actorName && (
                 <div className="mt-0.5 text-xs text-slate-500">Người thực hiện: <span className="font-medium text-slate-700">{e.actorName}</span></div>
               )}
@@ -550,7 +692,7 @@ const EVENT_LABELS: Record<string, string> = {
   retire: 'Thanh lý'
 };
 
-function TransitionModal({ device, event, onClose, onDone }: { device: PosDto; event: string; onClose: () => void; onDone: () => void }): JSX.Element {
+function TransitionModal({ device, event, onClose, onDone, onOpenSell }: { device: PosDto; event: string; onClose: () => void; onDone: () => void; onOpenSell?: () => void }): JSX.Element {
   const toast = useToast();
   const [customers, setCustomers] = useState<CustomerDto[]>([]);
   const [customerId, setCustomerId] = useState('');
@@ -561,6 +703,13 @@ function TransitionModal({ device, event, onClose, onDone }: { device: PosDto; e
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [confirmRetire, setConfirmRetire] = useState(false);
+  // LOẠI GIAO MÁY (Mr.Long) — chỉ áp cho "Giao khách" (deploy): loại giao + số tiền + quỹ.
+  const [handoverTypes, setHandoverTypes] = useState<HandoverTypeLite[]>([]);
+  const [handoverTypeId, setHandoverTypeId] = useState('');
+  const [handoverAmount, setHandoverAmount] = useState('');
+  const [fundId, setFundId] = useState('');
+  const [method, setMethod] = useState('CASH');
+  const [funds, setFunds] = useState<FundDto[]>([]);
 
   const needCustomer = event === 'deploy' || event === 'changeCustomer';
   // R27: giao / đổi-khách ghi "Từ kho" (chọn kho → hiện địa chỉ).
@@ -570,16 +719,43 @@ function TransitionModal({ device, event, onClose, onDone }: { device: PosDto; e
   // ĐỒNG BỘ: máy đang có kho (đang trong kho) → deploy xuất TỪ chính kho đó, KHÓA không cho chọn lệch.
   const lockedFromWarehouse = event === 'deploy' && device.warehouseId != null;
   const selectedWarehouse = warehouses.find((w) => String(w.id) === warehouseId);
+  const needHandover = event === 'deploy';
+  const selectedHandover = handoverTypes.find((h) => String(h.id) === handoverTypeId);
+  const moneyKind = selectedHandover?.moneyKind ?? 'NONE';
+  const amountNum = Number(handoverAmount) || 0;
 
   useEffect(() => {
     if (needCustomer) window.api.customerList({}).then((r) => r.ok && r.data && setCustomers(r.data));
     if (needFromWarehouse || needToWarehouse) window.api.warehouseLite().then((r) => r.ok && r.data && setWarehouses(r.data));
     if (event === 'deploy' && device.warehouseId != null) setWarehouseId(String(device.warehouseId));
-  }, [needCustomer, needFromWarehouse, needToWarehouse, event, device.warehouseId]);
+    if (needHandover) {
+      window.api.handoverTypeListLite().then((r) => {
+        if (r.ok && r.data) {
+          const sorted = [...r.data].sort((a, b) => a.sortOrder - b.sortOrder);
+          setHandoverTypes(sorted);
+          if (sorted[0]) setHandoverTypeId(String(sorted[0].id));
+        }
+      });
+      window.api.fundList({}).then((r) => r.ok && r.data && setFunds(r.data.filter((f) => f.active)));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needCustomer, needFromWarehouse, needToWarehouse, needHandover, event, device.warehouseId]);
+
+  // Mượn (NONE) — khóa số tiền = 0. Bán (SALE) — không dùng luồng này (chặn ở nút Bán máy riêng).
+  useEffect(() => {
+    if (needHandover && moneyKind === 'NONE') { setHandoverAmount('0'); setFundId(''); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moneyKind, needHandover]);
 
   async function run(password?: string): Promise<void> {
     if (needCustomer && !customerId) return toast.alert(event === 'changeCustomer' ? 'Phải chọn khách hàng mới.' : 'Phải chọn khách hàng nhận máy.');
     if (needToWarehouse && !toWarehouseId) return toast.alert('Phải chọn KHO nhận máy về (để biết máy đang ở kho nào).', 'Thiếu kho');
+    if (needHandover) {
+      if (!handoverTypeId) return toast.alert('Phải chọn loại giao.', 'Thiếu thông tin');
+      if (moneyKind === 'SALE') return toast.alert('Loại giao "Bán" dùng chức năng Bán máy riêng (nút Bán máy) — không giao qua luồng này.', 'Dùng chức năng Bán máy');
+      if (moneyKind === 'DEPOSIT' && !(amountNum > 0)) return toast.alert('Loại giao "Cọc" phải nhập số tiền cọc > 0.', 'Thiếu số tiền');
+      if (amountNum > 0 && !fundId) return toast.alert('Có số tiền thì phải chọn quỹ nhận.', 'Thiếu quỹ');
+    }
     setBusy(true);
     const input = {
       occurredAt: occurredAt ? new Date(occurredAt).toISOString() : null,
@@ -587,7 +763,11 @@ function TransitionModal({ device, event, onClose, onDone }: { device: PosDto; e
       customerId: customerId ? Number(customerId) : null,
       agentId: null,
       fromWarehouseId: needFromWarehouse && warehouseId ? Number(warehouseId) : null,
-      toWarehouseId: needToWarehouse && toWarehouseId ? Number(toWarehouseId) : null
+      toWarehouseId: needToWarehouse && toWarehouseId ? Number(toWarehouseId) : null,
+      handoverTypeId: needHandover && handoverTypeId ? Number(handoverTypeId) : null,
+      handoverAmount: needHandover ? amountNum : null,
+      fundId: needHandover && fundId ? Number(fundId) : null,
+      method: needHandover ? method : null
     };
     let res;
     switch (event) {
@@ -690,6 +870,52 @@ function TransitionModal({ device, event, onClose, onDone }: { device: PosDto; e
             </select>
           </Field>
         )}
+        {needHandover && (
+          <Field label="Loại giao" required hint="Hình thức giao máy cho khách">
+            <select className={inputCls} value={handoverTypeId} onChange={(e) => setHandoverTypeId(e.target.value)}>
+              {handoverTypes.length === 0 && <option value="">— Chưa có loại giao —</option>}
+              {handoverTypes.map((h) => <option key={h.id} value={h.id}>{h.name} ({MONEY_KIND_LABEL[h.moneyKind] ?? h.moneyKind})</option>)}
+            </select>
+          </Field>
+        )}
+        {needHandover && moneyKind === 'SALE' && (
+          <div className="rounded-lg border border-warning/40 bg-warning/5 p-3 text-sm text-slate-600">
+            Loại giao <b>Bán</b> — máy bán đứt, không giao qua luồng này. Hãy dùng chức năng <b>Bán máy</b>.
+            {onOpenSell && (
+              <div className="mt-2">
+                <Button variant="confirm" onClick={onOpenSell}>Mở Bán máy</Button>
+              </div>
+            )}
+          </div>
+        )}
+        {needHandover && moneyKind !== 'SALE' && (
+          <div className="grid grid-cols-2 gap-4">
+            <Field label={moneyKind === 'DEPOSIT' ? 'Số tiền cọc (VND)' : moneyKind === 'RENT' ? 'Số tiền thuê (VND)' : 'Số tiền (VND)'} required={moneyKind === 'DEPOSIT'} hint={moneyKind === 'NONE' ? 'Mượn — khóa 0đ' : undefined}>
+              <input
+                className={inputCls + ' text-right tabular-nums'}
+                inputMode="numeric"
+                value={handoverAmount}
+                disabled={moneyKind === 'NONE'}
+                onChange={(e) => setHandoverAmount(e.target.value.replace(/[^\d]/g, ''))}
+                placeholder="0"
+              />
+            </Field>
+            <Field label="Quỹ nhận tiền" hint={amountNum > 0 ? 'Bắt buộc khi có số tiền' : 'Không thu thì bỏ trống'}>
+              <select className={inputCls} value={fundId} disabled={moneyKind === 'NONE'} onChange={(e) => setFundId(e.target.value)}>
+                <option value="">— Chọn quỹ —</option>
+                {funds.map((f) => <option key={f.id} value={f.id}>{f.code} · {f.name}</option>)}
+              </select>
+            </Field>
+            {amountNum > 0 && (
+              <Field label="Hình thức">
+                <select className={inputCls} value={method} onChange={(e) => setMethod(e.target.value)}>
+                  <option value="CASH">Tiền mặt</option>
+                  <option value="CK">Chuyển khoản</option>
+                </select>
+              </Field>
+            )}
+          </div>
+        )}
         <Field label="Thời gian thao tác" hint="Bỏ trống = thời điểm hiện tại">
           <input type="datetime-local" className={inputCls} value={occurredAt} onChange={(e) => setOccurredAt(e.target.value)} />
         </Field>
@@ -703,7 +929,7 @@ function TransitionModal({ device, event, onClose, onDone }: { device: PosDto; e
         </button>
         <button
           onClick={() => (event === 'retire' ? setConfirmRetire(true) : run())}
-          disabled={busy}
+          disabled={busy || (needHandover && moneyKind === 'SALE')}
           className="flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-60"
         >
           {busy && <Loader2 className="h-4 w-4 animate-spin" />}

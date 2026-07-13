@@ -188,6 +188,10 @@ export interface TimelineEventDto {
   fromWarehouseId: number | null; // chỉ timeline POS
   warehouseName: string | null;
   deliveryAddress: string | null;
+  // LOẠI GIAO MÁY (Mr.Long) — deploy/gán-TID: loại giao + số tiền.
+  handoverTypeId: number | null;
+  handoverName: string | null;
+  handoverAmount: number | null;
 }
 export interface TidDto {
   id: number;
@@ -237,13 +241,15 @@ export interface TidSellFeeRowDto {
   cardTypeId: number;
   cardTypeCode: string | null;
   cardTypeName: string;
-  phiBanNiemYet: number | null; // % niêm yết (FeeRate hiệu lực hôm nay)
-  phiCaiMayNiemYet: number | null; // % phí cài máy niêm yết (tham chiếu)
+  phiBanNiemYet: number | null; // % niêm yết (FeeSellQuote loại phí này, hiệu lực hôm nay)
+  phiCaiMayNiemYet: number | null; // % phí cài máy niêm yết (FeeRate, tham chiếu)
   phiBanThucTe: number | null; // % override, null = dùng niêm yết
+  hasOverride: boolean; // có TidSellFee tùy chỉnh (tid × thẻ × loại phí)
 }
 export interface TidSellFeeListDto {
   tidId: number;
   tid: string;
+  feeTypeId: number; // LOẠI PHÍ đang xem
   bankId: number | null;
   bankCode: string | null;
   partnerId: number | null;
@@ -251,6 +257,7 @@ export interface TidSellFeeListDto {
 }
 export interface SetTidSellFeesInput {
   tidId: number;
+  feeTypeId: number; // LOẠI PHÍ (bắt buộc)
   entries: { cardTypeId: number; phiBan: number | null }[];
 }
 export interface TidRefs {
@@ -319,6 +326,11 @@ export interface TransitionInput {
   customerId?: number | null;
   fromWarehouseId?: number | null;
   toWarehouseId?: number | null;
+  // LOẠI GIAO MÁY (Mr.Long) — deploy: loại giao + số tiền + quỹ; recall: fundId = quỹ hoàn cọc.
+  handoverTypeId?: number | null;
+  handoverAmount?: number | null;
+  fundId?: number | null;
+  method?: string | null;
 }
 export interface SellPosInput {
   customerId: number;
@@ -429,6 +441,11 @@ export interface AssignTidInput {
   customerId: number;
   occurredAt?: string | null;
   note?: string | null;
+  // LOẠI GIAO MÁY (Mr.Long) — gán TID kèm máy: loại giao + số tiền + quỹ (SALE bị chặn).
+  handoverTypeId?: number | null;
+  handoverAmount?: number | null;
+  fundId?: number | null;
+  method?: string | null;
 }
 export interface ReplaceTidInput {
   newTid: string;
@@ -469,8 +486,17 @@ export interface WarehouseDto extends AuditTrail {
   name: string;
   address: string | null;
   phone: string | null;
+  managerUserId: number | null;
+  managerUserName: string | null;
   note: string | null;
   status: string;
+}
+export interface WarehouseManagerCandidate {
+  id: number;
+  fullName: string;
+  username: string;
+  phone: string | null;
+  address: string | null;
 }
 export interface WarehouseLite {
   id: number;
@@ -489,6 +515,7 @@ export interface CreateWarehouseInput {
   name: string;
   address?: string | null;
   phone?: string | null;
+  managerUserId?: number | null;
   note?: string | null;
   status?: string;
 }
@@ -497,8 +524,20 @@ export interface UpdateWarehouseInput {
   name?: string;
   address?: string | null;
   phone?: string | null;
+  managerUserId?: number | null;
   note?: string | null;
   status?: string;
+  expectedUpdatedAt?: string | null;
+}
+export interface UpdatePosInput {
+  model?: string | null;
+  bank?: string | null;
+  posModelId?: number | null;
+  supplierId?: number | null;
+  importPrice?: number | null;
+  importedAt?: string | null;
+  warehouseLoc?: string | null;
+  note?: string | null;
   expectedUpdatedAt?: string | null;
 }
 export interface BankDto extends AuditTrail {
@@ -793,6 +832,57 @@ export interface UpdateFeeTypeInput {
   name?: string;
   expectedUpdatedAt?: string | null;
 }
+// ── LOẠI GIAO MÁY (Mr.Long) — danh mục hình thức giao + báo cáo ──
+export interface HandoverTypeDto extends AuditTrail {
+  id: number;
+  name: string;
+  moneyKind: string; // SALE | RENT | DEPOSIT | NONE
+  isBuiltin: boolean;
+  sortOrder: number;
+}
+export interface HandoverTypeLite {
+  id: number;
+  name: string;
+  moneyKind: string;
+  sortOrder: number;
+}
+export interface CreateHandoverTypeInput {
+  name: string;
+  moneyKind: string;
+  sortOrder?: number;
+}
+export interface UpdateHandoverTypeInput {
+  name?: string;
+  moneyKind?: string;
+  sortOrder?: number;
+  expectedUpdatedAt?: string | null;
+}
+export interface DepositHeldRow {
+  customerId: number;
+  customerName: string | null;
+  totalDeposit: number;
+  totalRefunded: number;
+  remaining: number;
+  depositCount: number;
+}
+export interface RevenueByHandoverFilter {
+  from?: string;
+  to?: string;
+}
+export interface RevenueByHandoverRow {
+  handoverTypeId: number | null;
+  handoverName: string;
+  moneyKind: string;
+  revenue: number;
+  docCount: number;
+}
+// FEE_MODEL — 1 % phí bán niêm yết của 1 LOẠI PHÍ trong biểu phí (Đối tác × Loại thẻ × kỳ).
+export interface FeeSellQuoteDto {
+  feeTypeId: number;
+  feeTypeName: string | null;
+  phiBan: number; // % niêm yết của loại phí này
+  clKh: number; // % = phiBan − phiCaiMay
+}
 export interface FeeRateDto extends AuditTrail {
   id: number;
   partnerId: number;
@@ -804,13 +894,12 @@ export interface FeeRateDto extends AuditTrail {
   bankId: number | null;
   bankCode: string | null;
   bankName: string | null;
-  phiMua: number;
-  phiCaiMay: number;
-  phiBan: number;
-  clNcc: number;
-  clKh: number;
+  phiMua: number; // % — CỐ ĐỊNH (không theo loại phí)
+  phiCaiMay: number; // % — CỐ ĐỊNH (không theo loại phí)
+  clNcc: number; // % = phiMua − phiCaiMay
   effectiveFrom: string;
   isCurrent: boolean;
+  sellQuotes: FeeSellQuoteDto[]; // phí bán niêm yết theo TỪNG loại phí (cùng kỳ)
 }
 export interface FeeRateFilter {
   partnerId?: number;
@@ -820,10 +909,17 @@ export interface FeeRateFilter {
 export interface SetFeeRateInput {
   partnerId: number;
   cardTypeId: number;
-  phiMua: number;
-  phiCaiMay: number;
-  phiBan: number;
+  phiMua: number; // % — CỐ ĐỊNH
+  phiCaiMay: number; // % — CỐ ĐỊNH
   effectiveFrom?: string;
+  sellQuotes: { feeTypeId: number; phiBan: number }[]; // phí bán niêm yết cho MỌI loại phí
+}
+// FEE_MODEL — phí bán niêm yết hiệu lực theo loại phí (listSellQuotes).
+export interface SellQuoteEffectiveDto {
+  feeTypeId: number;
+  feeTypeName: string | null;
+  phiBan: number; // %
+  effectiveFrom: string;
 }
 
 // ── G-CFG.4 DTOs (Tài khoản nhận tiền §8) ──
@@ -1015,6 +1111,10 @@ export interface ConfigTidInput {
   configStatusId?: number | null;
   dossierSourceId?: number | null;
   note?: string | null;
+  mid?: string | null;
+  industryId?: number | null;
+  dossierId?: number | null;
+  customerDeviceSerial?: string | null;
   expectedUpdatedAt?: string | null;
 }
 // ── G-CFG.7 DTOs (Cấu hình ngành nghề §11 Pha I1) ──
@@ -1362,6 +1462,7 @@ export interface GlbApi {
   posList(filter: PosFilter): Promise<ListResult<PosDto>>;
   posTimeline(serial: string): Promise<ListResult<TimelineEventDto>>;
   posCreate(input: CreatePosInput): Promise<MutationOutcome>;
+  posUpdate(id: number, input: UpdatePosInput): Promise<MutationOutcome>;
   posDeploy(serial: string, input: TransitionInput): Promise<MutationOutcome>;
   posRecall(serial: string, input: TransitionInput): Promise<MutationOutcome>;
   posTransferAgent(serial: string, input: TransitionInput): Promise<MutationOutcome>;
@@ -1387,7 +1488,7 @@ export interface GlbApi {
   tidReplace(tid: string, input: ReplaceTidInput): Promise<MutationOutcome>;
   tidRecall(tid: string, input: RecallTidInput): Promise<MutationOutcome>;
   tidMarkDelivered(tid: string, input: MarkDeliveredInput): Promise<MutationOutcome>;
-  tidSellFeeList(tidId: number): Promise<{ ok: boolean; data?: TidSellFeeListDto; error?: string; message?: string }>;
+  tidSellFeeList(tidId: number, feeTypeId: number): Promise<{ ok: boolean; data?: TidSellFeeListDto; error?: string; message?: string }>;
   tidSellFeeSet(input: SetTidSellFeesInput): Promise<MutationOutcome>;
 
   notifyUndeliveredSummary(): Promise<{ ok: boolean; data?: UndeliveredSummary; error?: string; message?: string }>;
@@ -1396,6 +1497,7 @@ export interface GlbApi {
   // ── Danh mục Kho (R27) ──
   warehouseList(filter: WarehouseFilter): Promise<ListResult<WarehouseDto>>;
   warehouseLite(): Promise<ListResult<WarehouseLite>>;
+  warehouseManagerCandidates(): Promise<ListResult<WarehouseManagerCandidate>>;
   warehouseCreate(input: CreateWarehouseInput): Promise<MutationOutcome>;
   warehouseUpdate(id: number, input: UpdateWarehouseInput): Promise<MutationOutcome>;
   warehouseDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
@@ -1454,9 +1556,19 @@ export interface GlbApi {
   feeTypeUpdate(id: number, input: UpdateFeeTypeInput): Promise<MutationOutcome>;
   feeTypeDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
 
+  // ── LOẠI GIAO MÁY (Mr.Long) — danh mục loại giao + báo cáo cọc/doanh thu theo loại giao ──
+  handoverTypeList(): Promise<ListResult<HandoverTypeDto>>;
+  handoverTypeListLite(): Promise<ListResult<HandoverTypeLite>>;
+  handoverTypeCreate(input: CreateHandoverTypeInput): Promise<MutationOutcome>;
+  handoverTypeUpdate(id: number, input: UpdateHandoverTypeInput): Promise<MutationOutcome>;
+  handoverTypeDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
+  depositsHeld(customerId?: number): Promise<ListResult<DepositHeldRow>>;
+  revenueByHandover(filter: RevenueByHandoverFilter): Promise<ListResult<RevenueByHandoverRow>>;
+
   feeRateList(filter: FeeRateFilter): Promise<ListResult<FeeRateDto>>;
   feeRateSet(input: SetFeeRateInput): Promise<MutationOutcome>;
   feeRateDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
+  feeSellQuoteList(partnerId: number, cardTypeId: number, at?: string): Promise<ListResult<SellQuoteEffectiveDto>>;
 
   // ── Tài khoản nhận tiền – ủy quyền (G-CFG.4 §8) ──
   rcvSourceList(): Promise<ListResult<RcvSourceDto>>;
@@ -1548,6 +1660,7 @@ export interface GlbApi {
   // Doanh thu & Công nợ (Nhóm B)
   transactionList(filter: TransactionFilter): Promise<ListTransactionsResult>;
   transactionCreate(input: CreateTransactionInput): Promise<MutationOutcome>;
+  revenueByFeeType(filter: TransactionFilter): Promise<RevenueByFeeTypeResult>;
   transactionDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
   // FIX 2 — transactionSettle đã GỠ (H5): handler 'transaction:settle' không còn; settled chỉ đổi qua phiếu Thu công nợ.
   debtSummary(filter: TransactionFilter): Promise<{ ok: boolean; data?: DebtSummary; error?: string; message?: string }>;
@@ -1692,6 +1805,8 @@ export interface TransactionDto {
   customerName: string | null;
   cardTypeId: number | null;
   cardTypeName: string | null;
+  feeTypeId: number | null; // LOẠI PHÍ áp cho GD
+  feeTypeName: string | null;
   amount: number;
   partnerMarginPct: number;
   sellMarginPct: number;
@@ -1716,6 +1831,7 @@ export interface TransactionFilter {
   bankId?: number;
   customerId?: number;
   cardTypeId?: number;
+  feeTypeId?: number; // lọc theo LOẠI PHÍ
   dateFrom?: string;
   dateTo?: string;
   settled?: boolean;
@@ -1775,10 +1891,28 @@ export interface ListTransactionsResult {
 export interface CreateTransactionInput {
   tidId: number;
   cardTypeId: number;
+  feeTypeId: number; // LOẠI PHÍ (bắt buộc)
   amount: number;
   txnDate: string;
   customerId?: number | null;
   note?: string;
+}
+
+// FEE_TYPE — báo cáo doanh thu tách theo LOẠI PHÍ.
+export interface RevenueByFeeTypeRow {
+  feeTypeId: number | null;
+  feeTypeName: string | null;
+  count: number;
+  totalAmount: number;
+  totalRevenuePartner: number;
+  totalRevenueSell: number;
+  totalRevenue: number;
+}
+export interface RevenueByFeeTypeResult {
+  ok: boolean;
+  error?: string;
+  message?: string;
+  data?: RevenueByFeeTypeRow[];
 }
 
 export interface DashboardStats {

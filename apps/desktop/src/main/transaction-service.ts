@@ -68,6 +68,8 @@ export interface TransactionDto {
   customerName: string | null;
   cardTypeId: number | null;
   cardTypeName: string | null;
+  feeTypeId: number | null; // LOẠI PHÍ áp cho GD
+  feeTypeName: string | null;
   amount: number;
   partnerMarginPct: number; // CL_NCC %
   sellMarginPct: number; // CL_KH %
@@ -92,6 +94,7 @@ export interface TransactionFilter {
   bankId?: number;
   customerId?: number;
   cardTypeId?: number;
+  feeTypeId?: number; // lọc theo LOẠI PHÍ
   dateFrom?: string;
   dateTo?: string;
   settled?: boolean; // undefined = tất cả
@@ -160,6 +163,7 @@ async function resolveFeeForTxn(
   db: Db,
   tidRow: { id: number; partnerId: number | null; bankId: number | null },
   cardTypeId: number,
+  feeTypeId: number,
   at: Date
 ): Promise<{ ok: true; fee: ResolvedFee } | { ok: false; error: string; message: string }> {
   if (tidRow.partnerId == null)
@@ -168,25 +172,39 @@ async function resolveFeeForTxn(
   if (!card || card.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Loại thẻ không tồn tại.' };
   if (tidRow.bankId != null && card.bankId !== tidRow.bankId)
     return { ok: false, error: 'CARD_BANK_MISMATCH', message: 'Loại thẻ không thuộc ngân hàng của TID này.' };
-  // Tất cả KỲ giá còn sống của tổ hợp → chọn kỳ hiệu lực tại ngày GD (không lấy đại kỳ tương lai).
+  // FEE_MODEL — phí MUA + phí CÀI MÁY là CỐ ĐỊNH ở FeeRate (Đối tác × Loại thẻ), KHÔNG theo loại phí.
+  // Tất cả KỲ giá còn sống của tổ hợp (partner × card) → chọn kỳ hiệu lực tại ngày GD (không lấy đại kỳ tương lai).
   const rates = await db.feeRate.findMany({ where: { partnerId: tidRow.partnerId, cardTypeId, deletedAt: null } });
   const rate = pickEffectiveRate(rates, at);
   if (!rate)
     return {
       ok: false,
       error: 'NO_FEE_RATE',
-      message: 'Chưa có biểu phí hiệu lực tại ngày giao dịch. Hãy cấu hình biểu phí có ngày hiệu lực ≤ ngày GD.'
+      message: 'Chưa có biểu phí (phí mua/cài máy) hiệu lực tại ngày giao dịch. Hãy cấu hình biểu phí có ngày hiệu lực ≤ ngày GD.'
     };
-  // R30: phí bán THỰC TẾ theo TID × thẻ (thỏa thuận khi giao) ưu tiên hơn phí bán NIÊM YẾT (FeeRate.phiBan).
-  // Phí cài máy vẫn lấy từ kỳ FeeRate hiệu lực → CL_KH = (phí bán thực tế nếu có, else niêm yết) − phí cài máy.
+  // FEE_MODEL — LOẠI PHÍ chỉ đổi PHÍ BÁN. Phí bán THỰC TẾ = override TID (TidSellFee theo tid × thẻ × loại phí)
+  // NẾU CÓ, ngược lại = phí bán NIÊM YẾT (FeeSellQuote theo đối tác × thẻ × loại phí, kỳ hiệu lực tại ngày GD).
   // orderBy id desc → xác định (chọn override mới nhất) kể cả nếu lỡ tồn tại >1 dòng active; khớp listTidSellFees.
-  const override = await db.tidSellFee.findFirst({ where: { tidId: tidRow.id, cardTypeId, deletedAt: null }, orderBy: { id: 'desc' } });
-  const phiBan = override ? override.phiBan : rate.phiBan;
+  const override = await db.tidSellFee.findFirst({ where: { tidId: tidRow.id, cardTypeId, feeTypeId, deletedAt: null }, orderBy: { id: 'desc' } });
+  let phiBanActual: number;
+  if (override) {
+    phiBanActual = override.phiBan;
+  } else {
+    const quotes = await db.feeSellQuote.findMany({ where: { partnerId: tidRow.partnerId, cardTypeId, feeTypeId, deletedAt: null } });
+    const quote = pickEffectiveRate(quotes, at);
+    if (!quote)
+      return {
+        ok: false,
+        error: 'NO_SELL_QUOTE',
+        message: 'Chưa có phí bán niêm yết hiệu lực tại ngày giao dịch cho loại phí này. Hãy cấu hình phí bán niêm yết (đúng loại phí) có ngày hiệu lực ≤ ngày GD, hoặc đặt phí bán thực tế cho TID.'
+      };
+    phiBanActual = quote.phiBan;
+  }
   return {
     ok: true,
     fee: {
-      partnerMarginMilli: rate.phiMua - rate.phiCaiMay, // CL_NCC
-      sellMarginMilli: phiBan - rate.phiCaiMay, // CL_KH (ưu tiên phí bán thực tế theo TID)
+      partnerMarginMilli: rate.phiMua - rate.phiCaiMay, // CL_NCC (giống nhau mọi loại phí)
+      sellMarginMilli: phiBanActual - rate.phiCaiMay, // CL_KH = phí bán thực tế/niêm yết theo loại phí − phí cài máy
       bankId: tidRow.bankId,
       partnerId: tidRow.partnerId
     }
@@ -196,6 +214,7 @@ async function resolveFeeForTxn(
 export interface CreateTransactionInput {
   tidId: number;
   cardTypeId: number;
+  feeTypeId: number; // LOẠI PHÍ (bắt buộc) — tra biểu phí đúng loại phí + lưu vào GD
   amount: number;
   txnDate: string; // ISO
   customerId?: number | null; // mặc định lấy theo TID
@@ -212,11 +231,15 @@ export async function createTransaction(input: CreateTransactionInput): Promise<
   const txnDate = parseDate(input.txnDate);
   if (!txnDate) return { ok: false, error: 'VALIDATION', message: 'Ngày giao dịch không hợp lệ.' };
   if (!input.cardTypeId) return { ok: false, error: 'VALIDATION', message: 'Vui lòng chọn loại thẻ.' };
+  if (!input.feeTypeId) return { ok: false, error: 'VALIDATION', message: 'Vui lòng chọn loại phí.' };
 
   const tid = await db.tid.findUnique({ where: { id: input.tidId } });
   if (!tid || tid.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'TID không tồn tại.' };
+  // FEE_TYPE — loại phí phải tồn tại (chưa xóa) trước khi tra biểu phí theo loại phí.
+  const feeType = await db.feeType.findUnique({ where: { id: input.feeTypeId } });
+  if (!feeType || feeType.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Loại phí không tồn tại.' };
 
-  const fee = await resolveFeeForTxn(db, tid, input.cardTypeId, txnDate);
+  const fee = await resolveFeeForTxn(db, tid, input.cardTypeId, input.feeTypeId, txnDate);
   if (!fee.ok) return fee;
 
   const rev = computeRevenue(amount, fee.fee.partnerMarginMilli, fee.fee.sellMarginMilli);
@@ -243,6 +266,7 @@ export async function createTransaction(input: CreateTransactionInput): Promise<
         tidId: tid.id,
         customerId: customerId ?? null,
         cardTypeId: input.cardTypeId,
+        feeTypeId: input.feeTypeId,
         amount,
         partnerMarginMilli: fee.fee.partnerMarginMilli,
         sellMarginMilli: fee.fee.sellMarginMilli,
@@ -261,7 +285,7 @@ export async function createTransaction(input: CreateTransactionInput): Promise<
       action: 'TRANSACTION_CREATED',
       targetType: 'Transaction',
       targetId: String(c.id),
-      after: auditSnapshot({ code, tidId: tid.id, cardTypeId: input.cardTypeId, amount, revenueAmount: rev.revenueAmount })
+      after: auditSnapshot({ code, tidId: tid.id, cardTypeId: input.cardTypeId, feeTypeId: input.feeTypeId, amount, revenueAmount: rev.revenueAmount })
     });
     return c;
   });
@@ -357,6 +381,7 @@ async function buildWhere(db: Db, filter: TransactionFilter): Promise<Record<str
   }
   if (filter.customerId) where.customerId = filter.customerId;
   if (filter.cardTypeId) where.cardTypeId = filter.cardTypeId;
+  if (filter.feeTypeId) where.feeTypeId = filter.feeTypeId;
   if (filter.settled !== undefined) where.settled = filter.settled;
   const from = parseDate(filter.dateFrom);
   const to = parseDate(filter.dateTo);
@@ -425,10 +450,12 @@ export async function listTransactions(filter: TransactionFilter = {}): Promise<
   const partnerIds = [...new Set([...tidMap.values()].map((t) => t.partnerId).filter((x): x is number => x != null))];
   const custIds = [...new Set(rows.map((r) => r.customerId).filter((x): x is number => x != null))];
   const cardIds = [...new Set(rows.map((r) => r.cardTypeId).filter((x): x is number => x != null))];
+  const feeTypeIds = [...new Set(rows.map((r) => r.feeTypeId).filter((x): x is number => x != null))];
   const bankMap = new Map((await db.bank.findMany({ where: { id: { in: bankIds } }, select: { id: true, name: true } })).map((b) => [b.id, b.name]));
   const partnerMap = new Map((await db.partner.findMany({ where: { id: { in: partnerIds } }, select: { id: true, name: true } })).map((p) => [p.id, p.name]));
   const custMap = new Map((await db.customer.findMany({ where: { id: { in: custIds } }, select: { id: true, fullName: true } })).map((c) => [c.id, c.fullName]));
   const cardMap = new Map((await db.cardType.findMany({ where: { id: { in: cardIds } }, select: { id: true, name: true } })).map((c) => [c.id, c.name]));
+  const feeTypeMap = new Map((await db.feeType.findMany({ where: { id: { in: feeTypeIds } }, select: { id: true, name: true } })).map((f) => [f.id, f.name]));
   const names = await resolveUserNames(db, rows.map((r) => r.createdBy));
 
   const data: TransactionDto[] = rows.map((r) => {
@@ -448,6 +475,8 @@ export async function listTransactions(filter: TransactionFilter = {}): Promise<
       customerName: r.customerId != null ? custMap.get(r.customerId) ?? null : null,
       cardTypeId: r.cardTypeId,
       cardTypeName: r.cardTypeId != null ? cardMap.get(r.cardTypeId) ?? null : null,
+      feeTypeId: r.feeTypeId,
+      feeTypeName: r.feeTypeId != null ? feeTypeMap.get(r.feeTypeId) ?? null : null,
       amount: Number(r.amount),
       partnerMarginPct: milliToPct(r.partnerMarginMilli),
       sellMarginPct: milliToPct(r.sellMarginMilli),
@@ -469,6 +498,64 @@ export async function listTransactions(filter: TransactionFilter = {}): Promise<
 
 function emptySummary(): RevenueSummary {
   return { count: 0, totalAmount: 0, totalRevenuePartner: 0, totalRevenueSell: 0, totalRevenue: 0 };
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// FEE_TYPE — BÁO CÁO DOANH THU TÁCH THEO LOẠI PHÍ (Ủy quyền/Đối ứng/Tiền chờ…)
+// ═════════════════════════════════════════════════════════════════════════════
+export interface RevenueByFeeTypeRow {
+  feeTypeId: number | null; // null = GD lịch sử chưa gán loại phí
+  feeTypeName: string | null; // '(Chưa gán loại phí)' khi feeTypeId null
+  count: number;
+  totalAmount: number;
+  totalRevenuePartner: number;
+  totalRevenueSell: number;
+  totalRevenue: number;
+}
+export interface RevenueByFeeTypeResult {
+  ok: boolean;
+  error?: string;
+  message?: string;
+  data?: RevenueByFeeTypeRow[];
+}
+
+/**
+ * REVENUE_VIEW — doanh thu NHÓM theo LOẠI PHÍ trong phạm vi lọc (dùng CHUNG buildWhere với listTransactions,
+ * nhận cả filter.feeTypeId). LOẠI bill đã HỦY (status CANCELLED) khỏi tổng — khớp summary listTransactions.
+ * Trả về 1 dòng/loại phí: tổng số tiền + chênh đối tác + chênh bán + doanh thu (BigInt→Number). Sắp theo
+ * doanh thu giảm dần (loại phí đóng góp nhiều đứng trước); dòng "chưa gán loại phí" (feeTypeId null) cuối.
+ */
+export async function revenueByFeeType(filter: TransactionFilter = {}): Promise<RevenueByFeeTypeResult> {
+  const g = await requirePermission(VIEW, { action: VIEW });
+  if (!g.ok) return g;
+  const db = g.db;
+  const where = await buildWhere(db, filter);
+  if (where === null) return { ok: true, data: [] };
+  const revenueWhere = { ...where, status: { not: 'CANCELLED' } };
+  const groups = await db.transaction.groupBy({
+    by: ['feeTypeId'],
+    where: revenueWhere,
+    _sum: { amount: true, revenuePartner: true, revenueSell: true, revenueAmount: true },
+    _count: true
+  });
+  const ftIds = groups.map((gr) => gr.feeTypeId).filter((x): x is number => x != null);
+  const ftMap = new Map((await db.feeType.findMany({ where: { id: { in: ftIds } }, select: { id: true, name: true } })).map((f) => [f.id, f.name]));
+  const data: RevenueByFeeTypeRow[] = groups.map((gr) => ({
+    feeTypeId: gr.feeTypeId,
+    feeTypeName: gr.feeTypeId != null ? ftMap.get(gr.feeTypeId) ?? null : '(Chưa gán loại phí)',
+    count: gr._count,
+    totalAmount: Number(gr._sum.amount ?? 0),
+    totalRevenuePartner: Number(gr._sum.revenuePartner ?? 0),
+    totalRevenueSell: Number(gr._sum.revenueSell ?? 0),
+    totalRevenue: Number(gr._sum.revenueAmount ?? 0)
+  }));
+  // Doanh thu giảm dần; dòng null (chưa gán loại phí) luôn xuống cuối.
+  data.sort((a, b) => {
+    if (a.feeTypeId == null) return 1;
+    if (b.feeTypeId == null) return -1;
+    return b.totalRevenue - a.totalRevenue;
+  });
+  return { ok: true, data };
 }
 
 /**

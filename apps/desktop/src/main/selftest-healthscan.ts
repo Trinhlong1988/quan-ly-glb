@@ -37,8 +37,8 @@ export async function runHealthScanSelfTest(): Promise<number> {
   await db.transaction.create({ data: { tidId: 999999, cardTypeId: card.id, amount: 1000, partnerMarginMilli: 0, sellMarginMilli: 0, revenuePartner: 0, revenueSell: 0, revenueAmount: 0, txnDate: new Date() } });
   // (d) orphan khách + orphan loại thẻ
   await db.transaction.create({ data: { tidId: tid.id, cardTypeId: 888888, customerId: 777777, amount: 2000, partnerMarginMilli: 0, sellMarginMilli: 0, revenuePartner: 0, revenueSell: 0, revenueAmount: 0, txnDate: new Date() } });
-  // (e) biểu phí orphan
-  await db.feeRate.create({ data: { partnerId: 555555, cardTypeId: card.id, phiMua: 3000, phiCaiMay: 1000, phiBan: 2500, effectiveFrom: new Date('1970-01-01T00:00:00.000Z') } });
+  // (e) biểu phí orphan (đối tác 555555 không tồn tại)
+  await db.feeRate.create({ data: { partnerId: 555555, cardTypeId: card.id, phiMua: 3000, phiCaiMay: 1000, effectiveFrom: new Date('1970-01-01T00:00:00.000Z') } });
   // (f) user bị khóa
   const lockedUser = await userSvc.createUser({ fullName: 'Bị khóa', username: 'lockeduser1', password: 'Lock@12345', roleCodes: ['SALES'] }).catch(() => null);
   if (lockedUser && 'id' in lockedUser && lockedUser.id) await db.user.update({ where: { id: lockedUser.id as number }, data: { lockedAt: new Date(), failedAttempts: 5 } });

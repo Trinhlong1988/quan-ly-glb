@@ -175,6 +175,13 @@ export async function deleteFeeTypes(ids: number[], password: string): Promise<M
 // ═════════════════════════════════════════════════════════════════════════════
 // §C5b — BIỂU PHÍ % theo Đối tác × Loại thẻ
 // ═════════════════════════════════════════════════════════════════════════════
+// FEE_MODEL — 1 % phí bán niêm yết của 1 LOẠI PHÍ trong biểu phí (Đối tác × Loại thẻ × kỳ).
+export interface FeeSellQuoteDto {
+  feeTypeId: number; // LOẠI PHÍ (Ủy quyền/Tiền chờ/Tiền nhanh…)
+  feeTypeName: string | null;
+  phiBan: number; // % niêm yết của loại phí này
+  clKh: number; // % = phiBan − phiCaiMay (chênh bán của loại phí này)
+}
 export interface FeeRateDto extends AuditTrail {
   id: number;
   partnerId: number;
@@ -186,13 +193,12 @@ export interface FeeRateDto extends AuditTrail {
   bankId: number | null;
   bankCode: string | null;
   bankName: string | null;
-  phiMua: number; // %
-  phiCaiMay: number; // %
-  phiBan: number; // %
-  clNcc: number; // % = phiMua − phiCaiMay
-  clKh: number; // % = phiBan − phiCaiMay
+  phiMua: number; // % — CỐ ĐỊNH (không theo loại phí)
+  phiCaiMay: number; // % — CỐ ĐỊNH (không theo loại phí)
+  clNcc: number; // % = phiMua − phiCaiMay (giống nhau mọi loại phí)
   effectiveFrom: string; // ISO — ngày bắt đầu hiệu lực của kỳ giá (P1.1)
   isCurrent: boolean; // kỳ đang hiệu lực HÔM NAY của tổ hợp (đối tác × loại thẻ)
+  sellQuotes: FeeSellQuoteDto[]; // phí bán niêm yết theo TỪNG loại phí (cùng kỳ effectiveFrom)
 }
 export interface FeeRateFilter {
   partnerId?: number;
@@ -202,10 +208,18 @@ export interface FeeRateFilter {
 export interface SetFeeRateInput {
   partnerId: number;
   cardTypeId: number;
-  phiMua: number; // %
-  phiCaiMay: number; // %
-  phiBan: number; // %
+  phiMua: number; // % — CỐ ĐỊNH
+  phiCaiMay: number; // % — CỐ ĐỊNH
   effectiveFrom?: string; // ISO — không truyền = mặc định HÔM NAY (P1.1)
+  // Phí bán NIÊM YẾT cho MỌI loại phí bán trong danh mục — mỗi loại phí 1 %.
+  sellQuotes: { feeTypeId: number; phiBan: number }[];
+}
+// Phí bán niêm yết hiệu lực theo loại phí (listSellQuotes) — tham chiếu khi set phí bán TID / xem biểu phí.
+export interface SellQuoteEffectiveDto {
+  feeTypeId: number;
+  feeTypeName: string | null;
+  phiBan: number; // %
+  effectiveFrom: string; // ISO
 }
 
 export async function listFeeRates(filter: FeeRateFilter = {}): Promise<{ ok: boolean; data?: FeeRateDto[]; error?: string; message?: string }> {
@@ -232,13 +246,37 @@ export async function listFeeRates(filter: FeeRateFilter = {}): Promise<{ ok: bo
       if (cur) currentIdByCombo.set(key, cur.id);
     }
   }
+  // FEE_MODEL — phí bán niêm yết theo TỪNG loại phí (FeeSellQuote), khớp mỗi kỳ FeeRate theo
+  // (partnerId, cardTypeId, effectiveFrom) — cùng mốc thời gian (startOfDayLocal khi set).
+  const comboCards = [...new Set(rows.map((r) => r.cardTypeId))];
+  const comboPartners = [...new Set(rows.map((r) => r.partnerId))];
+  const quotes = rows.length
+    ? await db.feeSellQuote.findMany({ where: { deletedAt: null, partnerId: { in: comboPartners }, cardTypeId: { in: comboCards } } })
+    : [];
+  const quotesByPeriod = new Map<string, typeof quotes>();
+  for (const q of quotes) {
+    const key = `${q.partnerId}:${q.cardTypeId}:${q.effectiveFrom.getTime()}`;
+    const arr = quotesByPeriod.get(key) ?? [];
+    arr.push(q);
+    quotesByPeriod.set(key, arr);
+  }
   const names = await resolveUserNames(db, rows.flatMap((r) => [r.createdBy, r.updatedBy]));
-  const partners = new Map((await db.partner.findMany({ where: { id: { in: [...new Set(rows.map((r) => r.partnerId))] } }, select: { id: true, code: true, name: true } })).map((p) => [p.id, p]));
-  const cards = new Map((await db.cardType.findMany({ where: { id: { in: [...new Set(rows.map((r) => r.cardTypeId))] } }, select: { id: true, code: true, name: true, bankId: true } })).map((c) => [c.id, c]));
+  const partners = new Map((await db.partner.findMany({ where: { id: { in: comboPartners } }, select: { id: true, code: true, name: true } })).map((p) => [p.id, p]));
+  const cards = new Map((await db.cardType.findMany({ where: { id: { in: comboCards } }, select: { id: true, code: true, name: true, bankId: true } })).map((c) => [c.id, c]));
   const banks = new Map((await db.bank.findMany({ where: { id: { in: [...new Set([...cards.values()].map((c) => c.bankId))] } }, select: { id: true, code: true, name: true } })).map((b) => [b.id, b]));
+  const feeTypes = new Map((await db.feeType.findMany({ where: { id: { in: [...new Set(quotes.map((q) => q.feeTypeId))] } }, select: { id: true, name: true } })).map((f) => [f.id, f.name]));
   let data = rows.map((r) => {
     const card = cards.get(r.cardTypeId);
     const bank = card ? banks.get(card.bankId) : undefined;
+    const periodQuotes = (quotesByPeriod.get(`${r.partnerId}:${r.cardTypeId}:${r.effectiveFrom.getTime()}`) ?? [])
+      .slice()
+      .sort((a, b) => a.feeTypeId - b.feeTypeId);
+    const sellQuotes: FeeSellQuoteDto[] = periodQuotes.map((q) => ({
+      feeTypeId: q.feeTypeId,
+      feeTypeName: feeTypes.get(q.feeTypeId) ?? null,
+      phiBan: milliToPct(q.phiBan),
+      clKh: milliToPct(q.phiBan - r.phiCaiMay)
+    }));
     return {
       id: r.id,
       partnerId: r.partnerId,
@@ -252,11 +290,10 @@ export async function listFeeRates(filter: FeeRateFilter = {}): Promise<{ ok: bo
       bankName: bank?.name ?? null,
       phiMua: milliToPct(r.phiMua),
       phiCaiMay: milliToPct(r.phiCaiMay),
-      phiBan: milliToPct(r.phiBan),
       clNcc: milliToPct(r.phiMua - r.phiCaiMay),
-      clKh: milliToPct(r.phiBan - r.phiCaiMay),
       effectiveFrom: r.effectiveFrom.toISOString(),
       isCurrent: currentIdByCombo.get(`${r.partnerId}:${r.cardTypeId}`) === r.id,
+      sellQuotes,
       ...trail(r, names)
     };
   });
@@ -265,10 +302,12 @@ export async function listFeeRates(filter: FeeRateFilter = {}): Promise<{ ok: bo
 }
 
 /**
- * Set biểu phí cho 1 KỲ của tổ hợp (Đối tác × Loại thẻ) tại mốc `effectiveFrom` (P1.1).
- * UPSERT theo (partnerId, cardTypeId, effectiveFrom-NGÀY): đã có kỳ CÙNG mốc (kể cả xóa mềm→bật lại)
- * → cập nhật; khác mốc → TẠO KỲ MỚI (hai kỳ khác effectiveFrom cùng tồn tại). Không báo lỗi "trùng".
- * Không truyền effectiveFrom → mặc định HÔM NAY.
+ * Set biểu phí cho 1 KỲ của tổ hợp (Đối tác × Loại thẻ) tại mốc `effectiveFrom` (P1.1). FEE_MODEL:
+ *   • phí MUA + phí CÀI MÁY = 1 giá CỐ ĐỊNH (FeeRate) — KHÔNG theo loại phí.
+ *   • phí BÁN NIÊM YẾT theo TỪNG loại phí (FeeSellQuote) — mỗi loại phí 1 %.
+ * UPSERT theo (partnerId, cardTypeId, effectiveFrom-NGÀY) cho FeeRate + theo thêm chiều feeTypeId cho mỗi
+ * FeeSellQuote. Đã có kỳ CÙNG mốc (kể cả xóa mềm→bật lại) → cập nhật; khác mốc → TẠO KỲ MỚI. Toàn bộ trong
+ * 1 $transaction (nguyên tử). Không truyền effectiveFrom → mặc định HÔM NAY.
  */
 export async function setFeeRate(input: SetFeeRateInput): Promise<MutationResult> {
   const g = await requirePermission(MANAGE, { action: 'FEE_RATE_SET', targetType: 'FeeRate' });
@@ -278,13 +317,25 @@ export async function setFeeRate(input: SetFeeRateInput): Promise<MutationResult
   if (!input.cardTypeId) return { ok: false, error: 'VALIDATION', message: 'Vui lòng chọn loại thẻ.' };
   const phiMua = pctToMilli(input.phiMua);
   const phiCaiMay = pctToMilli(input.phiCaiMay);
-  const phiBan = pctToMilli(input.phiBan);
   if (phiMua === null) return { ok: false, error: 'VALIDATION', message: 'Phí mua không hợp lệ (≥0, tối đa 3 số thập phân).' };
   if (phiCaiMay === null) return { ok: false, error: 'VALIDATION', message: 'Phí cài máy không hợp lệ (≥0, tối đa 3 số thập phân).' };
-  if (phiBan === null) return { ok: false, error: 'VALIDATION', message: 'Phí bán không hợp lệ (≥0, tối đa 3 số thập phân).' };
-  // R48 Pha 3 — chặn chênh ÂM (doanh thu âm + công nợ lệch): CL_NCC = phiMua−phiCaiMay ≥ 0, CL_KH = phiBan−phiCaiMay ≥ 0.
+  // R48 Pha 3 — chặn chênh ÂM: CL_NCC = phiMua−phiCaiMay ≥ 0 (giống nhau mọi loại phí).
   if (phiMua < phiCaiMay) return { ok: false, error: 'VALIDATION', message: 'Phí mua phải ≥ phí cài máy (chênh đối tác không được âm).' };
-  if (phiBan < phiCaiMay) return { ok: false, error: 'VALIDATION', message: 'Phí bán phải ≥ phí cài máy (chênh bán không được âm).' };
+  // Phí bán niêm yết BẮT BUỘC cấu hình cho ≥1 loại phí (danh mục ≥3 loại — UI gửi hết loại phí active).
+  if (!Array.isArray(input.sellQuotes) || input.sellQuotes.length === 0)
+    return { ok: false, error: 'VALIDATION', message: 'Vui lòng nhập phí bán niêm yết cho ít nhất một loại phí.' };
+  // Validate từng phí bán niêm yết: %≥0 ≤3 thập phân + KHÔNG < phí cài máy (chênh bán không được âm, B45).
+  const quotesMilli: { feeTypeId: number; phiBan: number }[] = [];
+  const seenFeeType = new Set<number>();
+  for (const q of input.sellQuotes) {
+    if (!q.feeTypeId) return { ok: false, error: 'VALIDATION', message: 'Thiếu loại phí cho phí bán niêm yết.' };
+    if (seenFeeType.has(q.feeTypeId)) return { ok: false, error: 'VALIDATION', message: 'Trùng loại phí trong danh sách phí bán niêm yết.' };
+    seenFeeType.add(q.feeTypeId);
+    const phiBan = pctToMilli(q.phiBan);
+    if (phiBan === null) return { ok: false, error: 'VALIDATION', message: 'Phí bán niêm yết không hợp lệ (≥0, tối đa 3 số thập phân).' };
+    if (phiBan < phiCaiMay) return { ok: false, error: 'VALIDATION', message: 'Mỗi phí bán niêm yết phải ≥ phí cài máy (chênh bán không được âm).' };
+    quotesMilli.push({ feeTypeId: q.feeTypeId, phiBan });
+  }
   const effRaw = input.effectiveFrom !== undefined ? parseDate(input.effectiveFrom) : new Date();
   if (!effRaw) return { ok: false, error: 'VALIDATION', message: 'Ngày hiệu lực không hợp lệ.' };
   const effectiveFrom = startOfDayLocal(effRaw);
@@ -293,24 +344,71 @@ export async function setFeeRate(input: SetFeeRateInput): Promise<MutationResult
   if (!partner || partner.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Đối tác không tồn tại.' };
   const card = await db.cardType.findUnique({ where: { id: input.cardTypeId } });
   if (!card || card.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Loại thẻ không tồn tại.' };
+  // Mỗi loại phí niêm yết phải tồn tại + chưa xóa.
+  for (const q of quotesMilli) {
+    const feeType = await db.feeType.findUnique({ where: { id: q.feeTypeId } });
+    if (!feeType || feeType.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Loại phí không tồn tại.' };
+  }
   // Loại thẻ thuộc ngân hàng — ngân hàng đó phải liên kết với đối tác (§C5b: chọn NH liên kết đối tác).
   const link = await db.partnerBank.findFirst({ where: { partnerId: input.partnerId, bankId: card.bankId, deletedAt: null } });
   if (!link) return { ok: false, error: 'NOT_LINKED', message: 'Ngân hàng của loại thẻ này chưa liên kết với đối tác. Hãy liên kết ở mục Đối tác trước.' };
 
-  // Upsert theo KỲ: tìm kỳ cùng mốc (cùng NGÀY effectiveFrom, kể cả bản xóa mềm) → cập nhật; khác mốc → tạo kỳ mới.
+  // Upsert theo KỲ (cùng NGÀY effectiveFrom, kể cả bản xóa mềm) — FeeRate + mỗi FeeSellQuote — nguyên tử.
   const dayEnd = new Date(effectiveFrom.getTime() + 86_400_000);
-  const existing = await db.feeRate.findFirst({
-    where: { partnerId: input.partnerId, cardTypeId: input.cardTypeId, effectiveFrom: { gte: effectiveFrom, lt: dayEnd } }
+  const rateId = await db.$transaction(async (tx) => {
+    const existing = await tx.feeRate.findFirst({
+      where: { partnerId: input.partnerId, cardTypeId: input.cardTypeId, effectiveFrom: { gte: effectiveFrom, lt: dayEnd } }
+    });
+    let id: number;
+    if (existing) {
+      await tx.feeRate.update({ where: { id: existing.id }, data: { phiMua, phiCaiMay, effectiveFrom, deletedAt: null, deletedBy: null, updatedBy: user.id } });
+      id = existing.id;
+    } else {
+      const created = await tx.feeRate.create({ data: { partnerId: input.partnerId, cardTypeId: input.cardTypeId, phiMua, phiCaiMay, effectiveFrom, createdBy: user.id } });
+      id = created.id;
+    }
+    for (const q of quotesMilli) {
+      const exQ = await tx.feeSellQuote.findFirst({
+        where: { partnerId: input.partnerId, cardTypeId: input.cardTypeId, feeTypeId: q.feeTypeId, effectiveFrom: { gte: effectiveFrom, lt: dayEnd } }
+      });
+      if (exQ) {
+        await tx.feeSellQuote.update({ where: { id: exQ.id }, data: { phiBan: q.phiBan, effectiveFrom, deletedAt: null, deletedBy: null, updatedBy: user.id } });
+      } else {
+        await tx.feeSellQuote.create({ data: { partnerId: input.partnerId, cardTypeId: input.cardTypeId, feeTypeId: q.feeTypeId, phiBan: q.phiBan, effectiveFrom, createdBy: user.id } });
+      }
+    }
+    return id;
   });
-  if (existing) {
-    const before = auditSnapshot({ phiMua: existing.phiMua, phiCaiMay: existing.phiCaiMay, phiBan: existing.phiBan, effectiveFrom: existing.effectiveFrom.toISOString(), deleted: existing.deletedAt !== null });
-    const updated = await db.feeRate.update({ where: { id: existing.id }, data: { phiMua, phiCaiMay, phiBan, effectiveFrom, deletedAt: null, deletedBy: null, updatedBy: user.id } });
-    await writeAudit(db, { actorUserId: user.id, action: 'FEE_RATE_SET', targetType: 'FeeRate', targetId: String(updated.id), before, after: auditSnapshot({ phiMua, phiCaiMay, phiBan, effectiveFrom: effectiveFrom.toISOString() }) });
-    return { ok: true, id: updated.id };
+  await writeAudit(db, { actorUserId: user.id, action: 'FEE_RATE_SET', targetType: 'FeeRate', targetId: String(rateId), after: auditSnapshot({ partnerId: input.partnerId, cardTypeId: input.cardTypeId, phiMua, phiCaiMay, effectiveFrom: effectiveFrom.toISOString(), sellQuotes: quotesMilli }) });
+  return { ok: true, id: rateId };
+}
+
+/**
+ * FEE_MODEL — phí bán NIÊM YẾT hiệu lực theo TỪNG loại phí của (Đối tác × Loại thẻ) tại `at` (mặc định HÔM
+ * NAY). Mỗi loại phí lấy KỲ FeeSellQuote hiệu lực (pickEffectiveRate). Dùng cho form phí bán TID (tham chiếu).
+ */
+export async function listSellQuotes(partnerId: number, cardTypeId: number, at?: string): Promise<{ ok: boolean; data?: SellQuoteEffectiveDto[]; error?: string; message?: string }> {
+  const g = await requirePermission(VIEW, { action: VIEW });
+  if (!g.ok) return g;
+  const db = g.db;
+  if (!partnerId || !cardTypeId) return { ok: false, error: 'VALIDATION', message: 'Thiếu đối tác hoặc loại thẻ.' };
+  const when = at ? parseDate(at) ?? new Date() : new Date();
+  const quotes = await db.feeSellQuote.findMany({ where: { partnerId, cardTypeId, deletedAt: null } });
+  const byFeeType = new Map<number, typeof quotes>();
+  for (const q of quotes) {
+    const arr = byFeeType.get(q.feeTypeId) ?? [];
+    arr.push(q);
+    byFeeType.set(q.feeTypeId, arr);
   }
-  const created = await db.feeRate.create({ data: { partnerId: input.partnerId, cardTypeId: input.cardTypeId, phiMua, phiCaiMay, phiBan, effectiveFrom, createdBy: user.id } });
-  await writeAudit(db, { actorUserId: user.id, action: 'FEE_RATE_SET', targetType: 'FeeRate', targetId: String(created.id), after: auditSnapshot({ partnerId: input.partnerId, cardTypeId: input.cardTypeId, phiMua, phiCaiMay, phiBan, effectiveFrom: effectiveFrom.toISOString() }) });
-  return { ok: true, id: created.id };
+  const feeTypeNames = new Map((await db.feeType.findMany({ where: { id: { in: [...byFeeType.keys()] } }, select: { id: true, name: true } })).map((f) => [f.id, f.name]));
+  const data: SellQuoteEffectiveDto[] = [];
+  for (const [feeTypeId, arr] of byFeeType) {
+    const eff = pickEffectiveRate(arr, when);
+    if (!eff) continue;
+    data.push({ feeTypeId, feeTypeName: feeTypeNames.get(feeTypeId) ?? null, phiBan: milliToPct(eff.phiBan), effectiveFrom: eff.effectiveFrom.toISOString() });
+  }
+  data.sort((a, b) => a.feeTypeId - b.feeTypeId);
+  return { ok: true, data };
 }
 
 export async function deleteFeeRates(ids: number[], password: string): Promise<MutationResult & { deleted?: number }> {
@@ -326,7 +424,12 @@ export async function deleteFeeRates(ids: number[], password: string): Promise<M
   for (const id of ids) {
     const row = await db.feeRate.findUnique({ where: { id } });
     if (!row || row.deletedAt) continue;
-    await db.feeRate.update({ where: { id }, data: { deletedAt: new Date(), updatedBy: user.id, deletedBy: user.id } });
+    const now = new Date();
+    // FEE_MODEL — xóa 1 kỳ biểu phí cũng xóa mềm các phí bán niêm yết CÙNG KỲ (partner × card × effectiveFrom).
+    await db.$transaction(async (tx) => {
+      await tx.feeRate.update({ where: { id }, data: { deletedAt: now, updatedBy: user.id, deletedBy: user.id } });
+      await tx.feeSellQuote.updateMany({ where: { partnerId: row.partnerId, cardTypeId: row.cardTypeId, effectiveFrom: row.effectiveFrom, deletedAt: null }, data: { deletedAt: now, updatedBy: user.id, deletedBy: user.id } });
+    });
     await writeAudit(db, { actorUserId: user.id, action: 'FEE_RATE_DELETED', targetType: 'FeeRate', targetId: String(id), before: auditSnapshot({ partnerId: row.partnerId, cardTypeId: row.cardTypeId }) });
     deleted++;
   }

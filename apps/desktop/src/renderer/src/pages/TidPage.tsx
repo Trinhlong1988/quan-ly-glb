@@ -1,18 +1,21 @@
 import { useEffect, useState } from 'react';
-import { Plus, Loader2, CreditCard, Link2, RefreshCw, Undo2, PackageCheck, Send, Download, History, Tag, Trophy, FilterX, Percent, Trash2, Banknote } from 'lucide-react';
+import { Plus, Loader2, CreditCard, Link2, RefreshCw, Undo2, PackageCheck, Send, Download, History, Tag, Trophy, FilterX, Percent, Trash2, Banknote, Pencil } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate } from '@glb/shared';
-import type { TidDto, UndeliveredTidDto, PosDto, CustomerDto, FundDto, TidRefs, TimelineEventDto, CreateTidInput, TidRevenueRankRow, TidSellFeeRowDto } from '../../../preload/index.d';
+import type { TidDto, UndeliveredTidDto, PosDto, CustomerDto, FundDto, TidRefs, TimelineEventDto, CreateTidInput, ConfigTidInput, TidRevenueRankRow, TidSellFeeRowDto, FeeTypeDto, HandoverTypeLite } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
+import { isStaleWrite, STALE_TITLE } from '../lib/optlock.js';
 import { Modal } from '../components/Modal.js';
 import { Button } from '../components/Button.js';
 import { StatusPill, statusLabel, statusTone } from '../components/StatusPill.js';
+import { MONEY_KIND_LABEL } from './HandoverConfigPage.js';
 import { StatBar } from '../components/StatBar.js';
 import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
 import { StaleBanner } from '../lib/realtime.js';
 import { ImportButton } from '../components/ImportModal.js';
-import { RequestCancelModal, type RequestCancelTarget } from '../components/RequestCancelModal.js';
+import { RequestCancelModal, BulkRequestCancelModal, type RequestCancelTarget } from '../components/RequestCancelModal.js';
+import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../components/Selection.js';
 import { exportCsv } from '../lib/exportCsv.js';
 import { StatusTab, FeePreview } from './TidConfigPage.js';
 import { TabBar, TabButton } from '../components/Tabs.js';
@@ -60,7 +63,10 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
   const [timelineTid, setTimelineTid] = useState<TidDto | null>(null);
   const [sellFeeTid, setSellFeeTid] = useState<TidDto | null>(null); // R30: phí bán thực tế theo TID × thẻ
   const [cancelTarget, setCancelTarget] = useState<RequestCancelTarget | null>(null); // R34: yêu cầu hủy TID
+  const [editTid, setEditTid] = useState<TidDto | null>(null); // Nhóm 1: sửa full thông tin TID
+  const [bulkCancel, setBulkCancel] = useState(false); // Nhóm 1: yêu cầu hủy hàng loạt (qua Duyệt Hủy)
   const [sellTidTarget, setSellTidTarget] = useState<TidDto | null>(null); // Bán TID rời (chưa gắn máy, chưa giao)
+  const sel = useRowSelection();
 
   async function reload(): Promise<void> {
     setLoading(true);
@@ -84,6 +90,7 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
       });
       if (res.ok && res.data) setRows(res.data);
       else if (res.message) toast.alert(res.message);
+      sel.clear();
     }
     setLoading(false);
   }
@@ -268,12 +275,14 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
         />
       )}
 
+      {tab === 'all' && canCancelReq && <SelectionBar count={sel.count} entityLabel="TID" onClear={sel.clear} onDelete={() => setBulkCancel(true)} actionLabel={`Yêu cầu hủy (${sel.count})`} />}
       {(tab === 'all' || tab === 'undelivered') && <StaleBanner domain="Tid" onReload={reload} className="mb-2" />}
       {(tab === 'all' || tab === 'undelivered') && (
         <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs uppercase tracking-wide text-slate-500">
               <tr>
+                {tab === 'all' && canCancelReq && <SelectAllCell ids={rows.map((r) => r.id)} sel={sel} />}
                 <th className="px-4 py-3 whitespace-nowrap">TID</th>
                 <th className="px-4 py-3 whitespace-nowrap">HKD</th>
                 <th className="px-4 py-3 whitespace-nowrap">Ngân hàng</th>
@@ -289,14 +298,14 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
             <tbody className="divide-y divide-line">
               {loading && (
                 <tr>
-                  <td colSpan={tab === 'undelivered' ? 10 : 9} className="px-4 py-8 text-center text-slate-400">
+                  <td colSpan={tab === 'undelivered' ? 10 : 9 + (canCancelReq ? 1 : 0)} className="px-4 py-8 text-center text-slate-400">
                     <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                   </td>
                 </tr>
               )}
               {!loading && tab === 'all' && rows.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-10 text-center text-slate-400">
+                  <td colSpan={9 + (canCancelReq ? 1 : 0)} className="px-4 py-10 text-center text-slate-400">
                     <CreditCard className="mx-auto mb-2 h-6 w-6" />
                     Chưa có TID.
                   </td>
@@ -311,7 +320,8 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
                 </tr>
               )}
               {!loading && (tab === 'all' ? rows : undelivered).map((t) => (
-                <tr key={t.id} className={tab === 'undelivered' && (t as UndeliveredTidDto).agingDays >= 30 ? 'bg-danger/5' : 'hover:bg-appbg/60'}>
+                <tr key={t.id} className={(tab === 'undelivered' && (t as UndeliveredTidDto).agingDays >= 30 ? 'bg-danger/5 ' : 'hover:bg-appbg/60 ') + (tab === 'all' && sel.isSelected(t.id) ? 'bg-brand-tint/40' : '')}>
+                  {tab === 'all' && canCancelReq && <SelectCell id={t.id} sel={sel} />}
                   <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700 whitespace-nowrap">{t.tid}</td>
                   <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{t.hkdName ?? '—'}</td>
                   <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{t.bankCode ?? t.bank ?? '—'}</td>
@@ -341,6 +351,11 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
                         <button onClick={() => setTimelineTid(t)} title="Vòng đời TID" className="rounded-md border border-line p-1.5 text-slate-600 hover:bg-appbg hover:brightness-110">
                           <History className="h-4 w-4" />
                         </button>
+                        {tab === 'all' && canConfig && (
+                          <button onClick={() => setEditTid(t)} title="Sửa thông tin TID" className="rounded-md border border-warning/40 bg-warning/5 p-1.5 text-warning hover:brightness-110">
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                        )}
                         {canOps && (
                           <button onClick={() => setSellFeeTid(t)} className="rounded-md border border-brand/30 bg-brand/5 p-1.5 text-brand hover:brightness-110" title="Phí bán thực tế theo loại thẻ (thỏa thuận khi giao)">
                             <Percent className="h-4 w-4" />
@@ -409,6 +424,15 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
             setAction(null);
             await reload();
           }}
+          onOpenSell={
+            canSell
+              ? () => {
+                  const t = action.tid;
+                  setAction(null);
+                  setSellTidTarget(t);
+                }
+              : undefined
+          }
         />
       )}
       {timelineTid && <TidTimelineModal tid={timelineTid} onClose={() => setTimelineTid(null)} />}
@@ -439,7 +463,144 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
           }}
         />
       )}
+      {editTid && (
+        <TidEditForm
+          tid={editTid}
+          onClose={() => setEditTid(null)}
+          onSaved={async () => {
+            setEditTid(null);
+            await reload();
+          }}
+        />
+      )}
+      {bulkCancel && (
+        <BulkRequestCancelModal
+          entityType="Tid"
+          ids={[...sel.selected]}
+          typeLabel="TID"
+          onClose={() => setBulkCancel(false)}
+          onDone={() => {
+            setBulkCancel(false);
+            void reload();
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+/** Nhóm 1 — Sửa FULL thông tin TID (cấu hình): HKD/đối tác/ngân hàng/ngành nghề/MID/ghi chú/ngày cấp/máy
+ *  khách. Chuỗi TID = định danh (khóa join event-log) → CHỈ ĐỌC. Vận hành (gán/giao/thu hồi) qua nút riêng. */
+function TidEditForm({ tid, onClose, onSaved }: { tid: TidDto; onClose: () => void; onSaved: () => void }): JSX.Element {
+  const toast = useToast();
+  const [refs, setRefs] = useState<TidRefs | null>(null);
+  const [dossierId, setDossierId] = useState(tid.dossierId ? String(tid.dossierId) : '');
+  const [hkdName, setHkdName] = useState(tid.hkdName ?? '');
+  const [partnerId, setPartnerId] = useState(tid.partnerId ? String(tid.partnerId) : '');
+  const [bankId, setBankId] = useState(tid.bankId ? String(tid.bankId) : '');
+  const [industryId, setIndustryId] = useState(tid.industryId ? String(tid.industryId) : '');
+  const [mid, setMid] = useState(tid.mid ?? '');
+  const [issuedAt, setIssuedAt] = useState(tid.issuedAt ? tid.issuedAt.slice(0, 10) : '');
+  const [customerDeviceSerial, setCustomerDeviceSerial] = useState(tid.customerDeviceSerial ?? '');
+  const [note, setNote] = useState(tid.note ?? '');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    window.api.tidRefs().then((r) => r.ok && r.data && setRefs(r.data));
+  }, []);
+
+  // Ngân hàng lọc theo liên kết đối tác (PartnerBank) — nhất quán form Thêm TID.
+  const linkedBankIds = partnerId && refs ? refs.partnerBanks[Number(partnerId)] ?? [] : [];
+  const linkedBanks = refs ? refs.banks.filter((b) => linkedBankIds.includes(b.id)) : [];
+
+  function onPickDossier(id: string): void {
+    setDossierId(id);
+    const d = refs?.dossiers.find((x) => String(x.id) === id);
+    if (d) setHkdName(d.hkdName);
+  }
+
+  async function save(): Promise<void> {
+    if (!partnerId) return toast.alert('Vui lòng chọn đối tác.', 'Thiếu thông tin');
+    if (!bankId) return toast.alert('Vui lòng chọn ngân hàng.', 'Thiếu thông tin');
+    if (!hkdName.trim()) return toast.alert('Tên Hộ Kinh Doanh bắt buộc.', 'Thiếu thông tin');
+    setBusy(true);
+    const input: ConfigTidInput = {
+      tid: tid.tid, // định danh — server giữ nguyên (không đổi qua form này)
+      partnerId: Number(partnerId),
+      bankId: Number(bankId),
+      hkdName: hkdName.trim(),
+      industryId: industryId ? Number(industryId) : null,
+      mid: mid.trim() || null,
+      issuedAt: issuedAt || null,
+      dossierId: dossierId ? Number(dossierId) : null,
+      customerDeviceSerial: customerDeviceSerial.trim() || null,
+      note: note.trim() || null
+    };
+    const res = await window.api.tidConfigUpdate(tid.id, input);
+    setBusy(false);
+    if (res.ok) { toast.success(`Đã cập nhật TID ${tid.tid}`); onSaved(); }
+    else if (isStaleWrite(res)) { toast.alert(res.message ?? 'Bản ghi đã được người khác cập nhật, vui lòng mở lại.', STALE_TITLE); onSaved(); }
+    else toast.alert(res.message ?? 'Cập nhật TID thất bại', 'Không lưu được');
+  }
+
+  return (
+    <Modal title={`Sửa TID ${tid.tid}`} onClose={onClose} width="max-w-2xl">
+      {!refs && <div className="py-6 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></div>}
+      {refs && (
+        <>
+          <div className="mb-2 rounded-md bg-appbg px-3 py-2 text-xs text-slate-500">
+            Chuỗi TID <b className="font-mono text-slate-700">{tid.tid}</b> là định danh cố định — không sửa ở đây. Gán máy / giao khách / thu hồi đổi qua nút thao tác riêng.
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Hộ Kinh Doanh (HKD)" hint="Chọn để tự điền tên + gắn hồ sơ">
+              <select className={inputCls} value={dossierId} onChange={(e) => onPickDossier(e.target.value)}>
+                <option value="">— Chọn HKD —</option>
+                {refs.dossiers.map((d) => <option key={d.id} value={d.id}>{d.hkdName}{d.ownerName ? ` · ${d.ownerName}` : ''}</option>)}
+              </select>
+            </Field>
+            <Field label="Tên Hộ Kinh Doanh" required>
+              <input className={inputCls} value={hkdName} onChange={(e) => setHkdName(e.target.value)} />
+            </Field>
+            <Field label="Đối tác" required>
+              <select className={inputCls} value={partnerId} onChange={(e) => { setPartnerId(e.target.value); setBankId(''); }}>
+                <option value="">— Chọn đối tác —</option>
+                {refs.partners.map((p) => <option key={p.id} value={p.id}>{p.code} · {p.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Ngân hàng" required hint="Lọc theo liên kết đối tác ↔ ngân hàng">
+              <select className={inputCls} value={bankId} onChange={(e) => setBankId(e.target.value)}>
+                <option value="">— Chọn ngân hàng —</option>
+                {(partnerId ? linkedBanks : refs.banks).map((b) => <option key={b.id} value={b.id}>{b.code} · {b.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Ngành nghề" hint="Theo ĐKKD của HKD">
+              <select className={inputCls} value={industryId} onChange={(e) => setIndustryId(e.target.value)}>
+                <option value="">— Không chọn —</option>
+                {refs.industries.map((i) => <option key={i.id} value={i.id}>{i.code} · {i.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Chuỗi MID">
+              <input className={inputCls} value={mid} onChange={(e) => setMid(e.target.value)} />
+            </Field>
+            <Field label="Ngày cấp TID">
+              <input type="date" className={inputCls} value={issuedAt} onChange={(e) => setIssuedAt(e.target.value)} />
+            </Field>
+            <Field label="Serial máy của khách" hint="Tùy chọn — tra cứu, không tạo máy trong kho">
+              <input className={inputCls} value={customerDeviceSerial} onChange={(e) => setCustomerDeviceSerial(e.target.value)} />
+            </Field>
+            <div className="col-span-2">
+              <Field label="Ghi chú">
+                <input className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} />
+              </Field>
+            </div>
+          </div>
+          <div className="mt-6 flex justify-end gap-2">
+            <Button variant="neutral" onClick={onClose}>Hủy</Button>
+            <Button variant="confirm" onClick={save} disabled={busy} icon={busy ? <Loader2 className="h-4 w-4 animate-spin" /> : undefined}>Lưu thay đổi</Button>
+          </div>
+        </>
+      )}
+    </Modal>
   );
 }
 
@@ -962,7 +1123,7 @@ const KIND_TITLE: Record<string, string> = {
   deliver: 'Giao TID cho khách'
 };
 
-function TidActionModal({ tid, kind, onClose, onDone }: { tid: TidDto; kind: 'assign' | 'replace' | 'recall' | 'deliver'; onClose: () => void; onDone: () => void }): JSX.Element {
+function TidActionModal({ tid, kind, onClose, onDone, onOpenSell }: { tid: TidDto; kind: 'assign' | 'replace' | 'recall' | 'deliver'; onClose: () => void; onDone: () => void; onOpenSell?: () => void }): JSX.Element {
   const toast = useToast();
   const [devices, setDevices] = useState<PosDto[]>([]);
   const [customers, setCustomers] = useState<CustomerDto[]>([]);
@@ -972,16 +1133,41 @@ function TidActionModal({ tid, kind, onClose, onDone }: { tid: TidDto; kind: 'as
   const [occurredAt, setOccurredAt] = useState('');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
+  // LOẠI GIAO MÁY (Mr.Long) — "Gán máy POS" = giao TID kèm máy: loại giao + số tiền + quỹ.
+  const [handoverTypes, setHandoverTypes] = useState<HandoverTypeLite[]>([]);
+  const [handoverTypeId, setHandoverTypeId] = useState('');
+  const [handoverAmount, setHandoverAmount] = useState('');
+  const [fundId, setFundId] = useState('');
+  const [method, setMethod] = useState('CASH');
+  const [funds, setFunds] = useState<FundDto[]>([]);
+
+  const selectedHandover = handoverTypes.find((h) => String(h.id) === handoverTypeId);
+  const moneyKind = selectedHandover?.moneyKind ?? 'NONE';
+  const amountNum = Number(handoverAmount) || 0;
 
   useEffect(() => {
     if (kind === 'assign') {
       window.api.posList({}).then((r) => r.ok && r.data && setDevices(r.data));
       window.api.customerList({}).then((r) => r.ok && r.data && setCustomers(r.data));
+      window.api.handoverTypeListLite().then((r) => {
+        if (r.ok && r.data) {
+          const sorted = [...r.data].sort((a, b) => a.sortOrder - b.sortOrder);
+          setHandoverTypes(sorted);
+          if (sorted[0]) setHandoverTypeId(String(sorted[0].id));
+        }
+      });
+      window.api.fundList({}).then((r) => r.ok && r.data && setFunds(r.data.filter((f) => f.active)));
     }
     if (kind === 'deliver') {
       window.api.customerList({}).then((r) => r.ok && r.data && setCustomers(r.data));
     }
   }, [kind]);
+
+  // Mượn (NONE) — khóa số tiền = 0.
+  useEffect(() => {
+    if (kind === 'assign' && moneyKind === 'NONE') { setHandoverAmount('0'); setFundId(''); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moneyKind, kind]);
 
   async function run(): Promise<void> {
     const when = occurredAt ? new Date(occurredAt).toISOString() : null;
@@ -989,8 +1175,21 @@ function TidActionModal({ tid, kind, onClose, onDone }: { tid: TidDto; kind: 'as
     if (kind === 'assign') {
       if (!posSerial) return toast.alert('Phải chọn máy POS.');
       if (!customerId) return toast.alert('Phải chọn khách hàng.');
+      if (!handoverTypeId) return toast.alert('Phải chọn loại giao.', 'Thiếu thông tin');
+      if (moneyKind === 'SALE') return toast.alert('Loại giao "Bán" dùng chức năng Bán TID riêng — không gán qua luồng này.', 'Dùng chức năng Bán TID');
+      if (moneyKind === 'DEPOSIT' && !(amountNum > 0)) return toast.alert('Loại giao "Cọc" phải nhập số tiền cọc > 0.', 'Thiếu số tiền');
+      if (amountNum > 0 && !fundId) return toast.alert('Có số tiền thì phải chọn quỹ nhận.', 'Thiếu quỹ');
       setBusy(true);
-      res = await window.api.tidAssign(tid.tid, { posSerial, customerId: Number(customerId), occurredAt: when, note: note || null });
+      res = await window.api.tidAssign(tid.tid, {
+        posSerial,
+        customerId: Number(customerId),
+        occurredAt: when,
+        note: note || null,
+        handoverTypeId: Number(handoverTypeId),
+        handoverAmount: amountNum,
+        fundId: fundId ? Number(fundId) : null,
+        method
+      });
     } else if (kind === 'replace') {
       if (!newTid.trim()) return toast.alert('Phải nhập TID mới (đã tạo sẵn, trạng thái Chưa gán).');
       setBusy(true);
@@ -1037,6 +1236,50 @@ function TidActionModal({ tid, kind, onClose, onDone }: { tid: TidDto; kind: 'as
                 ))}
               </select>
             </Field>
+            <Field label="Loại giao" required hint="Hình thức giao TID kèm máy cho khách">
+              <select className={inputCls} value={handoverTypeId} onChange={(e) => setHandoverTypeId(e.target.value)}>
+                {handoverTypes.length === 0 && <option value="">— Chưa có loại giao —</option>}
+                {handoverTypes.map((h) => <option key={h.id} value={h.id}>{h.name} ({MONEY_KIND_LABEL[h.moneyKind] ?? h.moneyKind})</option>)}
+              </select>
+            </Field>
+            {moneyKind === 'SALE' && (
+              <div className="rounded-lg border border-warning/40 bg-warning/5 p-3 text-sm text-slate-600">
+                Loại giao <b>Bán</b> — TID bán đứt, không gán qua luồng này. Hãy dùng chức năng <b>Bán TID</b>.
+                {onOpenSell && (
+                  <div className="mt-2">
+                    <Button variant="confirm" onClick={onOpenSell}>Mở Bán TID</Button>
+                  </div>
+                )}
+              </div>
+            )}
+            {moneyKind !== 'SALE' && (
+              <div className="grid grid-cols-2 gap-4">
+                <Field label={moneyKind === 'DEPOSIT' ? 'Số tiền cọc (VND)' : moneyKind === 'RENT' ? 'Số tiền thuê (VND)' : 'Số tiền (VND)'} required={moneyKind === 'DEPOSIT'} hint={moneyKind === 'NONE' ? 'Mượn — khóa 0đ' : undefined}>
+                  <input
+                    className={inputCls + ' text-right tabular-nums'}
+                    inputMode="numeric"
+                    value={handoverAmount}
+                    disabled={moneyKind === 'NONE'}
+                    onChange={(e) => setHandoverAmount(e.target.value.replace(/[^\d]/g, ''))}
+                    placeholder="0"
+                  />
+                </Field>
+                <Field label="Quỹ nhận tiền" hint={amountNum > 0 ? 'Bắt buộc khi có số tiền' : 'Không thu thì bỏ trống'}>
+                  <select className={inputCls} value={fundId} disabled={moneyKind === 'NONE'} onChange={(e) => setFundId(e.target.value)}>
+                    <option value="">— Chọn quỹ —</option>
+                    {funds.map((f) => <option key={f.id} value={f.id}>{f.code} · {f.name}</option>)}
+                  </select>
+                </Field>
+                {amountNum > 0 && (
+                  <Field label="Hình thức">
+                    <select className={inputCls} value={method} onChange={(e) => setMethod(e.target.value)}>
+                      <option value="CASH">Tiền mặt</option>
+                      <option value="CK">Chuyển khoản</option>
+                    </select>
+                  </Field>
+                )}
+              </div>
+            )}
           </>
         )}
         {kind === 'replace' && (
@@ -1065,7 +1308,7 @@ function TidActionModal({ tid, kind, onClose, onDone }: { tid: TidDto; kind: 'as
       </div>
       <div className="mt-6 flex justify-end gap-2">
         <Button variant="neutral" onClick={onClose}>Hủy</Button>
-        <Button variant="confirm" onClick={run} disabled={busy} icon={busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-3.5 w-3.5" />}>
+        <Button variant="confirm" onClick={run} disabled={busy || (kind === 'assign' && moneyKind === 'SALE')} icon={busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-3.5 w-3.5" />}>
           {kind === 'assign' ? 'Gán TID' : kind === 'replace' ? 'Đổi TID' : kind === 'recall' ? 'Thu hồi' : 'Đã giao'}
         </Button>
       </div>
@@ -1113,18 +1356,39 @@ function TidSellFeeModal({ tid, onClose, onSaved }: { tid: TidDto; onClose: () =
   const [rows, setRows] = useState<TidSellFeeRowDto[] | null>(null);
   const [hasPartner, setHasPartner] = useState(true);
   const [edited, setEdited] = useState<Record<number, string>>({});
+  // FEE_MODEL — mỗi loại thẻ chọn 1 trong 2: 'quote' = dùng phí bán NIÊM YẾT (read-only) | 'custom' = phí TÙY CHỈNH.
+  const [mode, setMode] = useState<Record<number, 'quote' | 'custom'>>({});
   const [busy, setBusy] = useState(false);
+  // FEE_TYPE — phí bán thực tế theo TID × thẻ × LOẠI PHÍ. MẶC ĐỊNH loại phí phần tử ĐẦU (Mr.Long "thứ tự 1").
+  const [feeTypes, setFeeTypes] = useState<FeeTypeDto[]>([]);
+  const [feeTypeId, setFeeTypeId] = useState('');
 
   useEffect(() => {
+    window.api.feeTypeList().then((r) => {
+      if (r.ok && r.data) {
+        setFeeTypes(r.data);
+        if (r.data[0]) setFeeTypeId(String(r.data[0].id));
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!feeTypeId) return;
     let alive = true;
-    window.api.tidSellFeeList(tid.id).then((r) => {
+    setRows(null);
+    window.api.tidSellFeeList(tid.id, Number(feeTypeId)).then((r) => {
       if (!alive) return;
       if (r.ok && r.data) {
         setRows(r.data.rows);
         setHasPartner(r.data.partnerId != null);
         const init: Record<number, string> = {};
-        for (const row of r.data.rows) init[row.cardTypeId] = row.phiBanThucTe != null ? String(row.phiBanThucTe) : '';
+        const initMode: Record<number, 'quote' | 'custom'> = {};
+        for (const row of r.data.rows) {
+          init[row.cardTypeId] = row.phiBanThucTe != null ? String(row.phiBanThucTe) : '';
+          initMode[row.cardTypeId] = row.hasOverride ? 'custom' : 'quote';
+        }
         setEdited(init);
+        setMode(initMode);
       } else {
         toast.alert(r.message ?? 'Không tải được phí bán.');
         setRows([]);
@@ -1133,11 +1397,14 @@ function TidSellFeeModal({ tid, onClose, onSaved }: { tid: TidDto; onClose: () =
     return () => {
       alive = false;
     };
-  }, [tid.id]);
+  }, [tid.id, feeTypeId]);
 
   async function save(): Promise<void> {
     if (!rows || rows.length === 0) return;
+    if (!feeTypeId) { toast.alert('Vui lòng chọn loại phí.'); return; }
+    // 'quote' = dùng niêm yết → phiBan null (KHÔNG tạo/giữ override). 'custom' = phí tùy chỉnh → gửi số nhập.
     const entries = rows.map((row) => {
+      if ((mode[row.cardTypeId] ?? 'quote') === 'quote') return { cardTypeId: row.cardTypeId, phiBan: null };
       const raw = (edited[row.cardTypeId] ?? '').trim().replace(',', '.');
       return { cardTypeId: row.cardTypeId, phiBan: raw === '' ? null : Number(raw) };
     });
@@ -1148,7 +1415,7 @@ function TidSellFeeModal({ tid, onClose, onSaved }: { tid: TidDto; onClose: () =
       }
     }
     setBusy(true);
-    const res = await window.api.tidSellFeeSet({ tidId: tid.id, entries });
+    const res = await window.api.tidSellFeeSet({ tidId: tid.id, feeTypeId: Number(feeTypeId), entries });
     setBusy(false);
     if (res.ok) {
       toast.success('Đã lưu phí bán thực tế.');
@@ -1161,9 +1428,16 @@ function TidSellFeeModal({ tid, onClose, onSaved }: { tid: TidDto; onClose: () =
   return (
     <Modal title={`Phí bán thực tế — TID ${tid.tid}`} onClose={onClose} width="max-w-2xl" onSubmit={() => void save()}>
       <p className="mb-3 text-sm text-slate-500">
-        Phí bán thỏa thuận riêng cho TID này theo <span className="font-medium text-slate-600">từng loại thẻ</span> (nhập khi giao máy). Cột{' '}
-        <span className="font-medium text-slate-600">Niêm yết</span> là phí bán chung để đối chiếu. Để trống = dùng phí niêm yết.
+        Mỗi <span className="font-medium text-slate-600">loại thẻ</span> chọn 1 trong 2: <span className="font-medium text-slate-600">Niêm yết</span> (dùng % niêm yết của loại phí) hoặc{' '}
+        <span className="font-medium text-slate-600">Tùy chỉnh</span> (nhập % phí bán thực tế khi giao máy). Chọn Niêm yết = không tạo phí tùy chỉnh.
       </p>
+      <div className="mb-3 flex items-center gap-2">
+        <span className="text-sm font-medium text-slate-600">Loại phí</span>
+        <select className={inputCls + ' w-56'} value={feeTypeId} onChange={(e) => setFeeTypeId(e.target.value)}>
+          <option value="">— Chọn loại phí —</option>
+          {feeTypes.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+        </select>
+      </div>
       {rows === null && (
         <div className="py-6 text-center text-slate-400">
           <Loader2 className="mx-auto h-5 w-5 animate-spin" />
@@ -1187,27 +1461,49 @@ function TidSellFeeModal({ tid, onClose, onSaved }: { tid: TidDto; onClose: () =
                 <tr>
                   <th className="px-4 py-2.5">Loại thẻ</th>
                   <th className="px-4 py-2.5 text-right">Niêm yết</th>
-                  <th className="px-4 py-2.5 text-right">Phí bán thực tế (%)</th>
+                  <th className="px-4 py-2.5">Cách tính phí bán</th>
+                  <th className="px-4 py-2.5 text-right">Phí bán áp dụng (%)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {rows.map((row) => (
+                {rows.map((row) => {
+                  const m = mode[row.cardTypeId] ?? 'quote';
+                  return (
                   <tr key={row.cardTypeId} className="hover:bg-appbg/60">
                     <td className="px-4 py-2.5 text-slate-700">
                       {row.cardTypeCode ? <span className="font-mono text-xs font-semibold text-brand whitespace-nowrap">{row.cardTypeCode}</span> : null} {row.cardTypeName}
                     </td>
                     <td className="px-4 py-2.5 text-right text-slate-500">{pctText(row.phiBanNiemYet)}</td>
+                    <td className="px-4 py-2.5">
+                      <div className="inline-flex overflow-hidden rounded-md border border-line text-xs">
+                        <button
+                          type="button"
+                          className={'px-2.5 py-1 ' + (m === 'quote' ? 'bg-brand text-white' : 'bg-white text-slate-600 hover:bg-appbg')}
+                          onClick={() => setMode((s) => ({ ...s, [row.cardTypeId]: 'quote' }))}
+                        >Niêm yết</button>
+                        <button
+                          type="button"
+                          className={'px-2.5 py-1 ' + (m === 'custom' ? 'bg-brand text-white' : 'bg-white text-slate-600 hover:bg-appbg')}
+                          onClick={() => setMode((s) => ({ ...s, [row.cardTypeId]: 'custom' }))}
+                        >Tùy chỉnh</button>
+                      </div>
+                    </td>
                     <td className="px-4 py-2.5 text-right">
-                      <input
-                        className={inputCls + ' w-28 text-right'}
-                        inputMode="decimal"
-                        placeholder={row.phiBanNiemYet != null ? String(row.phiBanNiemYet) : '—'}
-                        value={edited[row.cardTypeId] ?? ''}
-                        onChange={(e) => setEdited((s) => ({ ...s, [row.cardTypeId]: e.target.value }))}
-                      />
+                      {m === 'quote' ? (
+                        <span className="text-slate-500">{pctText(row.phiBanNiemYet)} <span className="text-xs text-slate-400">(niêm yết)</span></span>
+                      ) : (
+                        <input
+                          className={inputCls + ' w-28 text-right'}
+                          inputMode="decimal"
+                          placeholder={row.phiBanNiemYet != null ? String(row.phiBanNiemYet) : '—'}
+                          value={edited[row.cardTypeId] ?? ''}
+                          onChange={(e) => setEdited((s) => ({ ...s, [row.cardTypeId]: e.target.value }))}
+                        />
+                      )}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -1254,6 +1550,12 @@ function TidTimelineModal({ tid, onClose }: { tid: TidDto; onClose: () => void }
               )}
               {e.warehouseName && (
                 <div className="mt-0.5 text-xs text-slate-500">Về kho: <span className="font-medium text-slate-700">{e.warehouseName}</span>{e.deliveryAddress ? ` — ${e.deliveryAddress}` : ''}</div>
+              )}
+              {e.handoverName && (
+                <div className="mt-0.5 text-xs text-slate-500">
+                  · <span className="font-medium text-slate-700">{e.handoverName}</span>
+                  {e.handoverAmount != null && <span className="ml-1 font-medium text-slate-700">{money(e.handoverAmount)}</span>}
+                </div>
               )}
               {e.actorName && (
                 <div className="mt-0.5 text-xs text-slate-500">Người thực hiện: <span className="font-medium text-slate-700">{e.actorName}</span></div>

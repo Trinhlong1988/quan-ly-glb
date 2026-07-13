@@ -268,14 +268,22 @@ export function FeePreview({ bankId, partnerId }: { bankId: number; partnerId: n
   return (
     <div className="overflow-hidden rounded-lg border border-line">
       <table className="w-full text-xs">
-        <thead className="bg-[#F8FAFC] text-left text-slate-500"><tr><th className="px-3 py-2">Loại thẻ</th><th className="px-3 py-2 text-right">Phí mua</th><th className="px-3 py-2 text-right">Phí cài máy</th><th className="px-3 py-2 text-right">Phí bán</th></tr></thead>
+        <thead className="bg-[#F8FAFC] text-left text-slate-500"><tr><th className="px-3 py-2">Loại thẻ</th><th className="px-3 py-2 text-right">Phí mua</th><th className="px-3 py-2 text-right">Phí cài máy</th><th className="px-3 py-2">Phí bán niêm yết (theo loại phí)</th></tr></thead>
         <tbody className="divide-y divide-line">
           {rows.map((r) => (
             <tr key={r.id}>
               <td className="px-3 py-1.5 font-medium text-slate-700 whitespace-nowrap">{r.cardTypeCode ?? r.cardTypeName}</td>
               <td className="px-3 py-1.5 text-right font-mono">{fmtPct(r.phiMua)}</td>
               <td className="px-3 py-1.5 text-right font-mono">{fmtPct(r.phiCaiMay)}</td>
-              <td className="px-3 py-1.5 text-right font-mono">{fmtPct(r.phiBan)}</td>
+              <td className="px-3 py-1.5">
+                {r.sellQuotes.length === 0 ? <span className="text-slate-400">—</span> : (
+                  <div className="flex flex-col gap-0.5">
+                    {r.sellQuotes.map((q) => (
+                      <span key={q.feeTypeId} className="whitespace-nowrap"><span className="text-slate-500">{q.feeTypeName}:</span> <span className="font-mono">{fmtPct(q.phiBan)}</span></span>
+                    ))}
+                  </div>
+                )}
+              </td>
             </tr>
           ))}
         </tbody>

@@ -9,6 +9,11 @@ import * as auth from './auth-service.js';
 
 const isDev = !app.isPackaged;
 
+// Mr.Long 13/7 — ô <input type="date"> native của Chromium hiển thị theo LOCALE HĐH (Windows en-US = mm/dd/yyyy).
+// Ép locale renderer về vi-VN để MỌI ô ngày (ngày cấp TID, thao tác POS, biểu phí…) hiện dd/mm/yyyy đồng nhất
+// với fmtDate. PHẢI gọi TRƯỚC app.whenReady() (Chromium đọc --lang lúc khởi tạo). Áp 1 điểm, không sửa từng ô.
+app.commandLine.appendSwitch('lang', 'vi-VN');
+
 // [H2] Giữ ref cửa sổ chính ở module để update-service gửi sự kiện (webContents.send).
 // `win` cục bộ trong createWindow không gửi được từ nơi khác.
 let mainWindow: BrowserWindow | null = null;
@@ -401,6 +406,13 @@ app.whenReady().then(async () => {
   if (process.env['GLB_SELFTEST'] === '41') {
     const { runDeviceSaleSelfTest } = await import('./selftest-devicesale.js');
     const code = await runDeviceSaleSelfTest();
+    app.exit(code);
+    return;
+  }
+  // LOẠI GIAO MÁY (Mr.Long): Bán/Cho thuê/Mượn/Cọc — mô hình tiền theo loại giao + hoàn cọc khi recall.
+  if (process.env['GLB_SELFTEST'] === '42') {
+    const { runHandoverSelfTest } = await import('./selftest-handover.js');
+    const code = await runHandoverSelfTest();
     app.exit(code);
     return;
   }

@@ -128,7 +128,7 @@ function trashModels(db: Db): Purger[] {
   const d = db as unknown as Record<string, Purger>;
   return [
     d.customer, d.agent, d.bank, d.cardType, d.partner, d.supplier, d.posModel, d.posIntakeStatus,
-    d.posIntake, d.feeType, d.feeRate, d.receiveAccountSource, d.receiveAccount, d.dossierSource,
+    d.posIntake, d.feeType, d.feeRate, d.feeSellQuote, d.receiveAccountSource, d.receiveAccount, d.dossierSource,
     d.dossier, d.tidConfigStatus, d.tid, d.transaction
   ];
 }

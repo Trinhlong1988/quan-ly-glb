@@ -87,6 +87,10 @@ const SOURCE_KINDS = new Set([
   'DEVICE_DEPOSIT',
   'FUND_TRANSFER',
   'SALARY',
+  // LOẠI GIAO MÁY (Mr.Long) — "Doanh thu cho thuê máy" (giao hình thức Cho thuê, thu 1 lần lúc giao).
+  // LÀ doanh thu thật → affectsPnl=true (KHÔNG nằm trong PNL_FORBIDDEN_SOURCE). Seed hệ thống, sinh khi
+  // applyHandover xử lý moneyKind=RENT.
+  'RENT',
   // H2b — "Chi phí nợ xấu" (ghi giảm nợ xấu). LÀ chi phí thật → affectsPnl=true (KHÔNG nằm trong
   // PNL_FORBIDDEN_SOURCE). Danh mục seed hệ thống, sinh khi write-off (writeOffBadDebt).
   'BAD_DEBT'

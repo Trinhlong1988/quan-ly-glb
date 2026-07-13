@@ -48,6 +48,8 @@ const ACTION_LABEL: Record<AuditAction, string> = {
   POS_UNIFY_BACKFILL: 'Hợp nhất dữ liệu POS', TID_UNIFY_DOSSIER_BACKFILL: 'Hợp nhất hồ sơ TID',
   FEE_TYPE_CREATED: 'Tạo loại phí', FEE_TYPE_UPDATED: 'Sửa loại phí', FEE_TYPE_DELETED: 'Xóa loại phí',
   FEE_RATE_SET: 'Đặt biểu phí', FEE_RATE_DELETED: 'Xóa biểu phí',
+  HANDOVER_TYPE_CREATED: 'Tạo loại giao', HANDOVER_TYPE_UPDATED: 'Sửa loại giao', HANDOVER_TYPE_DELETED: 'Xóa loại giao',
+  HANDOVER_PERMS_GRANTED: 'Cấp quyền loại giao (DB tiến hóa)',
   RCV_ACCT_SOURCE_CREATED: 'Tạo nguồn TK nhận tiền', RCV_ACCT_SOURCE_UPDATED: 'Sửa nguồn TK nhận tiền', RCV_ACCT_SOURCE_DELETED: 'Xóa nguồn TK nhận tiền',
   RCV_ACCT_CREATED: 'Tạo TK nhận tiền', RCV_ACCT_UPDATED: 'Sửa TK nhận tiền', RCV_ACCT_DELETED: 'Xóa TK nhận tiền',
   DOSSIER_SOURCE_CREATED: 'Tạo nguồn hồ sơ', DOSSIER_SOURCE_UPDATED: 'Sửa nguồn hồ sơ', DOSSIER_SOURCE_DELETED: 'Xóa nguồn hồ sơ',

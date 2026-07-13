@@ -9,7 +9,6 @@ import {
   HardDrive,
   CreditCard,
   Landmark,
-  Warehouse as WarehouseIcon,
   Wallet,
   FolderKanban,
   Inbox,
@@ -35,7 +34,6 @@ import { SystemConfigPage } from './SystemConfigPage.js';
 import { PosPage } from './PosPage.js';
 import { TidPage } from './TidPage.js';
 import { BankConfigPage } from './BankConfigPage.js';
-import { WarehousePage } from './WarehousePage.js';
 import { DossierPage } from './DossierPage.js';
 import { RevenueDebtPage } from './RevenueDebtPage.js';
 import { ApprovalPage } from './ApprovalPage.js';
@@ -61,10 +59,13 @@ const MENU: MenuItem[] = [
   { key: 'staff', label: 'Quản Lý Nhân Sự', icon: <Users className="h-[18px] w-[18px]" />, perms: ['USER_READ', 'ROLE_READ', 'CUSTOMER_VIEW', 'CONFIG_RCV_ACCT_VIEW'] },
   // PHASE K1 — gộp "Cấu hình máy POS" vào "Quản Lý Máy POS" (1 trang nhiều tab). Menu hiện với AI có
   // POS_VIEW HOẶC CONFIG_POS_SUPPLY_VIEW (hasAnyPermission) — không mất quyền của user chỉ-cấu-hình.
-  { key: 'pos', label: 'Quản Lý Máy POS', icon: <HardDrive className="h-[18px] w-[18px]" />, perms: ['POS_VIEW', 'CONFIG_POS_SUPPLY_VIEW'] },
-  // R3: "Cấu hình ngân hàng" nay gồm tab "Phí mua-cài máy-bán" (gộp Cấu hình % phí POS cũ) + tab "Ngành nghề" → menu hiện với CONFIG_BANK_VIEW HOẶC CONFIG_FEE_VIEW HOẶC CONFIG_INDUSTRY_VIEW.
-  { key: 'bankcfg', label: 'Cấu hình ngân hàng', icon: <Landmark className="h-[18px] w-[18px]" />, perms: ['CONFIG_BANK_VIEW', 'CONFIG_FEE_VIEW', 'CONFIG_INDUSTRY_VIEW'] },
-  { key: 'warehouse', label: 'Danh mục kho', icon: <WarehouseIcon className="h-[18px] w-[18px]" />, perms: ['CONFIG_WAREHOUSE_VIEW'] },
+  // PHASE Nhóm 1 — "Danh mục kho" gộp thành TAB ĐẦU của Quản Lý Máy POS → thêm CONFIG_WAREHOUSE_VIEW vào
+  // điều kiện hiện menu (ai chỉ có quyền kho vẫn vào được trang POS để thấy tab Kho).
+  { key: 'pos', label: 'Quản Lý Máy POS', icon: <HardDrive className="h-[18px] w-[18px]" />, perms: ['POS_VIEW', 'CONFIG_POS_SUPPLY_VIEW', 'CONFIG_WAREHOUSE_VIEW'] },
+  // R3: "Cấu hình ngân hàng" nay gồm tab "Phí mua-cài máy-bán" (gộp Cấu hình % phí POS cũ) + tab "Ngành nghề"
+  // + tab "Loại giao" (LOẠI GIAO MÁY, Mr.Long) → menu hiện với CONFIG_BANK_VIEW HOẶC CONFIG_FEE_VIEW HOẶC
+  // CONFIG_INDUSTRY_VIEW HOẶC CONFIG_HANDOVER_VIEW (ai chỉ có quyền loại giao vẫn vào được để thấy tab).
+  { key: 'bankcfg', label: 'Cấu hình ngân hàng', icon: <Landmark className="h-[18px] w-[18px]" />, perms: ['CONFIG_BANK_VIEW', 'CONFIG_FEE_VIEW', 'CONFIG_INDUSTRY_VIEW', 'CONFIG_HANDOVER_VIEW'] },
   { key: 'revdebt', label: 'Quản Lý Doanh Thu & Công Nợ', icon: <TrendingUp className="h-[18px] w-[18px]" />, perms: ['REVENUE_VIEW', 'DEBT_VIEW', 'DEVICE_SALE_VIEW'] },
   // R31: "Quản Lý Tài Khoản Nhận Tiền" đã gộp thành tab trong Quản Lý Nhân Sự (cạnh Vai trò & Quyền).
   { key: 'dossier', label: 'Quản Lý Hồ Sơ HKD', icon: <FolderKanban className="h-[18px] w-[18px]" />, perms: ['CONFIG_DOSSIER_VIEW'] },
@@ -285,7 +286,6 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
           {activeItem?.key === 'tid' && <TidPage user={user} />}
           {activeItem?.key === 'staff' && <StaffManagementPage user={user} />}
           {activeItem?.key === 'bankcfg' && <BankConfigPage user={user} />}
-          {activeItem?.key === 'warehouse' && <WarehousePage user={user} />}
           {activeItem?.key === 'dossier' && <DossierPage user={user} />}
           {activeItem?.key === 'finance' && <FinancePage user={user} />}
           {activeItem?.key === 'revdebt' && <RevenueDebtPage user={user} />}

@@ -317,6 +317,9 @@ model Transaction {
   tidId              Int       @map("tid_id")
   customerId         Int?      @map("customer_id")
   cardTypeId         Int?      @map("card_type_id")
+  // FEE_TYPE (12/7) — LOẠI PHÍ áp cho GD (Ủy quyền/Đối ứng/Tiền chờ…). Cột nullable (int) để không phá GD
+  // lịch sử; service (createTransaction) BẮT BUỘC feeTypeId khi tạo mới → tra đúng biểu phí theo loại phí.
+  feeTypeId          Int?      @map("fee_type_id")
   amount             BigInt // số tiền giao dịch (VND) — BigInt (R48): GD KHÔNG giới hạn giá trị, tránh tràn int4 (~2,15 tỷ)
   partnerMarginMilli Int       @default(0) @map("partner_margin_milli") // CL_NCC = phiMua−phiCaiMay (×1000)
   sellMarginMilli    Int       @default(0) @map("sell_margin_milli") // CL_KH = phiBan−phiCaiMay (×1000)
@@ -351,6 +354,7 @@ model Transaction {
   @@index([txnDate])
   @@index([status])
   @@index([debtQuality])
+  @@index([feeTypeId])
   @@map("transactions")
 }
 
@@ -408,12 +412,18 @@ model AssetEvent {
   // Kho; deliveryAddress = SNAPSHOT địa chỉ lúc giao (lưu bản sao để lịch sử không đổi khi kho sửa địa chỉ).
   fromWarehouseId Int?  @map("from_warehouse_id")
   deliveryAddress String? @map("delivery_address")
+  // LOẠI GIAO MÁY (Mr.Long) — ghi LOẠI GIAO (Bán/Cho thuê/Mượn/Cọc) + SỐ TIỀN lúc DEPLOY/giao-TID để
+  // vòng đời/timeline hiển thị "giao theo hình thức gì, bao nhiêu tiền". Nullable (sự kiện cũ + giao nội
+  // bộ không loại giao = null). handoverTypeId trỏ HandoverType (join ở service, nhất quán event-log).
+  handoverTypeId Int?    @map("handover_type_id")
+  handoverAmount BigInt? @map("handover_amount")
   beforeJson   String?  @map("before_json")
   afterJson    String?  @map("after_json")
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   @@index([deviceSerial])
   @@index([tid])
+  @@index([handoverTypeId])
   @@map("asset_events")
 }
 
@@ -423,8 +433,11 @@ model Warehouse {
   id        Int       @id @default(autoincrement())
   code      String    @unique // Mã kho (uppercase, unique toàn cục kể cả đã xóa)
   name      String // Tên kho
-  address   String? // Địa chỉ kho (nguồn để "chọn kho → hiện địa chỉ")
-  phone     String?
+  address   String? // Địa chỉ kho — DỰ PHÒNG (kho cũ). §4: nếu có managerUserId thì địa chỉ LẤY TỪ hồ sơ user quản lý.
+  phone     String? // SĐT kho — DỰ PHÒNG (kho cũ). §4: ưu tiên SĐT hồ sơ user quản lý khi có managerUserId.
+  // §4 (Mr.Long 12/7) — User QUẢN LÝ kho: chọn 1 user → địa chỉ + SĐT hiển thị READ-ONLY lấy từ hồ sơ user.
+  // Scalar (join tại service, nhất quán event-log). Nullable: kho cũ = null → dùng address/phone cột kho.
+  managerUserId Int?   @map("manager_user_id")
   note      String?
   status    String    @default("ACTIVE") // ACTIVE | INACTIVE (kho ngừng dùng — vẫn giữ, không gợi ý khi giao)
   createdBy Int?      @map("created_by")
@@ -434,6 +447,7 @@ model Warehouse {
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
   deletedBy Int?      @map("deleted_by")
 
+  @@index([managerUserId])
   @@map("warehouses")
 }
 
@@ -466,6 +480,9 @@ model DeviceSale {
   deviceSerial  String?   @map("device_serial") // khi bán máy (kèm TID nếu có)
   tid           String? // khi bán TID (riêng, hoặc TID bán kèm máy)
   customerId    Int       @map("customer_id") // khách MUA
+  // LOẠI GIAO MÁY (Mr.Long) — Bán luôn moneyKind=SALE; cột này để BÁO CÁO doanh thu theo loại giao
+  // (chọn "Bán" ở dropdown loại giao → route sang luồng bán). Nullable (chứng từ bán cũ = null).
+  handoverTypeId Int?     @map("handover_type_id")
   salePrice     BigInt    @map("sale_price") // giá bán (VND, > 0) — doanh thu ghi nhận đủ ngay
   warehouseId   Int?      @map("warehouse_id") // kho xuất (bán máy)
   soldByUserId  Int?      @map("sold_by_user_id") // người bán
@@ -498,6 +515,45 @@ model DeviceSaleSettlement {
   @@index([deviceSaleId])
   @@index([cashEntryId])
   @@map("device_sale_settlements")
+}
+
+// LOẠI GIAO MÁY (Mr.Long) — CHỨNG TỪ CỌC máy/TID (bất biến, NHÂN khuôn DeviceSale). Khi giao máy hình
+// thức "Cọc": tiền cọc = NỢ PHẢI TRẢ (KHÔNG doanh thu) qua CashEntry THU danh mục DEPOSIT (affectsPnl=false,
+// sourceType='DEVICE_DEPOSIT', sourceId=depositId). Thu hồi máy về (recall) → HOÀN CỌC phần còn giữ =
+// CashEntry CHI danh mục DEPOSIT_REFUND + DeviceDepositRefund. Phần cọc CÒN GIỮ = amount − Σrefund (LIVE).
+model DeviceDeposit {
+  id             Int       @id @default(autoincrement())
+  code           String?   @unique // CO##### (Cọc)
+  customerId     Int       @map("customer_id") // khách đặt cọc
+  deviceSerial   String?   @map("device_serial") // máy nhận cọc (giao kèm máy công ty)
+  tid            String? // TID nhận cọc (nếu giao TID kèm máy)
+  handoverTypeId Int?      @map("handover_type_id") // loại giao = Cọc (moneyKind=DEPOSIT)
+  amount         BigInt // tiền cọc (VND, > 0)
+  status         String    @default("OPEN") // OPEN | REFUNDED | CANCELLED
+  occurredAt     DateTime  @map("occurred_at") @db.Timestamptz(3)
+  note           String?
+  createdBy      Int?      @map("created_by")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([customerId])
+  @@index([deviceSerial])
+  @@index([tid])
+  @@index([status])
+  @@map("device_deposits")
+}
+
+// Hoàn cọc (NHÂN DeviceSaleSettlement) — mỗi lần hoàn 1 phần cọc gắn 1 CashEntry CHI DEPOSIT_REFUND.
+// Cọc CÒN GIỮ = DeviceDeposit.amount − Σ DeviceDepositRefund.amount (LIVE, không lưu cứng).
+model DeviceDepositRefund {
+  id              Int      @id @default(autoincrement())
+  deviceDepositId Int      @map("device_deposit_id")
+  cashEntryId     Int      @map("cash_entry_id")
+  amount          BigInt // VND hoàn ở lần này (> 0)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([deviceDepositId])
+  @@index([cashEntryId])
+  @@map("device_deposit_refunds")
 }
 
 // Bộ đếm sinh mã atomic (§D) — NV/KH/POS... zero-pad ≥2.
@@ -708,21 +764,43 @@ model FeeType {
   @@map("fee_types")
 }
 
+// LOẠI GIAO MÁY (Mr.Long) — danh mục hình thức GIAO máy/TID cho khách, quyết định MÔ HÌNH TIỀN qua
+// `moneyKind`: SALE (bán đứt → doanh thu, luồng device-sale) | RENT (cho thuê → thu 1 lần, doanh thu) |
+// DEPOSIT (cọc → nợ phải trả, KHÔNG doanh thu, recall hoàn cọc) | NONE (mượn → 0đ). isBuiltin = 4 loại
+// hệ thống seed (khóa moneyKind, cấm xóa; cho đổi name/sortOrder). Khuôn FeeType (name @unique + audit +
+// soft-delete). Cột `handoverTypeId` các bảng (AssetEvent/DeviceSale/DeviceDeposit) trỏ id ở đây.
+model HandoverType {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
+  moneyKind String    @map("money_kind") // SALE | RENT | DEPOSIT | NONE
+  isBuiltin Boolean   @default(false) @map("is_builtin")
+  sortOrder Int       @default(0) @map("sort_order")
+  createdBy Int?      @map("created_by")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedBy Int?      @map("updated_by")
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
+  deletedBy Int?      @map("deleted_by")
+
+  @@map("handover_types")
+}
+
 // Biểu phí % (§C5b) — 1 dòng = 1 tổ hợp Đối tác × Loại thẻ (loại thẻ đã gắn Ngân hàng ở C3).
-// Mỗi loại thẻ (Visa/Master/Napas…) của 1 đối tác có biểu phí riêng. Set lại = cập nhật (upsert).
+// FEE_MODEL (Mr.Long 12/7): LOẠI PHÍ CHỈ đổi PHÍ BÁN. Phí MUA + phí CÀI MÁY là 1 giá CỐ ĐỊNH cho
+// tổ hợp (Đối tác × Loại thẻ) — KHÔNG theo loại phí. Vì vậy FeeRate chỉ giữ phiMua/phiCaiMay (bỏ
+// feeTypeId + phiBan). Phí bán niêm yết theo TỪNG loại phí nằm ở model FeeSellQuote (bên dưới).
 // Phí lưu Int = phần trăm × 1000 (tối đa 3 số thập phân, chính xác tuyệt đối — không dùng float).
-// Chênh lệch NCC/KH là cột TÍNH (không lưu): CL_NCC = phiMua−phiCaiMay, CL_KH = phiBan−phiCaiMay.
+// Chênh lệch NCC là cột TÍNH (không lưu): CL_NCC = phiMua−phiCaiMay (giống nhau mọi loại phí).
 // P1.1 (GIÁ THEO KỲ): mỗi dòng = 1 KỲ giá của tổ hợp (Đối tác × Loại thẻ), phân biệt bởi
 // `effectiveFrom`. Nhiều kỳ cùng tồn tại (lịch sử giá). Phí của 1 GD = kỳ đang hiệu lực tại
 // `txnDate` (pickEffectiveRate). KHÔNG @@unique DB (bảng có deletedAt — bài học B05); "1 kỳ/1 mốc"
-// enforce ở service. Dòng cũ (mô hình 1-dòng/tổ hợp) backfill effective_from = mốc sàn 1970-01-01.
+// enforce ở service. Kỳ hiệu lực = (partnerId, cardTypeId) + effectiveFrom.
 model FeeRate {
   id           Int       @id @default(autoincrement())
   partnerId    Int       @map("partner_id")
   cardTypeId   Int       @map("card_type_id")
-  phiMua       Int       @map("phi_mua") // ×1000
-  phiCaiMay    Int       @map("phi_cai_may") // ×1000
-  phiBan       Int       @map("phi_ban") // ×1000
+  phiMua       Int       @map("phi_mua") // ×1000 — 1 giá cố định (không theo loại phí)
+  phiCaiMay    Int       @map("phi_cai_may") // ×1000 — 1 giá cố định (không theo loại phí)
   effectiveFrom DateTime @map("effective_from") // ngày bắt đầu hiệu lực của kỳ giá (P1.1)
   createdBy  Int?      @map("created_by")
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -736,6 +814,31 @@ model FeeRate {
   @@map("fee_rates")
 }
 
+// Phí BÁN NIÊM YẾT theo LOẠI PHÍ (FEE_MODEL 12/7) — 1 dòng = 1 (Đối tác × Loại thẻ × LOẠI PHÍ) tại 1 KỲ
+// (`effectiveFrom`). Mỗi loại phí bán trong danh mục (Ủy quyền/Tiền chờ/Tiền nhanh…) có % niêm yết RIÊNG.
+// Set biểu phí = 1 lần cấu hình phí mua/cài (FeeRate) + % bán cho MỌI loại phí (nhiều FeeSellQuote), CÙNG
+// effectiveFrom. Phí bán thực tế của TID: niêm yết ở đây nếu không tùy chỉnh, ngược lại TidSellFee override.
+// Phí lưu Int = %×1000. KHÔNG @@unique DB (có deletedAt — bài học B05); "1 kỳ/1 mốc/loại phí" enforce ở service.
+model FeeSellQuote {
+  id            Int       @id @default(autoincrement())
+  partnerId     Int       @map("partner_id")
+  cardTypeId    Int       @map("card_type_id")
+  feeTypeId     Int       @map("fee_type_id")
+  phiBan        Int       @map("phi_ban") // ×1000 — % phí bán niêm yết của loại phí này
+  effectiveFrom DateTime  @map("effective_from") // cùng kỳ với FeeRate (pickEffectiveRate dùng chung)
+  createdBy     Int?      @map("created_by")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedBy     Int?      @map("updated_by")
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(3)
+  deletedBy     Int?      @map("deleted_by")
+
+  @@index([partnerId])
+  @@index([cardTypeId])
+  @@index([feeTypeId])
+  @@map("fee_sell_quotes")
+}
+
 // R30 (Mr.Long 11/7) — Phí BÁN THỰC TẾ theo từng TID × Loại thẻ (tùy biến theo khách khi GIAO máy).
 // Biểu phí FeeRate (Đối tác × Loại thẻ) chỉ là phí NIÊM YẾT chung; phí bán thật thỏa thuận riêng cho
 // mỗi TID/khách/thẻ, nhập lúc giao máy. `phiBan` Int = %×1000 (như FeeRate). resolveFeeForTxn ưu tiên
@@ -747,6 +850,9 @@ model TidSellFee {
   id         Int       @id @default(autoincrement())
   tidId      Int       @map("tid_id")
   cardTypeId Int       @map("card_type_id")
+  // FEE_TYPE (12/7) — phí bán thực tế nay theo (TID × Loại thẻ × LOẠI PHÍ). Khóa "1 phí còn sống" =
+  // (tid_id, card_type_id, fee_type_id) — partial unique index `tid_sell_fees_active_uq` cập nhật kèm feeType.
+  feeTypeId  Int       @map("fee_type_id")
   phiBan     Int       @map("phi_ban") // phí BÁN thực tế, ×1000
   createdBy  Int?      @map("created_by")
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -757,6 +863,7 @@ model TidSellFee {
 
   @@index([tidId])
   @@index([cardTypeId])
+  @@index([feeTypeId])
   @@map("tid_sell_fees")
 }
 

@@ -26,13 +26,15 @@ export interface TidSellFeeRowDto {
   cardTypeId: number;
   cardTypeCode: string | null;
   cardTypeName: string;
-  phiBanNiemYet: number | null; // % — phí bán niêm yết (FeeRate hiệu lực hôm nay), null nếu chưa cấu hình biểu phí
-  phiCaiMayNiemYet: number | null; // % — phí cài máy niêm yết (để tham chiếu CL_KH = bán − cài máy)
+  phiBanNiemYet: number | null; // % — phí bán niêm yết (FeeSellQuote loại phí này, hiệu lực hôm nay), null nếu chưa cấu hình
+  phiCaiMayNiemYet: number | null; // % — phí cài máy niêm yết (FeeRate hiệu lực; tham chiếu CL_KH = bán − cài máy)
   phiBanThucTe: number | null; // % — phí bán THỰC TẾ (override), null = dùng niêm yết
+  hasOverride: boolean; // có TidSellFee tùy chỉnh cho (tid × thẻ × loại phí) đang xem
 }
 export interface TidSellFeeListDto {
   tidId: number;
   tid: string;
+  feeTypeId: number; // LOẠI PHÍ đang xem
   bankId: number | null;
   bankCode: string | null;
   partnerId: number | null;
@@ -43,18 +45,22 @@ export interface TidSellFeeListDto {
  * Liệt kê phí bán theo TID: mỗi loại thẻ của NGÂN HÀNG của TID → phí bán niêm yết (kỳ FeeRate hiệu lực
  * hôm nay của Đối tác × thẻ) + phí bán thực tế đã set (nếu có). UI dùng để đối chiếu khi nhập.
  */
-export async function listTidSellFees(tidId: number): Promise<{ ok: boolean; error?: string; message?: string; data?: TidSellFeeListDto }> {
+export async function listTidSellFees(tidId: number, feeTypeId: number): Promise<{ ok: boolean; error?: string; message?: string; data?: TidSellFeeListDto }> {
   const g = await requirePermission(VIEW, { action: 'TID_VIEW', targetType: 'Tid', targetId: String(tidId) });
   if (!g.ok) return g;
   const { db } = g;
+  if (!feeTypeId) return { ok: false, error: 'VALIDATION', message: 'Vui lòng chọn loại phí.' };
   const tid = await db.tid.findUnique({ where: { id: tidId } });
   if (!tid || tid.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'TID không tồn tại.' };
+  // FEE_TYPE — phí bán thực tế + niêm yết đều tra theo LOẠI PHÍ đã chọn.
+  const feeType = await db.feeType.findUnique({ where: { id: feeTypeId } });
+  if (!feeType || feeType.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Loại phí không tồn tại.' };
 
   const bank = tid.bankId != null ? await db.bank.findUnique({ where: { id: tid.bankId }, select: { code: true } }) : null;
   // Loại thẻ của ngân hàng TID (nếu TID chưa gán ngân hàng → rỗng, UI báo cấu hình TID trước).
   const cards = tid.bankId != null ? await db.cardType.findMany({ where: { bankId: tid.bankId, deletedAt: null }, orderBy: { id: 'asc' } }) : [];
   // orderBy id asc → Map giữ dòng CUỐI = id lớn nhất (mới nhất), khớp resolveFeeForTxn (orderBy id desc → id lớn nhất).
-  const overrides = await db.tidSellFee.findMany({ where: { tidId, deletedAt: null }, orderBy: { id: 'asc' } });
+  const overrides = await db.tidSellFee.findMany({ where: { tidId, feeTypeId, deletedAt: null }, orderBy: { id: 'asc' } });
   const ovByCard = new Map(overrides.map((o) => [o.cardTypeId, o]));
   const now = new Date();
 
@@ -63,12 +69,14 @@ export async function listTidSellFees(tidId: number): Promise<{ ok: boolean; err
     let phiBanNiemYet: number | null = null;
     let phiCaiMayNiemYet: number | null = null;
     if (tid.partnerId != null) {
+      // FEE_MODEL — phí cài máy niêm yết từ FeeRate (cố định, không loại phí); phí bán niêm yết từ
+      // FeeSellQuote theo LOẠI PHÍ đã chọn (mỗi loại phí 1 % niêm yết).
       const rates = await db.feeRate.findMany({ where: { partnerId: tid.partnerId, cardTypeId: c.id, deletedAt: null } });
       const rate = pickEffectiveRate(rates, now);
-      if (rate) {
-        phiBanNiemYet = milliToPct(rate.phiBan);
-        phiCaiMayNiemYet = milliToPct(rate.phiCaiMay);
-      }
+      if (rate) phiCaiMayNiemYet = milliToPct(rate.phiCaiMay);
+      const quotes = await db.feeSellQuote.findMany({ where: { partnerId: tid.partnerId, cardTypeId: c.id, feeTypeId, deletedAt: null } });
+      const quote = pickEffectiveRate(quotes, now);
+      if (quote) phiBanNiemYet = milliToPct(quote.phiBan);
     }
     const ov = ovByCard.get(c.id);
     rows.push({
@@ -77,17 +85,19 @@ export async function listTidSellFees(tidId: number): Promise<{ ok: boolean; err
       cardTypeName: c.name,
       phiBanNiemYet,
       phiCaiMayNiemYet,
-      phiBanThucTe: ov ? milliToPct(ov.phiBan) : null
+      phiBanThucTe: ov ? milliToPct(ov.phiBan) : null,
+      hasOverride: ov != null
     });
   }
   return {
     ok: true,
-    data: { tidId: tid.id, tid: tid.tid, bankId: tid.bankId, bankCode: bank?.code ?? null, partnerId: tid.partnerId, rows }
+    data: { tidId: tid.id, tid: tid.tid, feeTypeId, bankId: tid.bankId, bankCode: bank?.code ?? null, partnerId: tid.partnerId, rows }
   };
 }
 
 export interface SetTidSellFeesInput {
   tidId: number;
+  feeTypeId: number; // LOẠI PHÍ (bắt buộc) — phí bán thực tế theo (tid × thẻ × loại phí)
   entries: { cardTypeId: number; phiBan: number | null }[]; // phiBan % — null = xóa override (dùng lại niêm yết)
 }
 
@@ -99,8 +109,11 @@ export async function setTidSellFees(input: SetTidSellFeesInput): Promise<Mutati
   const g = await requirePermission(MANAGE, { action: 'TID_SELL_FEE_SET', targetType: 'Tid', targetId: String(input.tidId) });
   if (!g.ok) return g;
   const { db, user } = g;
+  if (!input.feeTypeId) return { ok: false, error: 'VALIDATION', message: 'Vui lòng chọn loại phí.' };
   const tid = await db.tid.findUnique({ where: { id: input.tidId } });
   if (!tid || tid.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'TID không tồn tại.' };
+  const feeType = await db.feeType.findUnique({ where: { id: input.feeTypeId } });
+  if (!feeType || feeType.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Loại phí không tồn tại.' };
   if (!Array.isArray(input.entries) || input.entries.length === 0)
     return { ok: false, error: 'VALIDATION', message: 'Không có phí bán nào để lưu.' };
 
@@ -116,6 +129,7 @@ export async function setTidSellFees(input: SetTidSellFeesInput): Promise<Mutati
     if (e.phiBan != null && (!Number.isFinite(e.phiBan) || e.phiBan < 0 || e.phiBan > 100))
       return { ok: false, error: 'VALIDATION', message: 'Phí bán phải trong khoảng 0–100%.' };
     // R48 Pha 3 — phí bán thực tế cũng KHÔNG được < phí cài máy (chênh bán âm → doanh thu âm).
+    // FEE_MODEL — phí cài máy là CỐ ĐỊNH ở FeeRate (không theo loại phí).
     if (e.phiBan != null && tid.partnerId != null) {
       const rates = await db.feeRate.findMany({ where: { partnerId: tid.partnerId, cardTypeId: e.cardTypeId, deletedAt: null } });
       const rate = pickEffectiveRate(rates, new Date());
@@ -134,7 +148,7 @@ export async function setTidSellFees(input: SetTidSellFeesInput): Promise<Mutati
     // Sau khóa, findFirst đọc trong khóa thấy dòng luồng trước đã commit → update thay vì create trùng.
     await txc.$queryRawUnsafe('SELECT id FROM tids WHERE id = $1 FOR UPDATE', tid.id);
     for (const e of input.entries) {
-      const existing = await txc.tidSellFee.findFirst({ where: { tidId: tid.id, cardTypeId: e.cardTypeId, deletedAt: null }, orderBy: { id: 'desc' } });
+      const existing = await txc.tidSellFee.findFirst({ where: { tidId: tid.id, cardTypeId: e.cardTypeId, feeTypeId: input.feeTypeId, deletedAt: null }, orderBy: { id: 'desc' } });
       if (e.phiBan == null) {
         // Xóa override → quay về niêm yết.
         if (existing) {
@@ -150,13 +164,13 @@ export async function setTidSellFees(input: SetTidSellFeesInput): Promise<Mutati
           changed.push({ cardTypeId: e.cardTypeId, phiBan: e.phiBan });
         }
       } else {
-        await txc.tidSellFee.create({ data: { tidId: tid.id, cardTypeId: e.cardTypeId, phiBan: milli, createdBy: user.id, updatedBy: user.id } });
+        await txc.tidSellFee.create({ data: { tidId: tid.id, cardTypeId: e.cardTypeId, feeTypeId: input.feeTypeId, phiBan: milli, createdBy: user.id, updatedBy: user.id } });
         changed.push({ cardTypeId: e.cardTypeId, phiBan: e.phiBan });
       }
     }
   });
 
   if (changed.length > 0)
-    await writeAudit(db, { actorUserId: user.id, action: 'TID_SELL_FEE_SET', targetType: 'Tid', targetId: String(tid.id), after: { tid: tid.tid, changed } });
+    await writeAudit(db, { actorUserId: user.id, action: 'TID_SELL_FEE_SET', targetType: 'Tid', targetId: String(tid.id), after: { tid: tid.tid, feeTypeId: input.feeTypeId, changed } });
   return { ok: true, id: tid.id };
 }

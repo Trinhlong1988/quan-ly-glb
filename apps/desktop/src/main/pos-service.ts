@@ -6,6 +6,9 @@ import { Prisma } from '@glb/database';
 import { requirePermission, verifyActorPassword } from './guard.js';
 import { writeAudit } from './audit.js';
 import { dateRange } from './customer-service.js';
+import { staleGuard } from './optimistic-lock.js';
+import { resolveHandoverInput, buildHandoverContext } from './handover-service.js';
+import { applyHandoverTx, refundOpenDepositsForSerialTx, type HandoverContext } from './deposit-service.js';
 
 export interface PosDto {
   id: number;
@@ -50,6 +53,10 @@ export interface TimelineEventDto {
   fromWarehouseId: number | null; // R27 — kho xuất (giao/đổi-khách)
   warehouseName: string | null; // "MÃ · Tên" kho
   deliveryAddress: string | null; // địa chỉ giao (snapshot theo kho lúc giao)
+  // LOẠI GIAO MÁY (Mr.Long) — deploy/gán-TID: loại giao + số tiền (hiển thị "giao hình thức gì, bao nhiêu").
+  handoverTypeId: number | null;
+  handoverName: string | null;
+  handoverAmount: number | null;
 }
 
 export interface MutationResult {
@@ -185,6 +192,10 @@ export async function getDeviceTimeline(
   const actorMap = new Map(
     (await g.db.user.findMany({ where: { id: { in: actorIds } }, select: { id: true, fullName: true, username: true } })).map((u) => [u.id, u.fullName || u.username])
   );
+  const htIds = [...new Set(events.map((e) => e.handoverTypeId).filter((x): x is number => x != null))];
+  const htMap = new Map(
+    (await g.db.handoverType.findMany({ where: { id: { in: htIds } }, select: { id: true, name: true } })).map((h) => [h.id, h.name])
+  );
   return {
     ok: true,
     data: events.map((e) => ({
@@ -203,7 +214,10 @@ export async function getDeviceTimeline(
       tid: e.tid,
       fromWarehouseId: e.fromWarehouseId,
       warehouseName: e.fromWarehouseId != null ? whMap.get(e.fromWarehouseId) ?? null : null,
-      deliveryAddress: e.deliveryAddress
+      deliveryAddress: e.deliveryAddress,
+      handoverTypeId: e.handoverTypeId,
+      handoverName: e.handoverTypeId != null ? htMap.get(e.handoverTypeId) ?? null : null,
+      handoverAmount: e.handoverAmount != null ? Number(e.handoverAmount) : null
     }))
   };
 }
@@ -264,6 +278,68 @@ export async function createPos(input: CreatePosInput): Promise<MutationResult> 
   return { ok: true, id: created.id };
 }
 
+// ── Sửa THÔNG TIN HỒ SƠ máy POS (Nhóm 1, Mr.Long 12/7) — KHÔNG đụng trạng thái/gán (state machine đi
+// qua luồng thao tác riêng). Chỉ các trường hồ sơ: chủng loại/NCC/giá nhập/ngày nhập/model text/bank
+// text/vị trí kho (warehouseLoc text)/ghi chú. Serial (định danh, khóa join event-log) BẤT BIẾN — không sửa.
+export interface UpdatePosInput {
+  model?: string | null;
+  bank?: string | null;
+  posModelId?: number | null;
+  supplierId?: number | null;
+  importPrice?: number | null;
+  importedAt?: string | null;
+  warehouseLoc?: string | null;
+  note?: string | null;
+  expectedUpdatedAt?: string | null; // R48 #2 optimistic-lock — mốc updatedAt client giữ lúc mở form
+}
+
+/** POS_MANAGE — sửa hồ sơ máy (không đổi trạng thái/gán/kho vật lý/serial). Audit before/after + optlock. */
+export async function updatePos(id: number, input: UpdatePosInput): Promise<MutationResult> {
+  const g = await requirePermission('POS_MANAGE', { action: 'POS_UPDATED', targetType: 'PosDevice', targetId: String(id) });
+  if (!g.ok) return g;
+  const { db, user } = g;
+
+  const row = await db.posDevice.findUnique({ where: { id } });
+  if (!row || row.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Không tìm thấy máy POS.' };
+  const stale = staleGuard(row.updatedAt, input.expectedUpdatedAt);
+  if (stale) return stale;
+
+  if (input.posModelId != null) {
+    const m = await db.posModel.findFirst({ where: { id: input.posModelId, deletedAt: null }, select: { id: true } });
+    if (!m) return { ok: false, error: 'NOT_FOUND', message: 'Chủng loại POS đã chọn không tồn tại.' };
+  }
+  if (input.supplierId != null) {
+    const s = await db.supplier.findFirst({ where: { id: input.supplierId, deletedAt: null }, select: { id: true } });
+    if (!s) return { ok: false, error: 'NOT_FOUND', message: 'Nhà cung cấp đã chọn không tồn tại.' };
+  }
+
+  const before = auditSnapshot({ model: row.model, bank: row.bank, posModelId: row.posModelId, supplierId: row.supplierId, importPrice: row.importPrice, importedAt: row.importedAt ? row.importedAt.toISOString() : null, warehouseLoc: row.warehouseLoc, note: row.note });
+  const importedAt = input.importedAt !== undefined ? (input.importedAt ? parseWhen(input.importedAt) : null) : row.importedAt;
+  const updated = await db.posDevice.update({
+    where: { id },
+    data: {
+      model: input.model !== undefined ? input.model?.trim() || null : row.model,
+      bank: input.bank !== undefined ? input.bank?.trim() || null : row.bank,
+      posModelId: input.posModelId !== undefined ? input.posModelId : row.posModelId,
+      supplierId: input.supplierId !== undefined ? input.supplierId : row.supplierId,
+      importPrice: input.importPrice !== undefined ? input.importPrice : row.importPrice,
+      importedAt,
+      warehouseLoc: input.warehouseLoc !== undefined ? input.warehouseLoc?.trim() || null : row.warehouseLoc,
+      note: input.note !== undefined ? input.note?.trim() || null : row.note,
+      updatedBy: user.id
+    }
+  });
+  await writeAudit(db, {
+    actorUserId: user.id,
+    action: 'POS_UPDATED',
+    targetType: 'PosDevice',
+    targetId: String(id),
+    before,
+    after: auditSnapshot({ model: updated.model, bank: updated.bank, posModelId: updated.posModelId, supplierId: updated.supplierId, importPrice: updated.importPrice, warehouseLoc: updated.warehouseLoc, note: updated.note })
+  });
+  return { ok: true, id };
+}
+
 export interface TransitionInput {
   occurredAt?: string | null;
   note?: string | null;
@@ -271,6 +347,12 @@ export interface TransitionInput {
   customerId?: number | null; // deploy target
   fromWarehouseId?: number | null; // R27 (§4) — giao/đổi-khách: kho xuất (địa chỉ snapshot theo kho)
   toWarehouseId?: number | null; // Model 1 — thu hồi / nhận-sửa VỀ kho nào (set PosDevice.warehouseId)
+  // LOẠI GIAO MÁY (Mr.Long) — deploy (giao khách): loại giao + số tiền + quỹ nhận (khi thu tiền). recall
+  // (thu máy về): fundId = quỹ HOÀN cọc (nếu rỗng → hoàn về quỹ cọc gốc). SALE bị chặn (dùng chức năng Bán).
+  handoverTypeId?: number | null;
+  handoverAmount?: number | null;
+  fundId?: number | null;
+  method?: string | null; // CK | CASH (khi có tiền)
 }
 
 /** Vietnamese label for a rejected transition reason (R_UX_WARN). */
@@ -434,6 +516,20 @@ async function applyTransition(serial: string, event: PosEvent, input: Transitio
   const touchesTid = unbinds || event === 'changeCustomer';
 
   const occurredAt = parseWhen(input.occurredAt);
+
+  // LOẠI GIAO MÁY — deploy (giao khách): giải mã loại giao + số tiền + quỹ TRƯỚC $transaction (validate
+  // đầy đủ ở đây → applyHandoverTx chỉ GHI). Bán (SALE) cần mật khẩu xác nhận → CHẶN, hướng dùng chức năng
+  // Bán máy. Deploy KHÔNG loại giao (handoverTypeId null) = Mượn 0đ → giữ tương thích giao nội bộ/selftest cũ.
+  let handover: HandoverContext | null = null;
+  if (event === 'deploy') {
+    const r = await resolveHandoverInput(db, { handoverTypeId: input.handoverTypeId, amount: input.handoverAmount, fundId: input.fundId, method: input.method });
+    if (!r.ok) return { ok: false, error: r.error, message: r.message };
+    if (r.moneyKind === 'SALE') {
+      return { ok: false, error: 'USE_SALE_FLOW', message: 'Giao hình thức "Bán" cần xác nhận mật khẩu — hãy dùng chức năng Bán máy.' };
+    }
+    handover = buildHandoverContext(r, { deviceSerial: serial, tid: pre.currentTid ?? null, customerId: input.customerId ?? null, occurredAt, actorId: user.id });
+  }
+
   let result: MutationResult;
   try {
     result = await runWithRetry(async () => {
@@ -517,11 +613,20 @@ async function applyTransition(serial: string, event: PosEvent, input: Transitio
           : event === 'changeCustomer'
             ? (input.fromWarehouseId ?? null)
             : null;
+      // #5 (Mr.Long 12/7) — GIAO máy cho khách (deploy) BẮT BUỘC máy ở 1 kho CÓ ĐỊA CHỈ cụ thể. Địa chỉ
+      // kho = địa chỉ hồ sơ User quản lý kho (§4) nếu có managerUserId, ngược lại address cột kho (legacy).
+      if (event === 'deploy' && srcWhId == null) {
+        throw new TransitionAbort({ ok: false, error: 'NO_WAREHOUSE', message: 'Máy phải ở kho có địa chỉ cụ thể mới giao cho khách được. Hãy chọn kho xuất (Từ kho).' });
+      }
       if (srcWhId != null) {
-        const wh = await tx.warehouse.findFirst({ where: { id: srcWhId, deletedAt: null }, select: { id: true, address: true } });
+        const wh = await tx.warehouse.findFirst({ where: { id: srcWhId, deletedAt: null }, select: { id: true, address: true, managerUserId: true } });
         if (!wh) throw new TransitionAbort({ ok: false, error: 'NOT_FOUND', message: 'Kho xuất đã chọn không tồn tại (hoặc đã bị xóa).' });
+        const effAddr = await resolveWarehouseAddress(tx, wh);
+        if (event === 'deploy' && !(effAddr && effAddr.trim())) {
+          throw new TransitionAbort({ ok: false, error: 'WAREHOUSE_NO_ADDRESS', message: 'Máy phải ở kho có địa chỉ cụ thể mới giao cho khách được. Kho xuất chưa có địa chỉ (kiểm tra User quản lý kho).' });
+        }
         eventWarehouseId = wh.id;
-        eventDeliveryAddress = wh.address;
+        eventDeliveryAddress = effAddr;
       }
 
       // Model 1 — ĐỒNG BỘ kho vật lý của máy: CHỈ khi IN_STOCK máy mới thuộc 1 kho (recall/nhận-sửa VỀ kho);
@@ -541,6 +646,9 @@ async function applyTransition(serial: string, event: PosEvent, input: Transitio
           customerId,
           fromWarehouseId: eventWarehouseId,
           deliveryAddress: eventDeliveryAddress,
+          // LOẠI GIAO MÁY — chỉ ghi khi deploy CÓ chọn loại giao (timeline hiện "giao hình thức gì, bao nhiêu").
+          handoverTypeId: handover && handover.handoverTypeId != null ? handover.handoverTypeId : null,
+          handoverAmount: handover && handover.handoverTypeId != null ? handover.amount : null,
           actorUserId: user.id,
           occurredAt,
           note: input.note ?? null,
@@ -548,6 +656,13 @@ async function applyTransition(serial: string, event: PosEvent, input: Transitio
           afterJson: JSON.stringify(auditSnapshot({ status: toState, currentAgentId: patch.currentAgentId ?? dev.currentAgentId, currentCustomerId: patch.currentCustomerId ?? dev.currentCustomerId }))
         }
       });
+      // LOẠI GIAO MÁY — áp mô hình tiền TRONG CÙNG $transaction:
+      //  • deploy: RENT (thu 1 lần) / DEPOSIT (cọc → nợ phải trả) / NONE (0đ). SALE đã bị chặn ở trên.
+      //  • recall: nếu máy có cọc OPEN → tự HOÀN phần còn giữ (fundId override, else quỹ cọc gốc).
+      if (event === 'deploy' && handover) await applyHandoverTx(tx, handover);
+      if (event === 'recall') {
+        await refundOpenDepositsForSerialTx(tx, { serial, fundIdOverride: input.fundId ?? null, method: input.method === 'CK' ? 'CK' : 'CASH', occurredAt, actorId: user.id });
+      }
         return { ok: true, id: dev.id, _before: before, _eventType: decision.eventType, _toState: toState } as MutationResult & { _before: unknown; _eventType: string; _toState: string };
       });
     });
@@ -587,6 +702,16 @@ export async function retirePos(serial: string, password: string, input: Transit
     return { ok: false, error: 'WRONG_PASSWORD', message: 'Mật khẩu xác nhận không đúng.' };
   }
   return applyTransition(serial, 'retire', input);
+}
+
+/** §4 — Địa chỉ HIỆU LỰC của kho: nếu kho gán User quản lý (managerUserId) → lấy address hồ sơ user đó
+ *  (nguồn sống); ngược lại dùng address cột kho (dữ liệu kho cũ, tương thích ngược). */
+async function resolveWarehouseAddress(tx: PrismaTx, wh: { address: string | null; managerUserId: number | null }): Promise<string | null> {
+  if (wh.managerUserId != null) {
+    const u = await tx.user.findUnique({ where: { id: wh.managerUserId }, select: { address: true } });
+    return u?.address ?? null;
+  }
+  return wh.address;
 }
 
 /** Parse an optional ISO/date string; fall back to now. Invalid → now (never throws). */

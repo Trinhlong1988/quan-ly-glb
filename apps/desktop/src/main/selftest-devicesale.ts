@@ -41,6 +41,8 @@ export async function runDeviceSaleSelfTest(): Promise<number> {
   const buyer = await customerSvc.createCustomer({ fullName: 'DS Khách Mua', nickname: 'DS Khách Mua' });
   const buyer2 = await customerSvc.createCustomer({ fullName: 'DS Khách 2', nickname: 'DS Khách 2' });
   const fund = await db.fund.create({ data: { code: 'QUDS', name: 'Quỹ test bán', type: 'CASH', openingBalance: 0n } });
+  // #5 — kho có ĐỊA CHỈ để làm "Từ kho" khi deploy máy trước lúc bán/gán TID/hủy khách (giao khách BẮT BUỘC kho có địa chỉ).
+  const whMain = await warehouseSvc.createWarehouse({ code: 'DSMAIN', name: 'Kho DS chính', address: 'DS · 1 Đại lộ Bán' });
 
   // ══ Ca 1: BÁN MÁY THU ĐỦ NGAY (giá 2tr, thu 2tr) ══
   const dt0 = await doanhThu(db); const fb0 = await fundBalance(db, fund.id);
@@ -91,7 +93,7 @@ export async function runDeviceSaleSelfTest(): Promise<number> {
 
   // ══ Ca 5: BÁN MÁY KÈM TID ══
   await posSvc.createPos({ serial: 'SN-DS-4', occurredAt: '2026-06-01T09:00:00Z' });
-  await posSvc.deployPos('SN-DS-4', { customerId: buyer.id!, occurredAt: '2026-06-02T09:00:00Z' });
+  await posSvc.deployPos('SN-DS-4', { customerId: buyer.id!, fromWarehouseId: whMain.id!, occurredAt: '2026-06-02T09:00:00Z' });
   await tidSvc.createTid({ tid: 'DS-TID-1', bank: 'VCB', openedAt: '2026-05-01T00:00:00Z' });
   await tidSvc.assignTid('DS-TID-1', { posSerial: 'SN-DS-4', customerId: buyer.id!, occurredAt: '2026-06-03T09:00:00Z' });
   const s5 = await saleSvc.sellPos('SN-DS-4', { customerId: buyer2.id!, salePrice: 5_000_000, paidNow: 5_000_000, fundId: fund.id, method: 'CASH', occurredAt: '2026-06-05T09:00:00Z' }, PW);
@@ -118,7 +120,7 @@ export async function runDeviceSaleSelfTest(): Promise<number> {
 
   // ══ Ca 7: HỦY KHÁCH GIỮ MÁY ══
   await posSvc.createPos({ serial: 'SN-DS-6', occurredAt: '2026-06-01T09:00:00Z' });
-  await posSvc.deployPos('SN-DS-6', { customerId: buyer.id!, occurredAt: '2026-06-02T09:00:00Z' });
+  await posSvc.deployPos('SN-DS-6', { customerId: buyer.id!, fromWarehouseId: whMain.id!, occurredAt: '2026-06-02T09:00:00Z' });
   const cc = await posSvc.cancelCustomerPos('SN-DS-6', { occurredAt: '2026-06-07T09:00:00Z', note: 'khách nghỉ' });
   assert('hủy khách ok', cc.ok === true, cc.error);
   const dev6 = await db.posDevice.findUnique({ where: { serial: 'SN-DS-6' } });
@@ -148,7 +150,7 @@ export async function runDeviceSaleSelfTest(): Promise<number> {
   const whS = await warehouseSvc.createWarehouse({ code: 'DSK1', name: 'Kho DS' });
   assert('kho test tạo được', whS.ok === true, whS.error);
   await posSvc.createPos({ serial: 'SN-DS-8', occurredAt: '2026-06-01T09:00:00Z' });
-  await posSvc.deployPos('SN-DS-8', { customerId: buyer.id!, occurredAt: '2026-06-02T09:00:00Z' });
+  await posSvc.deployPos('SN-DS-8', { customerId: buyer.id!, fromWarehouseId: whMain.id!, occurredAt: '2026-06-02T09:00:00Z' });
   await posSvc.recallPos('SN-DS-8', { toWarehouseId: whS.id!, occurredAt: '2026-06-03T09:00:00Z' }); // vào kho DSK1
   const dev8Before = await db.posDevice.findUnique({ where: { serial: 'SN-DS-8' } });
   assert('trước bán: máy trong kho DSK1 (IN_STOCK)', dev8Before?.warehouseId === whS.id && dev8Before?.status === 'IN_STOCK', { wh: dev8Before?.warehouseId, s: dev8Before?.status });
@@ -184,9 +186,9 @@ export async function runDeviceSaleSelfTest(): Promise<number> {
   assert('Ca9 THU LẠI được sau hủy (không kẹt ALREADY_SETTLED)', reCol9.ok === true, reCol9.error);
 
   // ══ Ca 10: CẤM xóa kho còn máy IN_STOCK (regression R27b — máy mắc kẹt) ══
-  const whDel = await warehouseSvc.createWarehouse({ code: 'DSKDEL', name: 'Kho DS xóa thử' });
+  const whDel = await warehouseSvc.createWarehouse({ code: 'DSKDEL', name: 'Kho DS xóa thử', address: 'DS · 9 Ngõ Xóa' });
   await posSvc.createPos({ serial: 'SN-DS-10', occurredAt: '2026-06-01T09:00:00Z' });
-  await posSvc.deployPos('SN-DS-10', { customerId: buyer.id!, occurredAt: '2026-06-02T09:00:00Z' });
+  await posSvc.deployPos('SN-DS-10', { customerId: buyer.id!, fromWarehouseId: whMain.id!, occurredAt: '2026-06-02T09:00:00Z' });
   await posSvc.recallPos('SN-DS-10', { toWarehouseId: whDel.id!, occurredAt: '2026-06-03T09:00:00Z' }); // IN_STOCK trong DSKDEL
   const delBlocked = await warehouseSvc.deleteWarehouses([whDel.id!], PW);
   assert('Ca10 xóa kho còn máy → IN_USE (chặn)', delBlocked.ok === false && delBlocked.error === 'IN_USE', { err: delBlocked.error });

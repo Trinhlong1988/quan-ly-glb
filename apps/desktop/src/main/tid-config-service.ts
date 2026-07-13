@@ -193,6 +193,11 @@ export interface ConfigTidInput {
   configStatusId?: number | null;
   dossierSourceId?: number | null;
   note?: string | null;
+  // Nhóm 1 (Mr.Long 12/7) — sửa FULL thông tin TID từ danh sách: thêm MID + ngành nghề + link HKD + máy khách.
+  mid?: string | null;
+  industryId?: number | null; // #11 LANE A — ngành nghề (phải tồn tại + active nếu gán)
+  dossierId?: number | null; // Q-T3 — link Hồ sơ HKD
+  customerDeviceSerial?: string | null; // Q-T6 — serial máy của khách (tra cứu, không tạo PosDevice)
   expectedUpdatedAt?: string | null; // R48 #2 optimistic-lock — mốc updatedAt client giữ lúc mở form (chỉ dùng ở updateConfigTid)
 }
 
@@ -335,6 +340,15 @@ export async function updateConfigTid(id: number, input: ConfigTidInput): Promis
   if (!hkdName) return { ok: false, error: 'VALIDATION', message: 'Tên Hộ Kinh Doanh không được để trống.' };
   const refErr = await validateRefs(db, { bankId, partnerId, receiveAccountId: input.receiveAccountId, configStatusId: input.configStatusId, dossierSourceId: input.dossierSourceId });
   if (refErr) return refErr;
+  // Nhóm 1 — validate ngành nghề (nếu gán): phải tồn tại + đang dùng (active). null = gỡ ngành nghề.
+  if (input.industryId != null) {
+    const ind = await db.industry.findUnique({ where: { id: input.industryId } });
+    if (!ind || ind.deletedAt || !ind.active) return { ok: false, error: 'VALIDATION', message: 'Ngành nghề đã chọn không tồn tại hoặc đã ngừng dùng.' };
+  }
+  if (input.dossierId != null) {
+    const d = await db.dossier.findUnique({ where: { id: input.dossierId } });
+    if (!d || d.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Hồ sơ HKD đã chọn không tồn tại.' };
+  }
   if (tid !== row.tid) {
     const dup = await db.tid.findFirst({ where: { tid, NOT: { id } } });
     if (dup) {
@@ -357,6 +371,10 @@ export async function updateConfigTid(id: number, input: ConfigTidInput): Promis
         configStatusId: input.configStatusId !== undefined ? input.configStatusId : row.configStatusId,
         dossierSourceId: input.dossierSourceId !== undefined ? input.dossierSourceId : row.dossierSourceId,
         note: input.note !== undefined ? input.note?.trim() || null : row.note,
+        mid: input.mid !== undefined ? input.mid?.trim() || null : row.mid,
+        industryId: input.industryId !== undefined ? input.industryId : row.industryId,
+        dossierId: input.dossierId !== undefined ? input.dossierId : row.dossierId,
+        customerDeviceSerial: input.customerDeviceSerial !== undefined ? input.customerDeviceSerial?.trim() || null : row.customerDeviceSerial,
         updatedBy: user.id
       }
     });
@@ -364,7 +382,7 @@ export async function updateConfigTid(id: number, input: ConfigTidInput): Promis
     if (isUniqueViolation(e)) return { ok: false, error: 'DUPLICATE', message: `TID "${tid}" đã tồn tại.` };
     throw e;
   }
-  await writeAudit(db, { actorUserId: user.id, action: 'TID_CONFIG_UPDATED', targetType: 'Tid', targetId: String(id), before, after: auditSnapshot({ tid, bankId, partnerId, hkdName }) });
+  await writeAudit(db, { actorUserId: user.id, action: 'TID_CONFIG_UPDATED', targetType: 'Tid', targetId: String(id), before, after: auditSnapshot({ tid, bankId, partnerId, hkdName, industryId: input.industryId !== undefined ? input.industryId : row.industryId }) });
   return { ok: true, id };
 }
 

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Plus, Pencil, Trash2, Loader2, Warehouse as WarehouseIcon, Download } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate, fmtTime } from '@glb/shared';
-import type { WarehouseDto, CreateWarehouseInput, UpdateWarehouseInput } from '../../../preload/index.d';
+import type { WarehouseDto, CreateWarehouseInput, UpdateWarehouseInput, WarehouseManagerCandidate } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
 import { isStaleWrite, STALE_TITLE } from '../lib/optlock.js';
 import { Modal } from '../components/Modal.js';
@@ -146,15 +146,28 @@ function WarehouseForm({ mode, row, onClose, onSaved }: { mode: 'create' | 'edit
   const [phone, setPhone] = useState(row?.phone ?? '');
   const [status, setStatus] = useState(row?.status ?? 'ACTIVE');
   const [note, setNote] = useState(row?.note ?? '');
+  const [managerUserId, setManagerUserId] = useState(row?.managerUserId ? String(row.managerUserId) : '');
+  const [managers, setManagers] = useState<WarehouseManagerCandidate[]>([]);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    window.api.warehouseManagerCandidates().then((r) => r.ok && r.data && setManagers(r.data));
+  }, []);
+
+  // §4 — có chọn User quản lý → địa chỉ + SĐT LẤY TỪ hồ sơ user (read-only). Không chọn → nhập tay (kho cũ).
+  const manager = managers.find((m) => String(m.id) === managerUserId);
+  const effAddress = manager ? manager.address ?? '' : address;
+  const effPhone = manager ? manager.phone ?? '' : phone;
 
   async function save(): Promise<void> {
     if (!code.trim()) return toast.alert('Mã kho bắt buộc.', 'Thiếu thông tin');
     if (!name.trim()) return toast.alert('Tên kho bắt buộc.', 'Thiếu thông tin');
     setBusy(true);
+    const mgrId = managerUserId ? Number(managerUserId) : null;
+    // Khi có user quản lý: địa chỉ/SĐT lấy từ hồ sơ user (server tự resolve) → không gửi address/phone tay.
     const res = mode === 'edit' && row
-      ? await window.api.warehouseUpdate(row.id, { code: code.trim(), name: name.trim(), address: address.trim() || null, phone: phone.trim() || null, note: note.trim() || null, status, expectedUpdatedAt: row.updatedAt } satisfies UpdateWarehouseInput)
-      : await window.api.warehouseCreate({ code: code.trim(), name: name.trim(), address: address.trim() || null, phone: phone.trim() || null, note: note.trim() || null, status } satisfies CreateWarehouseInput);
+      ? await window.api.warehouseUpdate(row.id, { code: code.trim(), name: name.trim(), address: mgrId ? null : address.trim() || null, phone: mgrId ? null : phone.trim() || null, managerUserId: mgrId, note: note.trim() || null, status, expectedUpdatedAt: row.updatedAt } satisfies UpdateWarehouseInput)
+      : await window.api.warehouseCreate({ code: code.trim(), name: name.trim(), address: mgrId ? null : address.trim() || null, phone: mgrId ? null : phone.trim() || null, managerUserId: mgrId, note: note.trim() || null, status } satisfies CreateWarehouseInput);
     setBusy(false);
     if (res.ok) { toast.success(mode === 'edit' ? 'Đã cập nhật kho' : `Đã thêm kho ${name}`); onSaved(); }
     else if (isStaleWrite(res)) { toast.alert(res.message ?? 'Bản ghi đã được người khác cập nhật, vui lòng mở lại.', STALE_TITLE); onSaved(); }
@@ -165,8 +178,27 @@ function WarehouseForm({ mode, row, onClose, onSaved }: { mode: 'create' | 'edit
     <Modal title={mode === 'edit' ? `Sửa kho ${row?.code}` : 'Thêm kho'} onClose={onClose} width="max-w-md" onSubmit={() => void save()}>
       <Field label="Mã kho" required hint="Ví dụ: KHO-HN, KHO-HCM"><input className={inputCls} value={code} onChange={(e) => setCode(e.target.value)} autoFocus /></Field>
       <Field label="Tên kho" required><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} /></Field>
-      <Field label="Địa chỉ" hint="Địa chỉ kho — dùng khi giao máy (chọn kho → hiện địa chỉ)"><textarea className={inputCls} rows={2} value={address} onChange={(e) => setAddress(e.target.value)} /></Field>
-      <Field label="Điện thoại"><input className={inputCls} value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
+      <Field label="User quản lý kho" hint="Chọn user → Địa chỉ + SĐT tự lấy từ hồ sơ user (không nhập tay)">
+        <select className={inputCls} value={managerUserId} onChange={(e) => setManagerUserId(e.target.value)}>
+          <option value="">— Không gán (nhập địa chỉ tay) —</option>
+          {managers.map((m) => <option key={m.id} value={m.id}>{m.fullName} · @{m.username}</option>)}
+        </select>
+      </Field>
+      {manager ? (
+        <>
+          <Field label="Địa chỉ" hint="Lấy từ hồ sơ User quản lý (chỉ đọc)">
+            <div className={inputCls + ' min-h-[38px] bg-appbg text-slate-600'}>{effAddress || <span className="italic text-warning">User quản lý chưa có địa chỉ — không giao máy được</span>}</div>
+          </Field>
+          <Field label="Điện thoại" hint="Lấy từ hồ sơ User quản lý (chỉ đọc)">
+            <div className={inputCls + ' min-h-[38px] bg-appbg text-slate-600'}>{effPhone || '—'}</div>
+          </Field>
+        </>
+      ) : (
+        <>
+          <Field label="Địa chỉ" hint="Địa chỉ kho — dùng khi giao máy (chọn kho → hiện địa chỉ)"><textarea className={inputCls} rows={2} value={address} onChange={(e) => setAddress(e.target.value)} /></Field>
+          <Field label="Điện thoại"><input className={inputCls} value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
+        </>
+      )}
       <Field label="Trạng thái sử dụng">
         <select className={inputCls} value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="ACTIVE">Đang dùng</option>

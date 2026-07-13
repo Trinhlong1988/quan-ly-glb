@@ -243,7 +243,13 @@ async function clearDeleted(entityType: TrashEntity, id: number): Promise<void> 
     case 'PosIntakeStatus': await db.posIntakeStatus.update({ where: { id }, data }); return;
     case 'PosIntake': await db.posIntake.update({ where: { id }, data }); return;
     case 'FeeType': await db.feeType.update({ where: { id }, data }); return;
-    case 'FeeRate': await db.feeRate.update({ where: { id }, data }); return;
+    case 'FeeRate': {
+      const rate = await db.feeRate.findUnique({ where: { id }, select: { partnerId: true, cardTypeId: true, effectiveFrom: true } });
+      await db.feeRate.update({ where: { id }, data });
+      // FEE_MODEL — khôi phục biểu phí cũng khôi phục phí bán niêm yết CÙNG KỲ đã xóa mềm kèm (đối xứng deleteFeeRates).
+      if (rate) await db.feeSellQuote.updateMany({ where: { partnerId: rate.partnerId, cardTypeId: rate.cardTypeId, effectiveFrom: rate.effectiveFrom, deletedAt: { not: null } }, data });
+      return;
+    }
     case 'ReceiveAccountSource': await db.receiveAccountSource.update({ where: { id }, data }); return;
     case 'ReceiveAccount': await db.receiveAccount.update({ where: { id }, data }); return;
     case 'DossierSource': await db.dossierSource.update({ where: { id }, data }); return;

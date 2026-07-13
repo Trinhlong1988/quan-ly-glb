@@ -34,7 +34,8 @@ export async function runPosLifecycleSelfTest(): Promise<number> {
   const c2 = await customerSvc.createCustomer({ fullName: 'PL Khách Hai', nickname: 'PL Khách Hai' });
   assert('2 khách test tạo được', c1.ok && c2.ok, { c1: c1.error, c2: c2.error });
   // Model 1 — thu hồi BẮT BUỘC có kho → tạo sẵn 1 kho cho các bước recall.
-  const whR = await warehouseSvc.createWarehouse({ code: 'PLK0', name: 'Kho PL 0' });
+  // #5 — kho này CÓ ĐỊA CHỈ để dùng làm "Từ kho" khi deploy (giao khách BẮT BUỘC kho có địa chỉ).
+  const whR = await warehouseSvc.createWarehouse({ code: 'PLK0', name: 'Kho PL 0', address: 'Kho PL 0 · số 0 Đường Z' });
   assert('kho recall tạo được', whR.ok === true, whR.error);
 
   // ── POS #1: 1 máy 1 TID sống ─────────────────────────────────────────────
@@ -42,7 +43,7 @@ export async function runPosLifecycleSelfTest(): Promise<number> {
   const B = 'SN-PL-B';
   await posSvc.createPos({ serial: A, occurredAt: '2026-06-01T09:00:00Z' });
   await posSvc.createPos({ serial: B, occurredAt: '2026-06-01T09:00:00Z' });
-  await posSvc.deployPos(A, { customerId: c1.id!, occurredAt: '2026-06-02T09:00:00Z' });
+  await posSvc.deployPos(A, { customerId: c1.id!, fromWarehouseId: whR.id!, occurredAt: '2026-06-02T09:00:00Z' });
   await tidSvc.createTid({ tid: 'PL-TID-1', bank: 'VCB', openedAt: '2026-05-01T00:00:00Z' });
   await tidSvc.createTid({ tid: 'PL-TID-2', bank: 'VCB', openedAt: '2026-05-01T00:00:00Z' });
 
@@ -74,7 +75,7 @@ export async function runPosLifecycleSelfTest(): Promise<number> {
   assert('thu hồi máy A ok (gỡ TID-1)', recall.ok === true, recall.error);
   const devA = await db.posDevice.findUnique({ where: { serial: A } });
   assert('máy A về IN_STOCK, currentTid null sau thu hồi', devA?.status === 'IN_STOCK' && devA?.currentTid === null, { s: devA?.status, tid: devA?.currentTid });
-  await posSvc.deployPos(B, { customerId: c2.id!, occurredAt: '2026-06-04T10:00:00Z' });
+  await posSvc.deployPos(B, { customerId: c2.id!, fromWarehouseId: whR.id!, occurredAt: '2026-06-04T10:00:00Z' });
   const moveOk = await tidSvc.assignTid('PL-TID-1', { posSerial: B, customerId: c2.id!, occurredAt: '2026-06-04T11:00:00Z' });
   assert('sau thu hồi, lắp TID-1 sang máy B ok (unbind-before-bind)', moveOk.ok === true, moveOk.error);
   const openBindingsTid1 = await db.posTidBinding.count({ where: { tid: 'PL-TID-1', unboundAt: null } });
@@ -111,8 +112,8 @@ export async function runPosLifecycleSelfTest(): Promise<number> {
   const wh2 = await warehouseSvc.createWarehouse({ code: 'PLK2', name: 'Kho PL 2', address: 'Số 2 Đường B' });
   assert('2 kho test tạo được', wh1.ok && wh2.ok, { wh1: wh1.error, wh2: wh2.error });
 
-  // A đang IN_STOCK (warehouseId null). deploy A cho c1 → rời kho (null); rồi thu hồi VỀ kho wh1 → warehouseId=wh1.
-  await posSvc.deployPos(A, { customerId: c1.id!, occurredAt: '2026-06-06T09:00:00Z' });
+  // A đang IN_STOCK (warehouseId null). deploy A cho c1 (Từ kho whR có địa chỉ) → rời kho (null); rồi thu hồi VỀ kho wh1.
+  await posSvc.deployPos(A, { customerId: c1.id!, fromWarehouseId: whR.id!, occurredAt: '2026-06-06T09:00:00Z' });
   const aDeployed = await db.posDevice.findUnique({ where: { serial: A } });
   assert('deploy A → rời kho: warehouseId null', aDeployed?.warehouseId == null && aDeployed?.status === 'DEPLOYED', { wh: aDeployed?.warehouseId, s: aDeployed?.status });
 

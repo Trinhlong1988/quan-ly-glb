@@ -74,6 +74,7 @@ const api = {
   posList: (filter: unknown) => ipcRenderer.invoke('pos:list', filter),
   posTimeline: (serial: string) => ipcRenderer.invoke('pos:timeline', serial),
   posCreate: (input: unknown) => ipcRenderer.invoke('pos:create', input),
+  posUpdate: (id: number, input: unknown) => ipcRenderer.invoke('pos:update', { id, input }),
   posDeploy: (serial: string, input: unknown) => ipcRenderer.invoke('pos:deploy', { serial, input }),
   posRecall: (serial: string, input: unknown) => ipcRenderer.invoke('pos:recall', { serial, input }),
   posTransferAgent: (serial: string, input: unknown) => ipcRenderer.invoke('pos:transferAgent', { serial, input }),
@@ -100,7 +101,7 @@ const api = {
   tidReplace: (tid: string, input: unknown) => ipcRenderer.invoke('tid:replace', { tid, input }),
   tidRecall: (tid: string, input: unknown) => ipcRenderer.invoke('tid:recall', { tid, input }),
   tidMarkDelivered: (tid: string, input: unknown) => ipcRenderer.invoke('tid:markDelivered', { tid, input }),
-  tidSellFeeList: (tidId: number) => ipcRenderer.invoke('tid:sellFeeList', tidId),
+  tidSellFeeList: (tidId: number, feeTypeId: number) => ipcRenderer.invoke('tid:sellFeeList', { tidId, feeTypeId }),
   tidSellFeeSet: (input: unknown) => ipcRenderer.invoke('tid:sellFeeSet', input),
 
   // Notifications (undelivered TID)
@@ -110,6 +111,7 @@ const api = {
   // Cấu hình ngân hàng (G-CFG.1)
   warehouseList: (filter: unknown) => ipcRenderer.invoke('warehouse:list', filter),
   warehouseLite: () => ipcRenderer.invoke('warehouse:lite'),
+  warehouseManagerCandidates: () => ipcRenderer.invoke('warehouse:managerCandidates'),
   warehouseCreate: (input: unknown) => ipcRenderer.invoke('warehouse:create', input),
   warehouseUpdate: (id: number, input: unknown) => ipcRenderer.invoke('warehouse:update', { id, input }),
   warehouseDelete: (ids: number[], password: string) => ipcRenderer.invoke('warehouse:delete', { ids, password }),
@@ -166,9 +168,20 @@ const api = {
   feeTypeUpdate: (id: number, input: unknown) => ipcRenderer.invoke('feeType:update', { id, input }),
   feeTypeDelete: (ids: number[], password: string) => ipcRenderer.invoke('feeType:delete', { ids, password }),
 
+  // LOẠI GIAO MÁY (Mr.Long) — danh mục loại giao + báo cáo cọc/doanh thu theo loại giao
+  handoverTypeList: () => ipcRenderer.invoke('handoverType:list'),
+  handoverTypeListLite: () => ipcRenderer.invoke('handoverType:listLite'),
+  handoverTypeCreate: (input: unknown) => ipcRenderer.invoke('handoverType:create', input),
+  handoverTypeUpdate: (id: number, input: unknown) => ipcRenderer.invoke('handoverType:update', { id, input }),
+  handoverTypeDelete: (ids: number[], password: string) => ipcRenderer.invoke('handoverType:delete', { ids, password }),
+  depositsHeld: (customerId?: number) => ipcRenderer.invoke('deposit:held', customerId),
+  revenueByHandover: (filter: unknown) => ipcRenderer.invoke('deposit:revenueByHandover', filter),
+
   feeRateList: (filter: unknown) => ipcRenderer.invoke('feeRate:list', filter),
   feeRateSet: (input: unknown) => ipcRenderer.invoke('feeRate:set', input),
   feeRateDelete: (ids: number[], password: string) => ipcRenderer.invoke('feeRate:delete', { ids, password }),
+  // FEE_MODEL — phí bán niêm yết hiệu lực theo loại phí (tham chiếu).
+  feeSellQuoteList: (partnerId: number, cardTypeId: number, at?: string) => ipcRenderer.invoke('feeSellQuote:list', { partnerId, cardTypeId, at }),
 
   // Tài khoản nhận tiền – ủy quyền (G-CFG.4 §8)
   rcvSourceList: () => ipcRenderer.invoke('rcvSource:list'),
@@ -258,6 +271,7 @@ const api = {
   // Doanh thu & Công nợ (Nhóm B)
   transactionList: (filter: unknown) => ipcRenderer.invoke('transaction:list', filter),
   transactionCreate: (input: unknown) => ipcRenderer.invoke('transaction:create', input),
+  revenueByFeeType: (filter: unknown) => ipcRenderer.invoke('transaction:revenueByFeeType', filter),
   transactionDelete: (ids: number[], password: string) => ipcRenderer.invoke('transaction:delete', { ids, password }),
   // FIX 2 — GỠ transactionSettle (H5): handler 'transaction:settle' đã gỡ → gọi sẽ reject "No handler". API chết.
   debtSummary: (filter: unknown) => ipcRenderer.invoke('debt:summary', filter),

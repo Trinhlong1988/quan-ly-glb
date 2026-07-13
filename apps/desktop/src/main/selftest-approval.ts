@@ -27,7 +27,9 @@ export async function runApprovalSelfTest(): Promise<number> {
   const card = await db.cardType.create({ data: { name: 'Thẻ Duyệt', code: 'APND', bankId: bank.id } });
   const partner = await db.partner.create({ data: { name: 'Đối tác Duyệt', code: 'APP' } });
   await db.partnerBank.create({ data: { partnerId: partner.id, bankId: bank.id } });
-  await db.feeRate.create({ data: { partnerId: partner.id, cardTypeId: card.id, phiMua: 3000, phiCaiMay: 1000, phiBan: 2500, effectiveFrom: new Date('1970-01-01T00:00:00.000Z') } });
+  const feeType = await db.feeType.create({ data: { name: 'Loại phí Duyệt' } });
+  await db.feeRate.create({ data: { partnerId: partner.id, cardTypeId: card.id, phiMua: 3000, phiCaiMay: 1000, effectiveFrom: new Date('1970-01-01T00:00:00.000Z') } });
+  await db.feeSellQuote.create({ data: { partnerId: partner.id, cardTypeId: card.id, feeTypeId: feeType.id, phiBan: 2500, effectiveFrom: new Date('1970-01-01T00:00:00.000Z') } });
   const cust = await db.customer.create({ data: { code: 'KHAP', fullName: 'Khách Duyệt', nickname: 'KAP' } });
   const tid = await db.tid.create({ data: { tid: 'TIDAP', mid: 'MIDAP', hkdName: 'HKD Duyệt', bankId: bank.id, partnerId: partner.id, customerId: cust.id } });
 
@@ -38,7 +40,7 @@ export async function runApprovalSelfTest(): Promise<number> {
   ok('tạo user 4 vai (acc/mgr/mgr2/admin2)', !!(acc as { id?: number }).id && !!(mgr as { id?: number }).id && !!(admin2 as { id?: number }).id, { acc: (acc as { id?: number }).id });
 
   const mkBill = async (): Promise<number> => {
-    const c = await createTransaction({ tidId: tid.id, cardTypeId: card.id, amount: 10_000_000, txnDate: '2026-07-01T00:00:00.000Z' });
+    const c = await createTransaction({ tidId: tid.id, cardTypeId: card.id, feeTypeId: feeType.id, amount: 10_000_000, txnDate: '2026-07-01T00:00:00.000Z' });
     if (!c.ok || !c.id) throw new Error('mkBill thất bại: ' + JSON.stringify(c));
     return c.id;
   };

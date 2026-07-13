@@ -55,8 +55,12 @@ async function runConcurrencyCases(): Promise<number> {
   const card = await db.cardType.create({ data: { name: 'Thẻ Conc', code: 'C20ND', bankId: bank.id } });
   const partner = await db.partner.create({ data: { name: 'Đối tác Conc', code: 'C20P' } });
   await db.partnerBank.create({ data: { partnerId: partner.id, bankId: bank.id } });
+  const feeType = await db.feeType.create({ data: { name: 'Loại phí Conc' } });
   await db.feeRate.create({
-    data: { partnerId: partner.id, cardTypeId: card.id, phiMua: 3000, phiCaiMay: 1000, phiBan: 2500, effectiveFrom: new Date('1970-01-01T00:00:00.000Z') }
+    data: { partnerId: partner.id, cardTypeId: card.id, phiMua: 3000, phiCaiMay: 1000, effectiveFrom: new Date('1970-01-01T00:00:00.000Z') }
+  });
+  await db.feeSellQuote.create({
+    data: { partnerId: partner.id, cardTypeId: card.id, feeTypeId: feeType.id, phiBan: 2500, effectiveFrom: new Date('1970-01-01T00:00:00.000Z') }
   });
   const cust = await db.customer.create({ data: { code: 'KHC20', fullName: 'Khách Conc', nickname: 'KC20' } });
   const tid = await db.tid.create({ data: { tid: 'TIDC20', mid: 'MIDC20', hkdName: 'HKD Conc', bankId: bank.id, partnerId: partner.id, customerId: cust.id } });
@@ -67,7 +71,7 @@ async function runConcurrencyCases(): Promise<number> {
   ok('setup: tạo user acc + mgr', !!accId && !!mgr.id, { acc, mgr });
 
   const mkBill = async (): Promise<number> => {
-    const c = await createTransaction({ tidId: tid.id, cardTypeId: card.id, amount: 10_000_000, txnDate: '2026-07-01T00:00:00.000Z' });
+    const c = await createTransaction({ tidId: tid.id, cardTypeId: card.id, feeTypeId: feeType.id, amount: 10_000_000, txnDate: '2026-07-01T00:00:00.000Z' });
     if (!c.ok || !c.id) throw new Error('mkBill thất bại: ' + JSON.stringify(c));
     return c.id;
   };

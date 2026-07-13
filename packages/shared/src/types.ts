@@ -141,6 +141,11 @@ export type AuditAction =
   | 'FEE_TYPE_DELETED'
   | 'FEE_RATE_SET'
   | 'FEE_RATE_DELETED'
+  // ── LOẠI GIAO MÁY (Mr.Long) — danh mục loại giao (Bán/Cho thuê/Mượn/Cọc) ──
+  | 'HANDOVER_TYPE_CREATED'
+  | 'HANDOVER_TYPE_UPDATED'
+  | 'HANDOVER_TYPE_DELETED'
+  | 'HANDOVER_PERMS_GRANTED'
   // ── G-CFG.4 (§8) — Tài khoản nhận tiền – ủy quyền ──
   | 'RCV_ACCT_SOURCE_CREATED'
   | 'RCV_ACCT_SOURCE_UPDATED'

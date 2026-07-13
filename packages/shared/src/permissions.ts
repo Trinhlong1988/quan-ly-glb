@@ -47,6 +47,9 @@ export const PERMISSIONS: PermissionDef[] = [
   // ── G-CFG.3 (§C5) — Cấu hình phí ──
   { code: 'CONFIG_FEE_VIEW', name: 'Xem cấu hình phí (loại phí/biểu phí)', group: 'Cấu hình phí' },
   { code: 'CONFIG_FEE_MANAGE', name: 'Quản lý cấu hình phí (loại phí/biểu phí)', group: 'Cấu hình phí' },
+  // ── LOẠI GIAO MÁY (Mr.Long) — danh mục hình thức giao (Bán/Cho thuê/Mượn/Cọc) ──
+  { code: 'CONFIG_HANDOVER_VIEW', name: 'Xem loại giao máy (Bán/Cho thuê/Mượn/Cọc)', group: 'Loại giao máy' },
+  { code: 'CONFIG_HANDOVER_MANAGE', name: 'Quản lý loại giao máy (thêm/sửa/xóa)', group: 'Loại giao máy' },
   // ── G-CFG.4 (§8) — Tài khoản nhận tiền – ủy quyền ──
   { code: 'CONFIG_RCV_ACCT_VIEW', name: 'Xem tài khoản nhận tiền – ủy quyền', group: 'Tài khoản nhận tiền' },
   { code: 'CONFIG_RCV_ACCT_MANAGE', name: 'Quản lý tài khoản nhận tiền – ủy quyền', group: 'Tài khoản nhận tiền' },
@@ -156,6 +159,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     // G-CFG.3: managers cấu hình phí.
     'CONFIG_FEE_VIEW',
     'CONFIG_FEE_MANAGE',
+    // LOẠI GIAO MÁY: managers cấu hình loại giao (như cấu hình loại phí).
+    'CONFIG_HANDOVER_VIEW',
+    'CONFIG_HANDOVER_MANAGE',
     // G-CFG.4: managers quản lý TK nhận tiền.
     'CONFIG_RCV_ACCT_VIEW',
     'CONFIG_RCV_ACCT_MANAGE',
@@ -220,8 +226,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'STORAGE_VIEW',
     'STORAGE_CLEANUP'
   ],
-  D_MANAGER: ['DASHBOARD_VIEW', 'USER_READ', 'ROLE_READ', 'CUSTOMER_VIEW', 'POS_VIEW', 'TID_VIEW', 'CONFIG_BANK_VIEW', 'CONFIG_WAREHOUSE_VIEW', 'DEVICE_SALE_VIEW'],
-  ACCOUNTANT: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW', 'CONFIG_BANK_VIEW', 'CONFIG_FEE_VIEW', 'CONFIG_FEE_MANAGE', 'CONFIG_RCV_ACCT_VIEW', 'CONFIG_RCV_ACCT_MANAGE', 'CONFIG_DOSSIER_VIEW', 'CONFIG_DOSSIER_MANAGE', 'REVENUE_VIEW', 'REVENUE_MANAGE', 'DEBT_VIEW', 'DEBT_SETTLE', 'DEBT_CLASSIFY', 'BILL_CANCEL_REQUEST',
+  D_MANAGER: ['DASHBOARD_VIEW', 'USER_READ', 'ROLE_READ', 'CUSTOMER_VIEW', 'POS_VIEW', 'TID_VIEW', 'CONFIG_BANK_VIEW', 'CONFIG_WAREHOUSE_VIEW', 'CONFIG_HANDOVER_VIEW', 'DEVICE_SALE_VIEW'],
+  ACCOUNTANT: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW', 'CONFIG_BANK_VIEW', 'CONFIG_FEE_VIEW', 'CONFIG_FEE_MANAGE', 'CONFIG_HANDOVER_VIEW', 'CONFIG_RCV_ACCT_VIEW', 'CONFIG_RCV_ACCT_MANAGE', 'CONFIG_DOSSIER_VIEW', 'CONFIG_DOSSIER_MANAGE', 'REVENUE_VIEW', 'REVENUE_MANAGE', 'DEBT_VIEW', 'DEBT_SETTLE', 'DEBT_CLASSIFY', 'BILL_CANCEL_REQUEST',
     // #3: kế toán = vai tiền chính → bán máy/TID + thu nợ mua thiết bị.
     'DEVICE_SALE_VIEW', 'DEVICE_SALE_MANAGE',
     // PHASE H2-core: kế toán = vai chính thu-chi (quỹ + phiếu thu/chi + báo cáo dòng tiền).
@@ -231,6 +237,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
   WAREHOUSE: ['DASHBOARD_VIEW', 'POS_VIEW', 'TID_VIEW', 'CONFIG_POS_SUPPLY_VIEW', 'CONFIG_POS_SUPPLY_MANAGE', 'CONFIG_TID_VIEW', 'CONFIG_TID_MANAGE',
     // R27: kho vận quản lý danh mục kho.
     'CONFIG_WAREHOUSE_VIEW', 'CONFIG_WAREHOUSE_MANAGE',
+    // LOẠI GIAO MÁY: kho vận XEM loại giao (để chọn khi giao máy/TID).
+    'CONFIG_HANDOVER_VIEW',
     // #3: kho vận CHỈ XEM bán thiết bị (bán = vai tiền, không cho kho tự bán).
     'DEVICE_SALE_VIEW',
     // R34: kho vận hành TID/POS → được TẠO yêu cầu hủy (duyệt vẫn do Admin/Manager).

@@ -125,6 +125,22 @@ export async function runEntityCancelSelfTest(): Promise<number> {
   );
   ok('tồn tại partial-unique index approval_requests_pending_cancel_uq', Array.isArray(idx) && idx.length === 1, idx);
 
+  // ═══ 9) BULK yêu cầu hủy (Nhóm 1) — lặp requestEntityCancel cho nhiều id (mô phỏng nút "Yêu cầu hủy (n)"):
+  //       mỗi id 1 yêu cầu PENDING, KHÔNG xóa cứng — đúng luồng Duyệt Hủy R34. ═══
+  const p1 = await db.posDevice.create({ data: { serial: 'POSBULK1', status: 'IN_STOCK', bankId: bank.id } });
+  const p2 = await db.posDevice.create({ data: { serial: 'POSBULK2', status: 'IN_STOCK', bankId: bank.id } });
+  let bulkOk = 0;
+  for (const id of [p1.id, p2.id]) {
+    const r = await requestEntityCancel('PosDevice', id, 'bulk hủy máy tồn');
+    if (r.ok) bulkOk++;
+  }
+  ok('bulk: 2 yêu cầu hủy POS tạo được (lặp từng id)', bulkOk === 2, { bulkOk });
+  const pend = await db.approvalRequest.count({ where: { entityType: 'PosDevice', action: 'CANCEL', status: 'PENDING', entityId: { in: [p1.id, p2.id] } } });
+  ok('bulk: đúng 2 yêu cầu PENDING (đi qua duyệt, chưa xóa)', pend === 2, { pend });
+  const p1Alive = await db.posDevice.findUnique({ where: { id: p1.id } });
+  const p2Alive = await db.posDevice.findUnique({ where: { id: p2.id } });
+  ok('bulk: 2 máy CHƯA bị xóa (không xóa cứng, chờ duyệt)', p1Alive?.deletedAt == null && p2Alive?.deletedAt == null);
+
   await logout();
   // eslint-disable-next-line no-console
   console.log(`ENTITYCANCEL34 SUMMARY | pass=${pass} fail=${fail}`);

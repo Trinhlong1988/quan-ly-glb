@@ -122,6 +122,59 @@ export async function grantDeviceSalePermsToExistingRoles(db: Db): Promise<numbe
   return granted;
 }
 
+// ── LOẠI GIAO MÁY (Mr.Long) — bug class "DB tiến hóa" (H7) ────────────────────
+// Quyền loại giao MỚI (CONFIG_HANDOVER_*) phải cấp cho role ĐÃ TỒN TẠI trên DB cũ. Cùng khuôn kho:
+// MANAGER nhận view+manage; ACCOUNTANT + D_MANAGER + WAREHOUSE chỉ view (chọn khi giao máy/TID/xem báo cáo).
+const HANDOVER_FULL_CODES = ['CONFIG_HANDOVER_VIEW', 'CONFIG_HANDOVER_MANAGE'];
+const HANDOVER_FULL_ROLES = ['MANAGER'];
+const HANDOVER_VIEW_ROLES = ['ACCOUNTANT', 'D_MANAGER', 'WAREHOUSE'];
+const HANDOVER_GRANT_FLAG = 'seed.handoverPermsGrantedV1';
+
+/** Cấp (idempotent) quyền loại giao máy cho role đã có sẵn (db-evolution). MANAGER view+manage;
+ * ACCOUNTANT/D_MANAGER/WAREHOUSE chỉ view. Trả số (role×quyền) vừa thêm. Cờ guard ở seedIfEmpty. */
+export async function grantHandoverPermsToExistingRoles(db: Db): Promise<number> {
+  const allPerms = await db.permission.findMany({ where: { code: { in: HANDOVER_FULL_CODES } }, select: { id: true, code: true } });
+  const viewPerm = allPerms.filter((p) => p.code === 'CONFIG_HANDOVER_VIEW');
+  let granted = 0;
+  const grantSet = async (roleCode: string, perms: { id: number }[]): Promise<void> => {
+    const role = await db.role.findUnique({ where: { code: roleCode }, select: { id: true } });
+    if (!role) return;
+    for (const perm of perms) {
+      const existing = await db.rolePermission.findUnique({ where: { roleId_permissionId: { roleId: role.id, permissionId: perm.id } } });
+      if (existing) continue;
+      await db.rolePermission.create({ data: { roleId: role.id, permissionId: perm.id } });
+      granted++;
+    }
+  };
+  for (const roleCode of HANDOVER_FULL_ROLES) await grantSet(roleCode, allPerms);
+  for (const roleCode of HANDOVER_VIEW_ROLES) await grantSet(roleCode, viewPerm);
+  return granted;
+}
+
+// ── LOẠI GIAO MÁY (Mr.Long) — seed 4 loại giao builtin (idempotent theo name, ADDITIVE mỗi boot) ──
+// moneyKind quyết định mô hình tiền: SALE (bán đứt → device-sale), RENT (cho thuê → thu 1 lần doanh thu),
+// NONE (mượn → 0đ), DEPOSIT (cọc → nợ phải trả, hoàn khi thu máy về). isBuiltin=true: cấm xóa + khóa
+// moneyKind (cho đổi name/sortOrder). Khớp biến thể hoa/thường để không đẻ trùng gần-giống (bài học 11/7).
+interface SeedHandover { name: string; moneyKind: string; sortOrder: number; }
+const BUILTIN_HANDOVER_TYPES: SeedHandover[] = [
+  { name: 'Bán', moneyKind: 'SALE', sortOrder: 1 },
+  { name: 'Cho thuê', moneyKind: 'RENT', sortOrder: 2 },
+  { name: 'Mượn', moneyKind: 'NONE', sortOrder: 3 },
+  { name: 'Cọc', moneyKind: 'DEPOSIT', sortOrder: 4 }
+];
+
+/** Seed idempotent 4 loại giao builtin. Trả về số loại vừa tạo mới. */
+export async function seedBuiltinHandoverTypes(db: Db): Promise<number> {
+  let created = 0;
+  for (const h of BUILTIN_HANDOVER_TYPES) {
+    const existing = await db.handoverType.findFirst({ where: { name: { equals: h.name, mode: 'insensitive' } }, select: { id: true } });
+    if (existing) continue;
+    await db.handoverType.create({ data: { name: h.name, moneyKind: h.moneyKind, isBuiltin: true, sortOrder: h.sortOrder, createdBy: null } });
+    created++;
+  }
+  return created;
+}
+
 // ── PHASE H1 — Thu–Chi: bug class "DB tiến hóa" (H7) ──────────────────────────
 // Quyền thu-chi MỚI (CASHCAT_*) phải cấp cho role ĐÃ TỒN TẠI trên DB cũ (không chỉ role tạo mới).
 // Cùng khuôn với ngành nghề: ADMIN tự đồng bộ mỗi boot (R_ADMIN_SUPERUSER); MANAGER cấp 1 LẦN
@@ -234,6 +287,10 @@ const SYSTEM_CASH_CATEGORIES: SeedCat[] = [
   // (công nợ POS quẹt thẻ) để không lẫn số. Liên kết chứng từ bán qua DeviceSaleSettlement.
   { kind: 'THU', name: 'Thu tiền bán thiết bị', unit: 'đồng', sourceKind: 'SALE_COLLECT', affectsPnl: false },
   { kind: 'THU', name: 'Doanh thu khác', unit: 'đồng', sourceKind: 'MANUAL', affectsPnl: true },
+  // LOẠI GIAO MÁY (Mr.Long) — giao hình thức "Cho thuê": thu 1 lần lúc giao = DOANH THU thật
+  // (affectsPnl=true → vào lợi nhuận tháng). Sinh qua applyHandover(moneyKind=RENT). Tách riêng để
+  // báo cáo doanh thu theo loại giao đọc đúng nguồn "Cho thuê".
+  { kind: 'THU', name: 'Doanh thu cho thuê máy', unit: 'đồng', sourceKind: 'RENT', affectsPnl: true },
   { kind: 'THU', name: 'Thu cọc máy', unit: 'đồng', sourceKind: 'DEPOSIT', affectsPnl: false },
   { kind: 'THU', name: 'Hoàn ứng (thu lại tạm ứng)', unit: 'đồng', sourceKind: 'ADVANCE', affectsPnl: false },
   { kind: 'THU', name: 'Chuyển quỹ đến', unit: 'đồng', sourceKind: 'FUND_TRANSFER', affectsPnl: false },
@@ -592,6 +649,28 @@ export async function seedIfEmpty(db: Db): Promise<void> {
     }
   }
 
+  // db-evolution (LOẠI GIAO MÁY): cấp quyền loại giao (CONFIG_HANDOVER_*) cho role CŨ 1 lần/DB (cờ
+  // AppSetting). DB mới → role vừa tạo đã có quyền qua DEFAULT_ROLE_PERMISSIONS → grant=0 (no-op an toàn).
+  {
+    const flag = await db.appSetting.findUnique({ where: { key: HANDOVER_GRANT_FLAG } });
+    if (!flag) {
+      const granted = await grantHandoverPermsToExistingRoles(db);
+      await db.appSetting.upsert({
+        where: { key: HANDOVER_GRANT_FLAG },
+        update: {},
+        create: { key: HANDOVER_GRANT_FLAG, value: new Date().toISOString() }
+      });
+      if (granted > 0) {
+        await writeAudit(db, {
+          actorUserId: null,
+          action: 'HANDOVER_PERMS_GRANTED',
+          targetType: 'System',
+          after: { granted, fullRoles: HANDOVER_FULL_ROLES, viewRoles: HANDOVER_VIEW_ROLES, perms: HANDOVER_FULL_CODES }
+        });
+      }
+    }
+  }
+
   // db-evolution (PHASE H1): cấp quyền thu-chi (CASHCAT_*) cho role CŨ 1 lần/DB (cờ AppSetting).
   // DB mới → role vừa tạo đã có quyền qua DEFAULT_ROLE_PERMISSIONS → grant=0 (no-op an toàn).
   {
@@ -662,6 +741,9 @@ export async function seedIfEmpty(db: Db): Promise<void> {
 
   // PHASE H1: seed danh mục thu/chi hệ thống (idempotent — bỏ qua danh mục đã tồn tại).
   await seedSystemCashCategories(db);
+
+  // LOẠI GIAO MÁY (Mr.Long): seed 4 loại giao builtin (Bán/Cho thuê/Mượn/Cọc) — idempotent theo name.
+  await seedBuiltinHandoverTypes(db);
 
   // VIỆC 1: seed 4 trạng thái nhập máy POS mặc định (idempotent theo name). Fix màn/nút "Nhập kho
   // máy POS" bị chặn vĩnh viễn khi PosIntakeStatus rỗng — áp cho cả DB mới lẫn DB đã tồn tại.

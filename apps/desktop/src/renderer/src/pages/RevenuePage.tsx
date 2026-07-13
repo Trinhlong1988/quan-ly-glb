@@ -9,7 +9,11 @@ import type {
   CardTypeDto,
   CustomerDto,
   LiteRef,
-  CreateTransactionInput
+  CreateTransactionInput,
+  FeeTypeDto,
+  RevenueByFeeTypeRow,
+  RevenueByHandoverRow,
+  DepositHeldRow
 } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
 import { Modal } from '../components/Modal.js';
@@ -20,6 +24,7 @@ import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../com
 import { StatBar } from '../components/StatBar.js';
 import { StaleBanner } from '../lib/realtime.js';
 import { exportCsv } from '../lib/exportCsv.js';
+import { MONEY_KIND_LABEL } from './HandoverConfigPage.js';
 
 /** VND, nhóm 3 số bằng dấu chấm (KHÔNG toLocaleString — R_UI QA gate). Giữ dấu âm. */
 function money(n: number): string {
@@ -64,6 +69,7 @@ export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
   const [fPartner, setFPartner] = useState('');
   const [fCustomer, setFCustomer] = useState('');
   const [fTid, setFTid] = useState('');
+  const [fFeeType, setFFeeType] = useState('');
   const [fSettled, setFSettled] = useState(''); // '' | 'yes' | 'no'
   const [fFrom, setFFrom] = useState('');
   const [fTo, setFTo] = useState('');
@@ -73,6 +79,12 @@ export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
   const [customers, setCustomers] = useState<CustomerDto[]>([]);
   const [banks, setBanks] = useState<LiteRef[]>([]);
   const [partners, setPartners] = useState<{ id: number; name: string; code: string | null }[]>([]);
+  const [feeTypes, setFeeTypes] = useState<FeeTypeDto[]>([]);
+  // FEE_TYPE — báo cáo doanh thu tách theo loại phí (tổng toàn bộ theo bộ lọc).
+  const [byFeeType, setByFeeType] = useState<RevenueByFeeTypeRow[]>([]);
+  // LOẠI GIAO MÁY (Mr.Long) — doanh thu theo loại giao (Bán/Cho thuê/Cọc/Mượn) + cọc đang giữ (KHÔNG phải doanh thu).
+  const [byHandover, setByHandover] = useState<RevenueByHandoverRow[]>([]);
+  const [depositsHeldRows, setDepositsHeldRows] = useState<DepositHeldRow[]>([]);
 
   const [showForm, setShowForm] = useState(false); // GD chỉ GHI NHẬN (create); bill bất biến — sửa = hủy+tạo lại (BILL_IMMUTABLE)
   const [del, setDel] = useState<TransactionDto | null>(null);
@@ -88,6 +100,7 @@ export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
       partnerId: fPartner ? Number(fPartner) : undefined,
       customerId: fCustomer ? Number(fCustomer) : undefined,
       tidId: fTid ? Number(fTid) : undefined,
+      feeTypeId: fFeeType ? Number(fFeeType) : undefined,
       settled: fSettled === 'yes' ? true : fSettled === 'no' ? false : undefined,
       dateFrom: fFrom ? new Date(fFrom + 'T00:00:00').toISOString() : undefined,
       dateTo: fTo ? new Date(fTo + 'T23:59:59').toISOString() : undefined,
@@ -97,27 +110,39 @@ export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
   }
 
   async function loadRefs(): Promise<void> {
-    const [t, c, b, p] = await Promise.all([
+    const [t, c, b, p, f] = await Promise.all([
       window.api.tidConfigList({}),
       window.api.customerList({}),
       window.api.bankLite(),
-      window.api.partnerList({})
+      window.api.partnerList({}),
+      window.api.feeTypeList()
     ]);
     if (t.ok && t.data) setTids(t.data);
     if (c.ok && c.data) setCustomers(c.data);
     if (b.ok && b.data) setBanks(b.data);
     if (p.ok && p.data) setPartners(p.data.map((x: { id: number; name: string; code: string | null }) => ({ id: x.id, name: x.name, code: x.code })));
+    if (f.ok && f.data) setFeeTypes(f.data);
   }
 
   async function reload(pg = page): Promise<void> {
     setLoading(true);
-    const res = await window.api.transactionList(buildFilter(pg));
+    const filter = buildFilter(pg);
+    // LOẠI GIAO MÁY — tôn trọng cùng khoảng ngày Từ/Đến đang lọc trên trang (fFrom/fTo, raw yyyy-mm-dd).
+    const [res, bf, bh, dh] = await Promise.all([
+      window.api.transactionList(filter),
+      window.api.revenueByFeeType(filter),
+      window.api.revenueByHandover({ from: fFrom || undefined, to: fTo || undefined }),
+      window.api.depositsHeld()
+    ]);
     if (res.ok) {
       setRows(res.data ?? []);
       setSummary(res.summary ?? emptySummary);
       setTotal(res.total ?? 0);
       setPage(res.page ?? pg);
     } else if (res.message) toast.alert(res.message);
+    setByFeeType(bf.ok && bf.data ? bf.data : []);
+    setByHandover(bh.ok && bh.data ? bh.data : []);
+    setDepositsHeldRows(dh.ok && dh.data ? dh.data : []);
     sel.clear();
     setLoading(false);
   }
@@ -127,7 +152,7 @@ export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
 
   function applyFilter(): void { void reload(1); }
   function resetFilter(): void {
-    setFMid(''); setFHkd(''); setFBank(''); setFPartner(''); setFCustomer(''); setFTid(''); setFSettled(''); setFFrom(''); setFTo('');
+    setFMid(''); setFHkd(''); setFBank(''); setFPartner(''); setFCustomer(''); setFTid(''); setFFeeType(''); setFSettled(''); setFFrom(''); setFTo('');
     setTimeout(() => void reload(1), 0);
   }
 
@@ -154,8 +179,8 @@ export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const showActions = canManage || canRequestCancel;
-  // 12 cột dữ liệu + ô chọn (canManage) + ô thao tác (showActions).
-  const colCount = 12 + (canManage ? 1 : 0) + (showActions ? 1 : 0);
+  // 13 cột dữ liệu (thêm Loại phí) + ô chọn (canManage) + ô thao tác (showActions).
+  const colCount = 13 + (canManage ? 1 : 0) + (showActions ? 1 : 0);
 
   return (
     <div>
@@ -180,6 +205,90 @@ export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
         ]}
       />
 
+      {/* FEE_TYPE — báo cáo doanh thu TÁCH theo loại phí (Ủy quyền/Đối ứng/Tiền chờ…), tổng toàn bộ theo bộ lọc. */}
+      {byFeeType.length > 0 && (
+        <div className="mb-3 overflow-x-auto rounded-xl border border-line bg-white p-3 shadow-sm">
+          <div className="mb-2 text-sm font-semibold text-slate-700">Doanh thu theo loại phí</div>
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-3 py-2">Loại phí</th>
+                <th className="px-3 py-2 text-right">Số GD</th>
+                <th className="px-3 py-2 text-right">Số tiền</th>
+                <th className="px-3 py-2 text-right">Chênh đối tác</th>
+                <th className="px-3 py-2 text-right">Chênh bán</th>
+                <th className="px-3 py-2 text-right">Doanh thu</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {byFeeType.map((r) => (
+                <tr key={r.feeTypeId ?? 'null'} className="hover:bg-appbg/60">
+                  <td className="px-3 py-2 font-medium text-slate-700">{r.feeTypeName ?? '(Chưa gán loại phí)'}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-slate-600">{r.count}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-slate-700">{money(r.totalAmount)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-indigo-600">{money(r.totalRevenuePartner)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-emerald-600">{money(r.totalRevenueSell)}</td>
+                  <td className="px-3 py-2 text-right font-semibold tabular-nums text-slate-800">{money(r.totalRevenue)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* LOẠI GIAO MÁY (Mr.Long) — doanh thu TÁCH theo loại giao (Bán/Cho thuê/Cọc/Mượn), tôn trọng khoảng ngày Từ/Đến. */}
+      {byHandover.length > 0 && (
+        <div className="mb-3 overflow-x-auto rounded-xl border border-line bg-white p-3 shadow-sm">
+          <div className="mb-2 text-sm font-semibold text-slate-700">Doanh thu theo loại giao</div>
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-3 py-2">Loại giao</th>
+                <th className="px-3 py-2">Hình thức tiền</th>
+                <th className="px-3 py-2 text-right">Số chứng từ</th>
+                <th className="px-3 py-2 text-right">Doanh thu</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {byHandover.map((r) => (
+                <tr key={r.handoverTypeId ?? 'null'} className="hover:bg-appbg/60">
+                  <td className="px-3 py-2 font-medium text-slate-700">{r.handoverName}</td>
+                  <td className="px-3 py-2 text-slate-600">{MONEY_KIND_LABEL[r.moneyKind] ?? r.moneyKind}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-slate-600">{r.docCount}</td>
+                  <td className="px-3 py-2 text-right font-semibold tabular-nums text-slate-800">{money(r.revenue)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Đang giữ cọc — CÔNG NỢ PHẢI TRẢ khách (chưa hoàn cọc), KHÔNG phải doanh thu. Hiển thị riêng để không lẫn vào KPI doanh thu. */}
+      {depositsHeldRows.length > 0 && (
+        <div className="mb-3 overflow-x-auto rounded-xl border border-amber-300/60 bg-amber-50/40 p-3 shadow-sm">
+          <div className="mb-0.5 text-sm font-semibold text-amber-700">Đang giữ cọc của khách</div>
+          <p className="mb-2 text-xs text-amber-700/80">Công nợ phải trả khách (tiền cọc chưa hoàn) — KHÔNG tính vào doanh thu ở trên.</p>
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs font-medium uppercase tracking-wide text-amber-700/70">
+              <tr>
+                <th className="px-3 py-2">Khách hàng</th>
+                <th className="px-3 py-2 text-right">Số lần cọc</th>
+                <th className="px-3 py-2 text-right">Còn giữ</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-amber-200/60">
+              {depositsHeldRows.map((r) => (
+                <tr key={r.customerId} className="hover:bg-amber-100/40">
+                  <td className="px-3 py-2 font-medium text-slate-700">{r.customerName ?? '—'}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-slate-600">{r.depositCount}</td>
+                  <td className="px-3 py-2 text-right font-semibold tabular-nums text-amber-700">{money(r.remaining)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       {/* Bộ lọc đa chiều — mỗi chiều một ô riêng */}
       <div className="mb-3 rounded-xl border border-line bg-white p-3 shadow-sm">
         <div className="flex flex-wrap items-end gap-2">
@@ -201,6 +310,9 @@ export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
           <label className="flex flex-col text-xs text-slate-500">Khách hàng
             <select className={inputCls + ' w-40'} value={fCustomer} onChange={(e) => setFCustomer(e.target.value)}><option value="">Tất cả</option>{customers.map((c) => <option key={c.id} value={c.id}>{c.nickname} ({c.fullName})</option>)}</select>
           </label>
+          <label className="flex flex-col text-xs text-slate-500">Loại phí
+            <select className={inputCls + ' w-36'} value={fFeeType} onChange={(e) => setFFeeType(e.target.value)}><option value="">Tất cả</option>{feeTypes.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select>
+          </label>
           <label className="flex flex-col text-xs text-slate-500">Đối soát
             <select className={inputCls + ' w-32'} value={fSettled} onChange={(e) => setFSettled(e.target.value)}><option value="">Tất cả</option><option value="no">Chưa đối soát</option><option value="yes">Đã đối soát</option></select>
           </label>
@@ -213,7 +325,7 @@ export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
           <button onClick={applyFilter} className="rounded-md bg-brand px-3 py-2 text-sm font-medium text-white hover:bg-brand-hover">Lọc</button>
           <button onClick={resetFilter} title="Xóa toàn bộ bộ lọc, đưa về mặc định" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-brand/10 text-brand hover:bg-brand/20"><FilterX className="h-4 w-4" /> Xóa lọc</button>
           <button onClick={() => void reload()} title="Tải lại dữ liệu mới nhất (giữ nguyên bộ lọc)" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-brand/10 text-brand hover:bg-brand/20"><RefreshCw className="h-4 w-4" /> Làm mới</button>
-          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('doanh_thu', ['Mã GD', 'Ngày', 'TID', 'MID', 'HKD', 'Khách', 'Loại thẻ', 'Số tiền', 'Chênh đối tác', 'Chênh bán', 'Doanh thu', 'Đối soát'], rows.map((r) => [r.code ?? '', fmtDate(r.txnDate), r.tid ?? '', r.mid ?? '', r.hkdName ?? '', r.customerName ?? '', r.cardTypeName ?? '', String(r.amount), String(r.revenuePartner), String(r.revenueSell), String(r.revenueAmount), r.settled ? 'Đã đối soát' : 'Chưa']))}>Xuất Excel</Button>
+          <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('doanh_thu', ['Mã GD', 'Ngày', 'TID', 'MID', 'HKD', 'Khách', 'Loại thẻ', 'Loại phí', 'Số tiền', 'Chênh đối tác', 'Chênh bán', 'Doanh thu', 'Đối soát'], rows.map((r) => [r.code ?? '', fmtDate(r.txnDate), r.tid ?? '', r.mid ?? '', r.hkdName ?? '', r.customerName ?? '', r.cardTypeName ?? '', r.feeTypeName ?? '', String(r.amount), String(r.revenuePartner), String(r.revenueSell), String(r.revenueAmount), r.settled ? 'Đã đối soát' : 'Chưa']))}>Xuất Excel</Button>
         </div>
       </div>
 
@@ -231,6 +343,7 @@ export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
               <th className="px-3 py-3">Hộ Kinh Doanh</th>
               <th className="px-3 py-3">Khách hàng</th>
               <th className="px-3 py-3">Loại thẻ</th>
+              <th className="px-3 py-3">Loại phí</th>
               <th className="px-3 py-3 text-right">Số tiền</th>
               <th className="px-3 py-3 text-right">Chênh đối tác</th>
               <th className="px-3 py-3 text-right">Chênh bán</th>
@@ -254,6 +367,7 @@ export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
                 <td className="px-3 py-3 text-slate-600">{r.hkdName ?? '—'}</td>
                 <td className="px-3 py-3 text-slate-600">{r.customerName ?? <span className="text-slate-400">—</span>}</td>
                 <td className="px-3 py-3 text-slate-600">{r.cardTypeName ?? '—'}</td>
+                <td className="px-3 py-3 text-slate-600">{r.feeTypeName ?? '—'}</td>
                 <td className="px-3 py-3 text-right tabular-nums text-slate-700 whitespace-nowrap">{money(r.amount)}</td>
                 <td className="px-3 py-3 text-right tabular-nums text-indigo-600 whitespace-nowrap">{money(r.revenuePartner)}</td>
                 <td className="px-3 py-3 text-right tabular-nums text-emerald-600 whitespace-nowrap">{money(r.revenueSell)}</td>
@@ -286,7 +400,7 @@ export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
         </div>
       )}
 
-      {showForm && <TransactionForm tids={tids} customers={customers} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); void reload(); }} />}
+      {showForm && <TransactionForm tids={tids} customers={customers} feeTypes={feeTypes} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); void reload(); }} />}
       {del && <ConfirmDialog title="Xóa giao dịch" message={`Giao dịch "${del.code ?? del.id}" (${money(del.amount)}) sẽ vào Thùng rác (có thể phục hồi). Nhập lại mật khẩu để xác nhận.`} confirmLabel="Xóa" danger requirePassword onCancel={() => setDel(null)} onConfirm={(pwd) => doDelete(del, pwd)} />}
       {bulkDel && <ConfirmDialog title="Xóa nhiều giao dịch" message={`${sel.count} giao dịch đã chọn sẽ vào Thùng rác (có thể phục hồi). Nhập lại mật khẩu để xác nhận.`} confirmLabel={`Xóa ${sel.count} mục`} danger requirePassword onCancel={() => setBulkDel(false)} onConfirm={(pwd) => doBulkDelete(pwd)} />}
       {cancelTarget && <CancelReasonModal bill={cancelTarget} onClose={() => setCancelTarget(null)} onSubmit={(reason) => doRequestCancel(cancelTarget, reason)} />}
@@ -318,10 +432,12 @@ function CancelReasonModal({ bill, onClose, onSubmit }: { bill: TransactionDto; 
   );
 }
 
-function TransactionForm({ tids, customers, onClose, onSaved }: { tids: ConfigTidDto[]; customers: CustomerDto[]; onClose: () => void; onSaved: () => void }): JSX.Element {
+function TransactionForm({ tids, customers, feeTypes, onClose, onSaved }: { tids: ConfigTidDto[]; customers: CustomerDto[]; feeTypes: FeeTypeDto[]; onClose: () => void; onSaved: () => void }): JSX.Element {
   const toast = useToast();
   const [tidId, setTidId] = useState('');
   const [cardTypeId, setCardTypeId] = useState('');
+  // Loại phí: MẶC ĐỊNH phần tử ĐẦU danh sách (Mr.Long "hiển thị theo thứ tự 1").
+  const [feeTypeId, setFeeTypeId] = useState(feeTypes[0] ? String(feeTypes[0].id) : '');
   const [amount, setAmount] = useState('');
   const [txnDate, setTxnDate] = useState(new Date().toISOString().slice(0, 10));
   const [customerId, setCustomerId] = useState('');
@@ -342,12 +458,13 @@ function TransactionForm({ tids, customers, onClose, onSaved }: { tids: ConfigTi
   async function save(): Promise<void> {
     if (!tidId) return toast.alert('Vui lòng chọn TID.', 'Thiếu thông tin');
     if (!cardTypeId) return toast.alert('Vui lòng chọn loại thẻ.', 'Thiếu thông tin');
+    if (!feeTypeId) return toast.alert('Vui lòng chọn loại phí.', 'Thiếu thông tin');
     const amt = Number(amount);
     if (!Number.isFinite(amt) || amt < 0 || !Number.isInteger(amt)) return toast.alert('Số tiền phải là số nguyên ≥ 0.', 'Số tiền không hợp lệ');
     if (!txnDate) return toast.alert('Vui lòng chọn ngày giao dịch.', 'Thiếu thông tin');
     setBusy(true);
     const iso = new Date(txnDate + 'T00:00:00').toISOString();
-    const input: CreateTransactionInput = { tidId: Number(tidId), cardTypeId: Number(cardTypeId), amount: amt, txnDate: iso, note };
+    const input: CreateTransactionInput = { tidId: Number(tidId), cardTypeId: Number(cardTypeId), feeTypeId: Number(feeTypeId), amount: amt, txnDate: iso, note };
     if (customerId) input.customerId = Number(customerId);
     const res = await window.api.transactionCreate(input);
     setBusy(false);
@@ -368,6 +485,12 @@ function TransactionForm({ tids, customers, onClose, onSaved }: { tids: ConfigTi
           <select className={inputCls} value={cardTypeId} onChange={(e) => setCardTypeId(e.target.value)} disabled={!cards.length}>
             <option value="">— Chọn loại thẻ —</option>
             {cards.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </Field>
+        <Field label="Loại phí" required hint="Tra biểu phí theo loại phí này">
+          <select className={inputCls} value={feeTypeId} onChange={(e) => setFeeTypeId(e.target.value)}>
+            <option value="">— Chọn loại phí —</option>
+            {feeTypes.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
           </select>
         </Field>
         <Field label="Số tiền giao dịch (VND)" required><input className={inputCls + ' text-right tabular-nums'} inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, ''))} placeholder="0" /></Field>
