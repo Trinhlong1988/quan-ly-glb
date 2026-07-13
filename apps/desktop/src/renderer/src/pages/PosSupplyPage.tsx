@@ -3,7 +3,7 @@ import { Plus, Pencil, Trash2, Loader2, Building2, Cpu, PackagePlus, Tag, Downlo
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate, fmtTime, groupDigits, parseVndInput, prereqMessage } from '@glb/shared';
 import type { PrereqDef } from '@glb/shared';
-import type { SupplierDto, PosModelDto, IntakeStatusDto, PosIntakeDto, LiteRef, WarehouseLite } from '../../../preload/index.d';
+import type { SupplierDto, PosModelDto, IntakeStatusDto, PosIntakeDto, LiteRef, WarehouseLite, BankLite } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
 import { isStaleWrite, STALE_TITLE } from '../lib/optlock.js';
 import { Modal } from '../components/Modal.js';
@@ -572,10 +572,16 @@ function IntakeForm({ mode, row, models, suppliers, statuses, onClose, onSaved }
   const [note, setNote] = useState(row?.note ?? '');
   const [warehouseId, setWarehouseId] = useState(''); // Model 1 — nhập vào kho nào (chỉ khi nhập kho mới)
   const [warehouses, setWarehouses] = useState<WarehouseLite[]>([]);
+  // Cài APP (Mr.Long 13/7) — app ngân hàng cài sẵn trên máy MỚI ('' = MÁY TRẮNG, mặc định).
+  const [bankId, setBankId] = useState('');
+  const [banks, setBanks] = useState<BankLite[]>([]);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (mode === 'create') window.api.warehouseLite().then((r) => r.ok && r.data && setWarehouses(r.data));
+    if (mode === 'create') {
+      window.api.warehouseLite().then((r) => r.ok && r.data && setWarehouses(r.data));
+      window.api.bankLite().then((r) => r.ok && r.data && setBanks(r.data));
+    }
   }, [mode]);
 
   async function save(): Promise<void> {
@@ -590,7 +596,7 @@ function IntakeForm({ mode, row, models, suppliers, statuses, onClose, onSaved }
     const payload = { posModelId: Number(posModelId), serial: serial.trim(), intakeStatusId: Number(intakeStatusId), supplierId: Number(supplierId), importPrice: priceNum, importedAt, note: note || null };
     const res = mode === 'edit' && row
       ? await window.api.posIntakeUpdate(row.id, { ...payload, expectedUpdatedAt: row.updatedAt })
-      : await window.api.posIntakeCreate({ ...payload, warehouseId: warehouseId ? Number(warehouseId) : null });
+      : await window.api.posIntakeCreate({ ...payload, warehouseId: warehouseId ? Number(warehouseId) : null, bankId: bankId ? Number(bankId) : null });
     setBusy(false);
     if (res.ok) { toast.success(mode === 'edit' ? 'Đã cập nhật máy POS' : `Đã nhập kho máy ${serial}`); onSaved(); }
     else if (isStaleWrite(res)) { toast.alert(res.message ?? 'Bản ghi đã được người khác cập nhật, vui lòng mở lại.', STALE_TITLE); onSaved(); }
@@ -612,6 +618,14 @@ function IntakeForm({ mode, row, models, suppliers, statuses, onClose, onSaved }
             <select className={inputCls} value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
               <option value="">— Chưa gán kho —</option>
               {warehouses.map((w) => <option key={w.id} value={w.id}>{w.code} · {w.name}</option>)}
+            </select>
+          </Field>
+        )}
+        {mode === 'create' && (
+          <Field label="Cài APP (ngân hàng)" hint="Máy trắng = chưa cài app. Gán TID chỉ được khi TID cùng ngân hàng với app.">
+            <select className={inputCls} value={bankId} onChange={(e) => setBankId(e.target.value)}>
+              <option value="">— Máy trắng (chưa cài app) —</option>
+              {banks.map((b) => <option key={b.id} value={b.id}>{b.code} · {b.name}</option>)}
             </select>
           </Field>
         )}

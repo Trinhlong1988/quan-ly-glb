@@ -17,6 +17,7 @@ import * as customerSvc from './customer-service.js';
 import * as posSvc from './pos-service.js';
 import * as tidSvc from './tid-service.js';
 import * as warehouseSvc from './warehouse-service.js';
+import * as bankSvc from './bank-config-service.js';
 
 let failures = 0;
 function assert(name: string, cond: boolean, extra?: unknown): void {
@@ -37,15 +38,21 @@ export async function runPosLifecycleSelfTest(): Promise<number> {
   // #5 — kho này CÓ ĐỊA CHỈ để dùng làm "Từ kho" khi deploy (giao khách BẮT BUỘC kho có địa chỉ).
   const whR = await warehouseSvc.createWarehouse({ code: 'PLK0', name: 'Kho PL 0', address: 'Kho PL 0 · số 0 Đường Z' });
   assert('kho recall tạo được', whR.ok === true, whR.error);
+  // Cài APP (Mr.Long 13/7) — gán TID chỉ được khi máy đã cài app CÙNG bank với TID. Tạo 1 bank app dùng
+  // chung: cả 2 máy A/B "Sửa máy chọn app" (updatePos bankId) + cả 2 TID PL cấu hình cùng bank này.
+  const appBank = await bankSvc.createBank({ name: 'NH App PL', code: 'NHAPPL39' });
+  assert('bank app test tạo được', appBank.ok === true, appBank.error);
 
   // ── POS #1: 1 máy 1 TID sống ─────────────────────────────────────────────
   const A = 'SN-PL-A';
   const B = 'SN-PL-B';
-  await posSvc.createPos({ serial: A, occurredAt: '2026-06-01T09:00:00Z' });
-  await posSvc.createPos({ serial: B, occurredAt: '2026-06-01T09:00:00Z' });
+  const posA = await posSvc.createPos({ serial: A, occurredAt: '2026-06-01T09:00:00Z' });
+  const posB = await posSvc.createPos({ serial: B, occurredAt: '2026-06-01T09:00:00Z' });
+  await posSvc.updatePos(posA.id!, { bankId: appBank.id! }); // "Sửa máy chọn app" cho máy A
+  await posSvc.updatePos(posB.id!, { bankId: appBank.id! }); // "Sửa máy chọn app" cho máy B
   await posSvc.deployPos(A, { customerId: c1.id!, fromWarehouseId: whR.id!, occurredAt: '2026-06-02T09:00:00Z' });
-  await tidSvc.createTid({ tid: 'PL-TID-1', bank: 'VCB', openedAt: '2026-05-01T00:00:00Z' });
-  await tidSvc.createTid({ tid: 'PL-TID-2', bank: 'VCB', openedAt: '2026-05-01T00:00:00Z' });
+  await tidSvc.createTid({ tid: 'PL-TID-1', bank: 'VCB', bankId: appBank.id!, openedAt: '2026-05-01T00:00:00Z' });
+  await tidSvc.createTid({ tid: 'PL-TID-2', bank: 'VCB', bankId: appBank.id!, openedAt: '2026-05-01T00:00:00Z' });
 
   const asg1 = await tidSvc.assignTid('PL-TID-1', { posSerial: A, customerId: c1.id!, occurredAt: '2026-06-03T09:00:00Z' });
   assert('gán PL-TID-1 lên máy A ok', asg1.ok === true, asg1.error);

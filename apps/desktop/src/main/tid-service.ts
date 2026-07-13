@@ -277,6 +277,7 @@ export interface CreateTidInput {
   tid: string;
   mid?: string | null;
   bank?: string | null;
+  bankId?: number | null; // Cài APP — ngân hàng của TID (khớp app máy khi gán). Config đầy đủ set qua createConfigTid.
   openedAt?: string | null;
 }
 
@@ -296,6 +297,7 @@ export async function createTid(input: CreateTidInput): Promise<MutationResult> 
       tid,
       mid: input.mid ?? null,
       bank: input.bank ?? null,
+      bankId: input.bankId ?? null,
       status: 'UNASSIGNED',
       openedAt: input.openedAt ? parseWhen(input.openedAt) : new Date()
     }
@@ -436,6 +438,11 @@ export async function createTidUnified(input: CreateTidUnifiedInput): Promise<Mu
         if (dev.currentTid != null && dev.currentTid !== tid) {
           throw new TidTxAbort({ ok: false, error: 'DEVICE_HAS_TID', message: `Máy ${assignSerial} đang gắn TID ${dev.currentTid}. Thu hồi TID đó khỏi máy trước khi gán TID khác.` });
         }
+        // Cài APP (Mr.Long 13/7) — gán TID CHỈ khi bank TID trùng app máy; máy trắng (bankId null) chặn.
+        if (dev.bankId == null)
+          throw new TidTxAbort({ ok: false, error: 'MACHINE_BLANK', message: `Máy POS "${assignSerial}" là máy trắng (chưa cài app ngân hàng). Vào Sửa máy chọn app cùng bank với TID trước khi gán.` });
+        if (dev.bankId !== input.bankId)
+          throw new TidTxAbort({ ok: false, error: 'BANK_MISMATCH', message: `Bank của TID không khớp app ngân hàng đã cài trên máy "${assignSerial}". Chỉ gán được TID cùng ngân hàng.` });
         devAgentId = dev.currentAgentId ?? null;
         agentSet = devAgentId;
         custSet = input.assign.customerId;
@@ -581,6 +588,12 @@ export async function assignTid(tid: string, input: AssignTidInput): Promise<Mut
   const devPre = await db.posDevice.findUnique({ where: { serial } });
   if (!devPre) return { ok: false, error: 'NOT_FOUND', message: `Không tìm thấy máy POS serial "${input.posSerial}".` };
   if (devPre.status === 'RETIRED') return { ok: false, error: 'INVALID_STATE', message: `Máy POS "${serial}" đã thanh lý, không thể gán TID.` };
+  // Cài APP (Mr.Long 13/7) — gán TID CHỈ khi bank của TID TRÙNG app ngân hàng đã cài trên máy.
+  // Máy trắng (bankId null, chưa cài app) KHÔNG gán được → phải Sửa máy chọn app trước (re-check trong tx).
+  if (devPre.bankId == null)
+    return { ok: false, error: 'MACHINE_BLANK', message: `Máy POS "${serial}" là MÁY TRẮNG (chưa cài app ngân hàng). Vào Sửa máy chọn app ngân hàng cùng bank với TID trước khi gán.` };
+  if (devPre.bankId !== row.bankId)
+    return { ok: false, error: 'BANK_MISMATCH', message: `Bank của TID không khớp app ngân hàng đã cài trên máy "${serial}". Chỉ gán được TID cùng ngân hàng với app đã cài trên máy.` };
 
   const occurredAt = parseWhen(input.occurredAt);
 
@@ -607,6 +620,11 @@ export async function assignTid(tid: string, input: AssignTidInput): Promise<Mut
       if (dev.currentTid != null && dev.currentTid !== tid) {
         throw new TidTxAbort({ ok: false, error: 'DEVICE_HAS_TID', message: `Máy ${serial} đang gắn TID ${dev.currentTid}. Thu hồi TID đó khỏi máy trước khi gán TID khác.` });
       }
+      // Cài APP — re-check trong tx (app máy có thể đổi giữa pre-check và FOR UPDATE): máy trắng chặn + bank khớp.
+      if (dev.bankId == null)
+        throw new TidTxAbort({ ok: false, error: 'MACHINE_BLANK', message: `Máy POS "${serial}" là máy trắng (chưa cài app ngân hàng) — không gán được TID.` });
+      if (dev.bankId !== row.bankId)
+        throw new TidTxAbort({ ok: false, error: 'BANK_MISMATCH', message: `Bank của TID không khớp app ngân hàng đã cài trên máy "${serial}".` });
       devAgentId = dev.currentAgentId ?? null;
       await tx.tid.update({
         where: { id: row.id },
@@ -686,6 +704,10 @@ export async function replaceTid(oldTid: string, input: ReplaceTidInput): Promis
 
   const posSerial = oldRow.posSerial;
   const customerId = oldRow.customerId;
+  // Cài APP (Mr.Long 13/7) — nếu TID cũ đang TRÊN máy (posSerial), TID thay thế phải CÙNG ngân hàng
+  // (= app đã cài trên máy). Khác bank → không lắp lên máy đó được.
+  if (posSerial != null && newRow.bankId !== oldRow.bankId)
+    return { ok: false, error: 'BANK_MISMATCH', message: `TID mới "${newTidStr}" khác ngân hàng với TID cũ (app đã cài trên máy). TID thay thế phải cùng ngân hàng.` };
   const occurredAt = parseWhen(input.occurredAt);
 
   await db.$transaction(async (tx) => {

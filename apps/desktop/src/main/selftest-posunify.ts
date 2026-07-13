@@ -14,6 +14,7 @@ import * as posSvc from './pos-service.js';
 import * as tidSvc from './tid-service.js';
 import * as supplySvc from './pos-supply-service.js';
 import * as warehouseSvc from './warehouse-service.js';
+import * as bankSvc from './bank-config-service.js';
 
 let failures = 0;
 function assert(name: string, cond: boolean, extra?: unknown): void {
@@ -35,6 +36,12 @@ export async function runPosUnifySelfTest(): Promise<number> {
   assert('master data created', model.ok && supplier.ok, { model: model.error, supplier: supplier.error });
   const modelId = model.id!;
   const supplierId = supplier.id!;
+  // Cài APP (Mr.Long 13/7) — gán TID chỉ được khi máy đã cài app cùng bank với TID. Tạo 2 bank test:
+  // bankX = app chuẩn cho MỌI ca gán thuận (máy + TID đều bankX); bankY = khác bank cho ca BANK_MISMATCH.
+  const bankX = await bankSvc.createBank({ name: 'NH App K1 X', code: 'NHAPK1X' });
+  const bankY = await bankSvc.createBank({ name: 'NH App K1 Y', code: 'NHAPK1Y' });
+  assert('tạo 2 bank app test', bankX.ok === true && bankY.ok === true, { x: bankX.error, y: bankY.error });
+  const bankXId = bankX.id!;
   const statuses = await supplySvc.listIntakeStatuses();
   const statusId = statuses.data?.[0]?.id;
   assert('seeded intake status available', typeof statusId === 'number', { count: statuses.data?.length });
@@ -44,7 +51,7 @@ export async function runPosUnifySelfTest(): Promise<number> {
 
   // ── (1) createPosIntake → PosDevice IN_STOCK + STOCK_IN + hiện ở list ───
   const s1 = 'SN-K1-001';
-  const i1 = await supplySvc.createPosIntake({ posModelId: modelId, serial: s1, intakeStatusId: statusId!, supplierId, importPrice: 1_500_000, importedAt: '2026-07-01' });
+  const i1 = await supplySvc.createPosIntake({ posModelId: modelId, serial: s1, intakeStatusId: statusId!, supplierId, importPrice: 1_500_000, importedAt: '2026-07-01', bankId: bankXId });
   assert('createPosIntake ok', i1.ok, i1.error);
   const dev1 = await db.posDevice.findUnique({ where: { serial: s1 } });
   assert('intake → PosDevice IN_STOCK', dev1?.status === 'IN_STOCK', { status: dev1?.status });
@@ -55,7 +62,7 @@ export async function runPosUnifySelfTest(): Promise<number> {
   assert('máy nhập kho HIỆN ở listPosDevices (desync #22 fixed)', list1.ok === true && (list1.data ?? []).some((d) => d.serial === s1));
 
   // ── (2) gán TID lên máy vừa nhập kho ───────────────────────────────────
-  await tidSvc.createTid({ tid: 'TID-K1-001' });
+  await tidSvc.createTid({ tid: 'TID-K1-001', bankId: bankXId });
   const assign = await tidSvc.assignTid('TID-K1-001', { posSerial: s1, customerId, occurredAt: '2026-07-02' });
   assert('assign TID lên máy vừa nhập kho chạy được', assign.ok === true, assign.error);
   const dev1b = await db.posDevice.findUnique({ where: { serial: s1 } });
@@ -75,8 +82,8 @@ export async function runPosUnifySelfTest(): Promise<number> {
 
   // ── (4b) recallPos GỠ currentTid (TID về "chưa gán máy") ───────────────
   const s2 = 'SN-K1-002';
-  await supplySvc.createPosIntake({ posModelId: modelId, serial: s2, intakeStatusId: statusId!, supplierId, importPrice: 1_200_000, importedAt: '2026-07-01' });
-  await tidSvc.createTid({ tid: 'TID-K1-002' });
+  await supplySvc.createPosIntake({ posModelId: modelId, serial: s2, intakeStatusId: statusId!, supplierId, importPrice: 1_200_000, importedAt: '2026-07-01', bankId: bankXId });
+  await tidSvc.createTid({ tid: 'TID-K1-002', bankId: bankXId });
   await tidSvc.assignTid('TID-K1-002', { posSerial: s2, customerId, occurredAt: '2026-07-02' });
   const whU = await warehouseSvc.createWarehouse({ code: 'PUK0', name: 'Kho PosUnify' }); // Model 1 — thu hồi BẮT BUỘC có kho
   const recall = await posSvc.recallPos(s2, { toWarehouseId: whU.id!, occurredAt: '2026-07-05' });
@@ -93,7 +100,7 @@ export async function runPosUnifySelfTest(): Promise<number> {
   // ── FIX 1 REGRESSION: TID thu hồi khỏi máy PHẢI lắp lại được máy khác (spec §2.5) ──────
   // (a) TID-K1-002 (ACTIVE, posSerial=null sau recallPos) → gán sang máy B IN_STOCK PHẢI ok.
   const s2b = 'SN-K1-002B';
-  await supplySvc.createPosIntake({ posModelId: modelId, serial: s2b, intakeStatusId: statusId!, supplierId, importPrice: 1_000_000, importedAt: '2026-07-01' });
+  await supplySvc.createPosIntake({ posModelId: modelId, serial: s2b, intakeStatusId: statusId!, supplierId, importPrice: 1_000_000, importedAt: '2026-07-01', bankId: bankXId });
   const reassign = await tidSvc.assignTid('TID-K1-002', { posSerial: s2b, customerId, occurredAt: '2026-07-06' });
   assert('FIX1(a): TID thu hồi khỏi máy gán LẠI được máy khác', reassign.ok === true, reassign.error);
   const devB = await db.posDevice.findUnique({ where: { serial: s2b } });
@@ -102,18 +109,18 @@ export async function runPosUnifySelfTest(): Promise<number> {
 
   // (b) TID đang GẮN trên máy (posSerial!=null) → gán máy khác → reject TID_ON_DEVICE.
   const s2c = 'SN-K1-002C';
-  await supplySvc.createPosIntake({ posModelId: modelId, serial: s2c, intakeStatusId: statusId!, supplierId, importPrice: 800_000, importedAt: '2026-07-01' });
+  await supplySvc.createPosIntake({ posModelId: modelId, serial: s2c, intakeStatusId: statusId!, supplierId, importPrice: 800_000, importedAt: '2026-07-01', bankId: bankXId });
   const onDevice = await tidSvc.assignTid('TID-K1-002', { posSerial: s2c, customerId, occurredAt: '2026-07-06' });
   assert('FIX1(b): TID đang trên máy → gán máy khác bị chặn TID_ON_DEVICE', onDevice.ok === false && onDevice.error === 'TID_ON_DEVICE', { error: onDevice.error });
 
   // (c) TID DEAD/CLOSED/RECALLED → gán → reject (INVALID_STATE ở state machine).
   const sRec = 'SN-K1-REC';
-  await supplySvc.createPosIntake({ posModelId: modelId, serial: sRec, intakeStatusId: statusId!, supplierId, importPrice: 700_000, importedAt: '2026-07-01' });
-  await tidSvc.createTid({ tid: 'TID-K1-REC' });
+  await supplySvc.createPosIntake({ posModelId: modelId, serial: sRec, intakeStatusId: statusId!, supplierId, importPrice: 700_000, importedAt: '2026-07-01', bankId: bankXId });
+  await tidSvc.createTid({ tid: 'TID-K1-REC', bankId: bankXId });
   await tidSvc.assignTid('TID-K1-REC', { posSerial: sRec, customerId, occurredAt: '2026-07-02' });
   await tidSvc.recallTid('TID-K1-REC', { occurredAt: '2026-07-03' }); // TID → RECALLED
   const sRecFree = 'SN-K1-RECFREE';
-  await supplySvc.createPosIntake({ posModelId: modelId, serial: sRecFree, intakeStatusId: statusId!, supplierId, importPrice: 600_000, importedAt: '2026-07-01' });
+  await supplySvc.createPosIntake({ posModelId: modelId, serial: sRecFree, intakeStatusId: statusId!, supplierId, importPrice: 600_000, importedAt: '2026-07-01', bankId: bankXId });
   const recalledAssign = await tidSvc.assignTid('TID-K1-REC', { posSerial: sRecFree, customerId, occurredAt: '2026-07-07' });
   assert('FIX1(c): TID RECALLED → gán bị chặn (INVALID_STATE)', recalledAssign.ok === false && recalledAssign.error === 'INVALID_STATE', { error: recalledAssign.error });
 
@@ -125,7 +132,7 @@ export async function runPosUnifySelfTest(): Promise<number> {
 
   // (e) BACK-PORT (K2 hardening): assignTid lên máy ĐANG MANG TID khác → chặn DEVICE_HAS_TID (bất
   //     biến 1 máy 1 TID; chống mồ côi TID + 2 binding mở). s2b hiện DEPLOYED + currentTid=TID-K1-002.
-  await tidSvc.createTid({ tid: 'TID-K1-DHT' });
+  await tidSvc.createTid({ tid: 'TID-K1-DHT', bankId: bankXId }); // cùng bankX với s2b để qua cổng bank, chạm đúng DEVICE_HAS_TID
   const devHasTid = await tidSvc.assignTid('TID-K1-DHT', { posSerial: s2b, customerId, occurredAt: '2026-07-09' });
   assert('FIX1(e): gán TID mới lên máy đã có TID → chặn DEVICE_HAS_TID', devHasTid.ok === false && devHasTid.error === 'DEVICE_HAS_TID', { error: devHasTid.error });
   const devS2b = await db.posDevice.findUnique({ where: { serial: s2b } });
@@ -135,8 +142,8 @@ export async function runPosUnifySelfTest(): Promise<number> {
 
   // ── (4c) retirePos BẮT BUỘC gỡ + đóng TID (RECALLED) ───────────────────
   const s3 = 'SN-K1-003';
-  await supplySvc.createPosIntake({ posModelId: modelId, serial: s3, intakeStatusId: statusId!, supplierId, importPrice: 900_000, importedAt: '2026-07-01' });
-  await tidSvc.createTid({ tid: 'TID-K1-003' });
+  await supplySvc.createPosIntake({ posModelId: modelId, serial: s3, intakeStatusId: statusId!, supplierId, importPrice: 900_000, importedAt: '2026-07-01', bankId: bankXId });
+  await tidSvc.createTid({ tid: 'TID-K1-003', bankId: bankXId });
   await tidSvc.assignTid('TID-K1-003', { posSerial: s3, customerId, occurredAt: '2026-07-02' });
   const badPw = await posSvc.retirePos(s3, 'wrong-password', {});
   assert('retirePos sai mật khẩu bị chặn', badPw.ok === false && badPw.error === 'WRONG_PASSWORD');
@@ -182,6 +189,34 @@ export async function runPosUnifySelfTest(): Promise<number> {
     if (!has) missingStockIn++;
   }
   assert('MỌI máy đều có AssetEvent STOCK_IN', missingStockIn === 0, { devices: allDevices.length, missingStockIn });
+
+  // ── (7) CÀI APP (Mr.Long 13/7) — gán TID CHỈ khi máy đã cài app cùng bank với TID ─────
+  // (a) MÁY TRẮNG (createPosIntake KHÔNG bankId) → gán TID (bankX) bị chặn MACHINE_BLANK.
+  const sBlank = 'SN-K1-BLANK';
+  await supplySvc.createPosIntake({ posModelId: modelId, serial: sBlank, intakeStatusId: statusId!, supplierId, importPrice: 500_000, importedAt: '2026-07-01' }); // KHÔNG bankId → máy trắng
+  await tidSvc.createTid({ tid: 'TID-K1-BLANK', bankId: bankXId });
+  const asgBlank = await tidSvc.assignTid('TID-K1-BLANK', { posSerial: sBlank, customerId, occurredAt: '2026-07-10' });
+  assert('CÀI APP(a): máy trắng → gán TID bị chặn MACHINE_BLANK', asgBlank.ok === false && asgBlank.error === 'MACHINE_BLANK', { err: asgBlank.error });
+  const devBlank = await db.posDevice.findUnique({ where: { serial: sBlank } });
+  assert('CÀI APP(a): máy trắng KHÔNG đổi trạng thái/gán (vẫn IN_STOCK, currentTid null)', devBlank?.status === 'IN_STOCK' && devBlank?.currentTid === null, { st: devBlank?.status, tid: devBlank?.currentTid });
+
+  // (b) Máy cài app bankX + TID bankY (KHÁC bank) → gán bị chặn BANK_MISMATCH.
+  const sMism = 'SN-K1-MISM';
+  await supplySvc.createPosIntake({ posModelId: modelId, serial: sMism, intakeStatusId: statusId!, supplierId, importPrice: 500_000, importedAt: '2026-07-01', bankId: bankXId }); // app bankX
+  await tidSvc.createTid({ tid: 'TID-K1-MISM', bankId: bankY.id! }); // TID bankY
+  const asgMism = await tidSvc.assignTid('TID-K1-MISM', { posSerial: sMism, customerId, occurredAt: '2026-07-10' });
+  assert('CÀI APP(b): máy app bankX + TID bankY → gán bị chặn BANK_MISMATCH', asgMism.ok === false && asgMism.error === 'BANK_MISMATCH', { err: asgMism.error });
+  const devMism = await db.posDevice.findUnique({ where: { serial: sMism } });
+  assert('CÀI APP(b): máy khác-bank KHÔNG đổi trạng thái/gán', devMism?.status === 'IN_STOCK' && devMism?.currentTid === null, { st: devMism?.status });
+
+  // (c) Máy cài app bankX + TID bankX (CÙNG bank) → gán ok: máy DEPLOYED + currentTid.
+  const sOk = 'SN-K1-APPOK';
+  await supplySvc.createPosIntake({ posModelId: modelId, serial: sOk, intakeStatusId: statusId!, supplierId, importPrice: 500_000, importedAt: '2026-07-01', bankId: bankXId }); // app bankX
+  await tidSvc.createTid({ tid: 'TID-K1-APPOK', bankId: bankXId }); // TID bankX
+  const asgOk = await tidSvc.assignTid('TID-K1-APPOK', { posSerial: sOk, customerId, occurredAt: '2026-07-10' });
+  assert('CÀI APP(c): máy app bankX + TID bankX → gán ok (đường thuận)', asgOk.ok === true, asgOk.error);
+  const devOk = await db.posDevice.findUnique({ where: { serial: sOk } });
+  assert('CÀI APP(c): máy cùng-bank → DEPLOYED + currentTid', devOk?.status === 'DEPLOYED' && devOk?.currentTid === 'TID-K1-APPOK', { st: devOk?.status, tid: devOk?.currentTid });
 
   await logout();
   // eslint-disable-next-line no-console

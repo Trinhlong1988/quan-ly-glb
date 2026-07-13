@@ -66,8 +66,10 @@ export async function runTidUnifySelfTest(): Promise<number> {
   const industryId = industryRes.id!;
   const inactiveInd = await db.industry.create({ data: { code: 'NGHK2X', name: 'Ngành ngừng dùng K2', active: false } });
 
-  const mkDevice = async (serial: string): Promise<void> => {
-    await supplySvc.createPosIntake({ posModelId: modelId, serial, intakeStatusId: statusId!, supplierId, importPrice: 1_000_000, importedAt: '2026-07-01' });
+  // Cài APP (Mr.Long 13/7) — máy nhận TID phải cài app cùng bank với TID. baseCfg cấu hình bankId=bank
+  // (BKK2) → mkDevice mặc định cài app = bank. Truyền appBankId khác (bank2) cho ca khớp/không-khớp bank.
+  const mkDevice = async (serial: string, appBankId: number = bankId): Promise<void> => {
+    await supplySvc.createPosIntake({ posModelId: modelId, serial, intakeStatusId: statusId!, supplierId, importPrice: 1_000_000, importedAt: '2026-07-01', bankId: appBankId });
   };
   const baseCfg = { hkdName: 'HKD Xưởng K2', dossierId: dossier.id, partnerId, bankId, industryId };
 
@@ -317,6 +319,21 @@ export async function runTidUnifySelfTest(): Promise<number> {
   await tidSvc.recallTid('TID-K2-HR', { occurredAt: cur(6).toISOString() });
   const hrAfter = await tidSvc.listTids({ search: 'TID-K2-HR' });
   assert('#14: TID_HR sau RECALLED → holding trống (khách đã trả)', hrAfter.data?.[0]?.holdingCustomerName === null && hrAfter.data?.[0]?.status === 'RECALLED', { h: hrAfter.data?.[0]?.holdingCustomerName, s: hrAfter.data?.[0]?.status });
+
+  // ── CÀI APP (Mr.Long 13/7) — createTidUnified nhánh assign khớp bank app máy (bank vs bank2) ──
+  // TID cấu hình bank2 gán MÁY app bank2 → ok; gán MÁY app bank1 (khác) → BANK_MISMATCH (input.bankId vs dev.bankId).
+  const sApp2 = 'SN-K2-APP2';
+  await mkDevice(sApp2, bank2.id!); // máy cài app bank2
+  const uApp2 = await tidSvc.createTidUnified({ tid: 'TID-K2-APP2', ...baseCfg, bankId: bank2.id!, assign: { posSerial: sApp2, customerId } });
+  assert('CÀI APP: createTidUnified TID bank2 gán máy app bank2 → ok', uApp2.ok === true, uApp2.error);
+  const devApp2 = await db.posDevice.findUnique({ where: { serial: sApp2 } });
+  assert('CÀI APP: máy app bank2 nhận TID bank2 → DEPLOYED + currentTid', devApp2?.status === 'DEPLOYED' && devApp2?.currentTid === 'TID-K2-APP2', { s: devApp2?.status, t: devApp2?.currentTid });
+  const sApp1 = 'SN-K2-APP1';
+  await mkDevice(sApp1); // máy cài app bank1 (mặc định = bank)
+  const uMis = await tidSvc.createTidUnified({ tid: 'TID-K2-MISBANK', ...baseCfg, bankId: bank2.id!, assign: { posSerial: sApp1, customerId } });
+  assert('CÀI APP: createTidUnified TID bank2 gán máy app bank1 → BANK_MISMATCH', uMis.ok === false && uMis.error === 'BANK_MISMATCH', { e: uMis.error });
+  const misRow = await db.tid.findUnique({ where: { tid: 'TID-K2-MISBANK' } });
+  assert('CÀI APP: TID bank-mismatch rollback (không tạo row mồ côi)', misRow === null);
 
   // ── Mr.Long 12/7 — bộ lọc "Khách hàng giữ" (holdingCustomerId) + "Nguồn hồ sơ" (dossierSourceId) ──
   const fHold = await tidSvc.listTids({ holdingCustomerId: customerId });

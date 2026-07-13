@@ -15,6 +15,10 @@ export interface PosDto {
   serial: string;
   model: string | null;
   bank: string | null;
+  // Cài APP (Mr.Long 13/7) — app ngân hàng đã cài trên máy (FK Bank). null = MÁY TRẮNG (chưa cài app).
+  // Gán TID chỉ được khi bank của TID trùng bankId này (máy trắng KHÔNG gán được — phải Sửa máy chọn app trước).
+  bankId: number | null;
+  bankCode: string | null; // mã ngân hàng app (AB/VP/MB…) để hiển thị cột "Cài APP"
   status: string;
   currentAgentId: number | null;
   currentCustomerId: number | null;
@@ -72,6 +76,8 @@ export interface PosFilter {
   status?: string;
   agentId?: number;
   warehouseId?: number; // Model 1 — lọc theo kho vật lý đang chứa máy
+  bankId?: number; // Cài APP — lọc máy đã cài app ngân hàng cụ thể
+  bankBlank?: boolean; // Cài APP — lọc MÁY TRẮNG (bankId = null)
   fromDate?: string;
   toDate?: string;
 }
@@ -81,6 +87,7 @@ interface PosDeviceRow {
   serial: string;
   model: string | null;
   bank: string | null;
+  bankId: number | null;
   status: string;
   currentAgentId: number | null;
   currentCustomerId: number | null;
@@ -101,6 +108,7 @@ interface PosNameMaps {
   customers: Map<number, string>;
   agents: Map<number, string>;
   warehouses: Map<number, string>;
+  banks: Map<number, string>; // Cài APP — mã ngân hàng (code)
 }
 function toDto(d: PosDeviceRow, maps: PosNameMaps): PosDto {
   const m = d.posModelId != null ? maps.models.get(d.posModelId) : undefined;
@@ -110,6 +118,8 @@ function toDto(d: PosDeviceRow, maps: PosNameMaps): PosDto {
     serial: d.serial,
     model: d.model,
     bank: d.bank,
+    bankId: d.bankId,
+    bankCode: d.bankId != null ? maps.banks.get(d.bankId) ?? null : null,
     status: d.status,
     currentAgentId: d.currentAgentId,
     currentCustomerId: d.currentCustomerId,
@@ -144,6 +154,8 @@ export async function listPosDevices(
       status: filter.status || undefined,
       currentAgentId: filter.agentId ?? undefined,
       warehouseId: filter.warehouseId ?? undefined,
+      // Cài APP — lọc theo app ngân hàng: bankId cụ thể HOẶC máy trắng (bankId null). Không truyền cả 2.
+      bankId: filter.bankBlank ? null : (filter.bankId ?? undefined),
       createdAt: dateRange(filter.fromDate, filter.toDate),
       OR: filter.search
         ? [{ serial: { contains: filter.search, mode: 'insensitive' } }, { currentTid: { contains: filter.search, mode: 'insensitive' } }]
@@ -157,12 +169,14 @@ export async function listPosDevices(
   const customerIds = [...new Set(rows.map((r) => r.currentCustomerId).filter((x): x is number => x != null))];
   const agentIds = [...new Set(rows.map((r) => r.currentAgentId).filter((x): x is number => x != null))];
   const whIds = [...new Set(rows.map((r) => r.warehouseId).filter((x): x is number => x != null))];
+  const bankIds = [...new Set(rows.map((r) => r.bankId).filter((x): x is number => x != null))];
   const maps: PosNameMaps = {
     models: new Map((await g.db.posModel.findMany({ where: { id: { in: modelIds } }, select: { id: true, code: true, name: true } })).map((x) => [x.id, { code: x.code, name: x.name }])),
     suppliers: new Map((await g.db.supplier.findMany({ where: { id: { in: supplierIds } }, select: { id: true, code: true, name: true } })).map((x) => [x.id, { code: x.code, name: x.name }])),
     customers: new Map((await g.db.customer.findMany({ where: { id: { in: customerIds } }, select: { id: true, nickname: true, fullName: true } })).map((x) => [x.id, x.nickname || x.fullName])),
     agents: new Map((await g.db.agent.findMany({ where: { id: { in: agentIds } }, select: { id: true, name: true } })).map((x) => [x.id, x.name])),
-    warehouses: new Map((await g.db.warehouse.findMany({ where: { id: { in: whIds } }, select: { id: true, code: true, name: true } })).map((x) => [x.id, `${x.code} · ${x.name}`]))
+    warehouses: new Map((await g.db.warehouse.findMany({ where: { id: { in: whIds } }, select: { id: true, code: true, name: true } })).map((x) => [x.id, `${x.code} · ${x.name}`])),
+    banks: new Map((await g.db.bank.findMany({ where: { id: { in: bankIds } }, select: { id: true, code: true } })).map((x) => [x.id, x.code]))
   };
   return { ok: true, data: rows.map((r) => toDto(r, maps)) };
 }
@@ -284,6 +298,7 @@ export async function createPos(input: CreatePosInput): Promise<MutationResult> 
 export interface UpdatePosInput {
   model?: string | null;
   bank?: string | null;
+  bankId?: number | null; // Cài APP — app ngân hàng cài trên máy (null = máy trắng). "Cài app" cho máy trắng để gán TID.
   posModelId?: number | null;
   supplierId?: number | null;
   importPrice?: number | null;
@@ -312,14 +327,21 @@ export async function updatePos(id: number, input: UpdatePosInput): Promise<Muta
     const s = await db.supplier.findFirst({ where: { id: input.supplierId, deletedAt: null }, select: { id: true } });
     if (!s) return { ok: false, error: 'NOT_FOUND', message: 'Nhà cung cấp đã chọn không tồn tại.' };
   }
+  // Cài APP — nếu chọn app ngân hàng (bankId>0) phải tồn tại + còn dùng (ACTIVE). bankId null/0 = máy trắng.
+  if (input.bankId != null) {
+    const bk = await db.bank.findFirst({ where: { id: input.bankId, deletedAt: null }, select: { id: true, status: true } });
+    if (!bk) return { ok: false, error: 'NOT_FOUND', message: 'Ngân hàng (app) đã chọn không tồn tại.' };
+    if (bk.status !== 'ACTIVE') return { ok: false, error: 'VALIDATION', message: 'Ngân hàng (app) đã ngừng sử dụng — không thể cài lên máy.' };
+  }
 
-  const before = auditSnapshot({ model: row.model, bank: row.bank, posModelId: row.posModelId, supplierId: row.supplierId, importPrice: row.importPrice, importedAt: row.importedAt ? row.importedAt.toISOString() : null, warehouseLoc: row.warehouseLoc, note: row.note });
+  const before = auditSnapshot({ model: row.model, bank: row.bank, bankId: row.bankId, posModelId: row.posModelId, supplierId: row.supplierId, importPrice: row.importPrice, importedAt: row.importedAt ? row.importedAt.toISOString() : null, warehouseLoc: row.warehouseLoc, note: row.note });
   const importedAt = input.importedAt !== undefined ? (input.importedAt ? parseWhen(input.importedAt) : null) : row.importedAt;
   const updated = await db.posDevice.update({
     where: { id },
     data: {
       model: input.model !== undefined ? input.model?.trim() || null : row.model,
       bank: input.bank !== undefined ? input.bank?.trim() || null : row.bank,
+      bankId: input.bankId !== undefined ? (input.bankId || null) : row.bankId,
       posModelId: input.posModelId !== undefined ? input.posModelId : row.posModelId,
       supplierId: input.supplierId !== undefined ? input.supplierId : row.supplierId,
       importPrice: input.importPrice !== undefined ? input.importPrice : row.importPrice,
@@ -335,7 +357,7 @@ export async function updatePos(id: number, input: UpdatePosInput): Promise<Muta
     targetType: 'PosDevice',
     targetId: String(id),
     before,
-    after: auditSnapshot({ model: updated.model, bank: updated.bank, posModelId: updated.posModelId, supplierId: updated.supplierId, importPrice: updated.importPrice, warehouseLoc: updated.warehouseLoc, note: updated.note })
+    after: auditSnapshot({ model: updated.model, bank: updated.bank, bankId: updated.bankId, posModelId: updated.posModelId, supplierId: updated.supplierId, importPrice: updated.importPrice, warehouseLoc: updated.warehouseLoc, note: updated.note })
   });
   return { ok: true, id };
 }

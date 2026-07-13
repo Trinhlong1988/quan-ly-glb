@@ -14,6 +14,7 @@ import * as customerSvc from './customer-service.js';
 import * as posSvc from './pos-service.js';
 import * as tidSvc from './tid-service.js';
 import * as warehouseSvc from './warehouse-service.js';
+import * as bankSvc from './bank-config-service.js';
 import * as auditSvc from './audit-service.js';
 import { nextCode } from './code-service.js';
 
@@ -84,9 +85,13 @@ export async function runGposSelfTest(): Promise<number> {
   // ── §A: POS lifecycle produces asset_events with occurredAt ─────────────
   // #5 — kho có ĐỊA CHỈ để làm "Từ kho" khi giao khách (deploy BẮT BUỘC kho có địa chỉ). Cũng dùng cho nhận-sửa về kho.
   const whG = await warehouseSvc.createWarehouse({ code: 'GPK0', name: 'Kho GPOS', address: 'Kho GPOS · 1 Đường X' });
+  // Cài APP (Mr.Long 13/7) — gán/đổi TID chỉ được khi máy cài app CÙNG bank với TID (kể cả replace: TID
+  // mới phải cùng bank TID cũ). 1 bank app dùng chung cho máy + TID-A-001 + TID-A-002.
+  const appBank = await bankSvc.createBank({ name: 'NH App GPOS', code: 'NHAPGP3' });
   const serial = 'SN-SELFTEST-001';
   const posC = await posSvc.createPos({ serial, occurredAt: '2026-06-01T09:00:00Z' });
   assert('POS create ok', posC.ok === true, posC.error);
+  await posSvc.updatePos(posC.id!, { bankId: appBank.id! }); // "Sửa máy chọn app" trước khi gán TID
   const dupSerial = await posSvc.createPos({ serial });
   assert('duplicate serial blocked with specific message', dupSerial.ok === false && dupSerial.error === 'DUPLICATE' && !!dupSerial.message?.includes(serial), { message: dupSerial.message });
 
@@ -116,8 +121,8 @@ export async function runGposSelfTest(): Promise<number> {
   // ── §A: TID assign then replace → DEAD + ACTIVE + 2 bindings ────────────
   // Redeploy so the device has a customer, then assign a TID.
   await posSvc.deployPos(serial, { customerId: c1.id!, occurredAt: '2026-07-05T09:00:00Z' });
-  const tCreate1 = await tidSvc.createTid({ tid: 'TID-A-001', bank: 'VCB', openedAt: '2026-05-01T00:00:00Z' });
-  const tCreate2 = await tidSvc.createTid({ tid: 'TID-A-002', bank: 'VCB', openedAt: '2026-07-01T00:00:00Z' });
+  const tCreate1 = await tidSvc.createTid({ tid: 'TID-A-001', bank: 'VCB', bankId: appBank.id!, openedAt: '2026-05-01T00:00:00Z' });
+  const tCreate2 = await tidSvc.createTid({ tid: 'TID-A-002', bank: 'VCB', bankId: appBank.id!, openedAt: '2026-07-01T00:00:00Z' });
   assert('two TIDs created', tCreate1.ok && tCreate2.ok);
   const dupTid = await tidSvc.createTid({ tid: 'TID-A-001' });
   assert('duplicate TID blocked with specific message', dupTid.ok === false && dupTid.error === 'DUPLICATE' && !!dupTid.message?.includes('TID-A-001'));

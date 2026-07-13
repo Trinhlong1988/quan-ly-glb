@@ -152,6 +152,8 @@ export interface PosDto {
   serial: string;
   model: string | null;
   bank: string | null;
+  bankId: number | null;
+  bankCode: string | null;
   status: string;
   currentAgentId: number | null;
   currentCustomerId: number | null;
@@ -308,6 +310,8 @@ export interface PosFilter {
   status?: string;
   agentId?: number;
   warehouseId?: number;
+  bankId?: number;
+  bankBlank?: boolean;
   fromDate?: string;
   toDate?: string;
 }
@@ -532,6 +536,7 @@ export interface UpdateWarehouseInput {
 export interface UpdatePosInput {
   model?: string | null;
   bank?: string | null;
+  bankId?: number | null;
   posModelId?: number | null;
   supplierId?: number | null;
   importPrice?: number | null;
@@ -803,6 +808,7 @@ export interface CreatePosIntakeInput {
   importedAt: string;
   note?: string | null;
   warehouseId?: number | null;
+  bankId?: number | null;
 }
 export interface UpdatePosIntakeInput {
   posModelId?: number;

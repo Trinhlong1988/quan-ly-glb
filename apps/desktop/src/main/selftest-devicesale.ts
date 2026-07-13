@@ -9,6 +9,7 @@ import * as saleSvc from './device-sale-service.js';
 import * as warehouseSvc from './warehouse-service.js';
 import * as userSvc from './user-service.js';
 import * as cashEntrySvc from './cash-entry-service.js';
+import * as bankSvc from './bank-config-service.js';
 import type { Db } from '@glb/database';
 
 let failures = 0;
@@ -43,6 +44,9 @@ export async function runDeviceSaleSelfTest(): Promise<number> {
   const fund = await db.fund.create({ data: { code: 'QUDS', name: 'Quỹ test bán', type: 'CASH', openingBalance: 0n } });
   // #5 — kho có ĐỊA CHỈ để làm "Từ kho" khi deploy máy trước lúc bán/gán TID/hủy khách (giao khách BẮT BUỘC kho có địa chỉ).
   const whMain = await warehouseSvc.createWarehouse({ code: 'DSMAIN', name: 'Kho DS chính', address: 'DS · 1 Đại lộ Bán' });
+  // Cài APP (Mr.Long 13/7) — máy gán TID (Ca5/Ca6) phải cài app cùng bank với TID. 1 bank app dùng chung.
+  const appBank = await bankSvc.createBank({ name: 'NH App DS', code: 'NHAPDS41' });
+  assert('bank app test tạo được', appBank.ok === true, appBank.error);
 
   // ══ Ca 1: BÁN MÁY THU ĐỦ NGAY (giá 2tr, thu 2tr) ══
   const dt0 = await doanhThu(db); const fb0 = await fundBalance(db, fund.id);
@@ -92,9 +96,10 @@ export async function runDeviceSaleSelfTest(): Promise<number> {
   assert('thu nợ KHÔNG cộng doanh thu (SALE_COLLECT affectsPnl=false)', (await doanhThu(db)) - dt2 === 2_000_000n, { note: 'vẫn 2tr sau khi thu thêm 1,5tr' });
 
   // ══ Ca 5: BÁN MÁY KÈM TID ══
-  await posSvc.createPos({ serial: 'SN-DS-4', occurredAt: '2026-06-01T09:00:00Z' });
+  const posDs4 = await posSvc.createPos({ serial: 'SN-DS-4', occurredAt: '2026-06-01T09:00:00Z' });
+  await posSvc.updatePos(posDs4.id!, { bankId: appBank.id! }); // cài app cùng bank với DS-TID-1
   await posSvc.deployPos('SN-DS-4', { customerId: buyer.id!, fromWarehouseId: whMain.id!, occurredAt: '2026-06-02T09:00:00Z' });
-  await tidSvc.createTid({ tid: 'DS-TID-1', bank: 'VCB', openedAt: '2026-05-01T00:00:00Z' });
+  await tidSvc.createTid({ tid: 'DS-TID-1', bank: 'VCB', bankId: appBank.id!, openedAt: '2026-05-01T00:00:00Z' });
   await tidSvc.assignTid('DS-TID-1', { posSerial: 'SN-DS-4', customerId: buyer.id!, occurredAt: '2026-06-03T09:00:00Z' });
   const s5 = await saleSvc.sellPos('SN-DS-4', { customerId: buyer2.id!, salePrice: 5_000_000, paidNow: 5_000_000, fundId: fund.id, method: 'CASH', occurredAt: '2026-06-05T09:00:00Z' }, PW);
   assert('bán máy kèm TID ok', s5.ok === true, s5.error);
@@ -112,8 +117,9 @@ export async function runDeviceSaleSelfTest(): Promise<number> {
   const tid2 = await db.tid.findUnique({ where: { tid: 'DS-TID-2' } });
   assert('TID bán riêng → SOLD, sang khách mua', tid2?.status === 'SOLD' && tid2?.customerId === buyer.id);
   // TID đang trên máy → bán TID riêng bị chặn
-  await posSvc.createPos({ serial: 'SN-DS-5', occurredAt: '2026-06-01T09:00:00Z' });
-  await tidSvc.createTid({ tid: 'DS-TID-3', bank: 'VCB', openedAt: '2026-05-01T00:00:00Z' });
+  const posDs5 = await posSvc.createPos({ serial: 'SN-DS-5', occurredAt: '2026-06-01T09:00:00Z' });
+  await posSvc.updatePos(posDs5.id!, { bankId: appBank.id! }); // cài app cùng bank với DS-TID-3
+  await tidSvc.createTid({ tid: 'DS-TID-3', bank: 'VCB', bankId: appBank.id!, openedAt: '2026-05-01T00:00:00Z' });
   await tidSvc.assignTid('DS-TID-3', { posSerial: 'SN-DS-5', customerId: buyer.id!, occurredAt: '2026-06-03T09:00:00Z' });
   const s6b = await saleSvc.sellTid('DS-TID-3', { customerId: buyer.id!, salePrice: 100_000, paidNow: 0, occurredAt: '2026-06-06T09:00:00Z' }, PW);
   assert('bán TID đang trên máy riêng lẻ → chặn TID_ON_DEVICE', s6b.ok === false && s6b.error === 'TID_ON_DEVICE', { err: s6b.error });

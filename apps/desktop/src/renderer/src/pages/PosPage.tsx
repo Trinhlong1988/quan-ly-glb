@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Loader2, HardDrive, History, Wrench, Download, List, PackagePlus, Building2, Cpu, Tag, Trash2, Banknote, Undo2, Pencil, Warehouse as WarehouseIcon } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate, fmtTimeSec } from '@glb/shared';
-import type { PosDto, TimelineEventDto, CustomerDto, FundDto, LiteRef, WarehouseLite, UpdatePosInput, HandoverTypeLite } from '../../../preload/index.d';
+import type { PosDto, TimelineEventDto, CustomerDto, FundDto, LiteRef, WarehouseLite, UpdatePosInput, HandoverTypeLite, BankLite } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
 import { isStaleWrite, STALE_TITLE } from '../lib/optlock.js';
 import { Modal } from '../components/Modal.js';
@@ -40,12 +40,13 @@ export function PosPage({ user }: { user: AuthUser }): JSX.Element {
   const canWarehouseView = hasPermission(user, 'CONFIG_WAREHOUSE_VIEW');
 
   const allTabs: { key: PosTab; label: string; icon: JSX.Element; show: boolean }[] = [
-    { key: 'warehouse', label: 'Danh mục kho', icon: <WarehouseIcon className="h-4 w-4" />, show: canWarehouseView },
     { key: 'devices', label: 'Danh sách máy', icon: <List className="h-4 w-4" />, show: canView },
     { key: 'intake', label: 'Nhập kho', icon: <PackagePlus className="h-4 w-4" />, show: canConfigView },
     { key: 'supplier', label: 'Nhà cung cấp', icon: <Building2 className="h-4 w-4" />, show: canConfigView },
     { key: 'model', label: 'Chủng loại POS', icon: <Cpu className="h-4 w-4" />, show: canConfigView },
-    { key: 'status', label: 'Trạng thái nhập', icon: <Tag className="h-4 w-4" />, show: canConfigView }
+    { key: 'status', label: 'Trạng thái nhập', icon: <Tag className="h-4 w-4" />, show: canConfigView },
+    // Nhóm 1 (Mr.Long 13/7) — "Danh sách kho" chuyển sang NGOÀI CÙNG, cạnh "Trạng thái nhập".
+    { key: 'warehouse', label: 'Danh sách kho', icon: <WarehouseIcon className="h-4 w-4" />, show: canWarehouseView }
   ];
   const tabs = allTabs.filter((t) => t.show);
 
@@ -80,12 +81,14 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
   const [rows, setRows] = useState<PosDto[]>([]);
   const [models, setModels] = useState<LiteRef[]>([]);
   const [warehouses, setWarehouses] = useState<WarehouseLite[]>([]); // Model 1 — lọc theo kho
+  const [banks, setBanks] = useState<BankLite[]>([]); // Cài APP — lọc theo app ngân hàng
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   // LANE B (#24) — lọc "Chủng loại" phía client trên tập rows (posList trả full, không phân trang).
   const [modelFilter, setModelFilter] = useState('');
   const [warehouseFilter, setWarehouseFilter] = useState(''); // Model 1 — lọc theo kho vật lý (server-side)
+  const [bankFilter, setBankFilter] = useState(''); // Cài APP — '' tất cả · 'BLANK' máy trắng · '<id>' app ngân hàng
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [timelineOf, setTimelineOf] = useState<PosDto | null>(null);
@@ -110,6 +113,8 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
       search: search || undefined,
       status: statusFilter || undefined,
       warehouseId: warehouseFilter ? Number(warehouseFilter) : undefined,
+      bankBlank: bankFilter === 'BLANK' ? true : undefined,
+      bankId: bankFilter && bankFilter !== 'BLANK' ? Number(bankFilter) : undefined,
       fromDate: fromDate || undefined,
       toDate: toDate || undefined
     });
@@ -122,13 +127,14 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
     void reload();
     window.api.posModelLite().then((r) => r.ok && r.data && setModels(r.data));
     window.api.warehouseLite().then((r) => r.ok && r.data && setWarehouses(r.data));
+    window.api.bankLite().then((r) => r.ok && r.data && setBanks(r.data));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  // Đổi kho là lọc lại ngay (server-side).
+  // Đổi kho / Cài APP là lọc lại ngay (server-side).
   useEffect(() => {
     void reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [warehouseFilter]);
+  }, [warehouseFilter, bankFilter]);
 
   // Lọc chủng loại (client-side) trên tập đã lọc phía server. Ưu tiên posModelId; nếu DTO thiếu id
   // nhưng có tên khớp option đang chọn thì fallback theo posModelName.
@@ -164,8 +170,8 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
             onClick={() =>
               exportCsv(
                 'may_pos',
-                ['Serial', 'Chủng loại', 'Nhà cung cấp', 'Giá nhập', 'Ngày nhập', 'Trạng thái', 'Kho', 'TID hiện tại', 'Khách'],
-                filteredRows.map((d) => [d.serial, d.posModelName ?? '', d.supplierName ?? '', d.importPrice ?? '', d.importedAt ? fmtDate(d.importedAt) : '', posStatusLabel(d.status), d.warehouseName ?? '', d.currentTid ?? '', d.customerName ?? ''])
+                ['Serial', 'Chủng loại', 'Cài APP', 'Nhà cung cấp', 'Giá nhập', 'Ngày nhập', 'Trạng thái', 'Kho', 'TID hiện tại', 'Khách'],
+                filteredRows.map((d) => [d.serial, d.posModelName ?? '', d.bankCode ?? 'Máy trắng', d.supplierName ?? '', d.importPrice ?? '', d.importedAt ? fmtDate(d.importedAt) : '', posStatusLabel(d.status), d.warehouseName ?? '', d.currentTid ?? '', d.customerName ?? ''])
               )
             }
           >
@@ -187,7 +193,9 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
           // Lọc chủng loại (client-side) — đổi giá trị là lọc ngay, không cần bấm "Lọc".
           { key: 'model', placeholder: 'Tất cả chủng loại', value: modelFilter, options: models.map((m) => ({ value: String(m.id), label: m.name })), onChange: setModelFilter },
           // Model 1 — lọc theo KHO đang chứa máy (server-side). "Chưa gán kho" bắt máy IN_STOCK chưa có kho.
-          { key: 'warehouse', placeholder: 'Tất cả kho', value: warehouseFilter, options: warehouses.map((w) => ({ value: String(w.id), label: `${w.code} · ${w.name}` })), onChange: setWarehouseFilter }
+          { key: 'warehouse', placeholder: 'Tất cả kho', value: warehouseFilter, options: warehouses.map((w) => ({ value: String(w.id), label: `${w.code} · ${w.name}` })), onChange: setWarehouseFilter },
+          // Cài APP — lọc theo app ngân hàng (server-side). "Máy trắng" = máy chưa cài app.
+          { key: 'bankapp', placeholder: 'Tất cả Cài APP', value: bankFilter, options: [{ value: 'BLANK', label: 'Máy trắng' }, ...banks.map((b) => ({ value: String(b.id), label: `${b.code} · ${b.name}` }))], onChange: setBankFilter }
         ]}
         onApply={reload}
         onReset={resetFilters}
@@ -223,6 +231,7 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
               {canCancelReq && <SelectAllCell ids={filteredRows.map((r) => r.id)} sel={sel} />}
               <th className="px-4 py-3">Serial</th>
               <th className="px-4 py-3">Chủng loại</th>
+              <th className="px-4 py-3">Cài APP</th>
               <th className="px-4 py-3">Nhà cung cấp</th>
               <th className="px-4 py-3 text-right">Giá nhập</th>
               <th className="px-4 py-3">Ngày nhập</th>
@@ -236,14 +245,14 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
           <tbody className="divide-y divide-line">
             {loading && (
               <tr>
-                <td colSpan={10 + (canCancelReq ? 1 : 0)} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={11 + (canCancelReq ? 1 : 0)} className="px-4 py-8 text-center text-slate-400">
                   <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                 </td>
               </tr>
             )}
             {!loading && filteredRows.length === 0 && (
               <tr>
-                <td colSpan={10 + (canCancelReq ? 1 : 0)} className="px-4 py-10 text-center text-slate-400">
+                <td colSpan={11 + (canCancelReq ? 1 : 0)} className="px-4 py-10 text-center text-slate-400">
                   <HardDrive className="mx-auto mb-2 h-6 w-6" />
                   {rows.length === 0 ? 'Chưa có máy POS.' : 'Không có máy POS khớp bộ lọc.'}
                 </td>
@@ -255,6 +264,11 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
                   {canCancelReq && <SelectCell id={d.id} sel={sel} />}
                   <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700 whitespace-nowrap">{d.serial}</td>
                   <td className="px-4 py-3 text-slate-600">{d.posModelName ?? '—'}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    {d.bankCode
+                      ? <span className="rounded-full bg-brand-tint/60 px-2 py-0.5 text-xs font-semibold text-brand">{d.bankCode}</span>
+                      : <span className="text-xs text-slate-400">Máy trắng</span>}
+                  </td>
                   <td className="px-4 py-3 text-slate-600">{d.supplierName ?? '—'}</td>
                   <td className="px-4 py-3 text-right text-slate-700 whitespace-nowrap">{fmtVnd(d.importPrice)}</td>
                   <td className="px-4 py-3 text-xs text-slate-500">{d.importedAt ? fmtDate(d.importedAt) : '—'}</td>
@@ -263,8 +277,8 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
                   </td>
                   <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{d.warehouseName ?? (d.status === 'IN_STOCK' ? <span className="text-amber-500">Chưa gán kho</span> : '—')}</td>
                   <td className="px-4 py-3 font-mono text-xs text-slate-500 whitespace-nowrap">{d.currentTid ?? '—'}</td>
-                  <td className="px-4 py-3 text-slate-600">{d.customerName ?? '—'}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{d.customerName ?? '—'}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">
                     <div className="flex items-center justify-end gap-2">
                       <button
                         onClick={() => setTimelineOf(d)}
@@ -397,9 +411,11 @@ function EditDeviceModal({ device, onClose, onDone }: { device: PosDto; onClose:
   const toast = useToast();
   const [models, setModels] = useState<LiteRef[]>([]);
   const [suppliers, setSuppliers] = useState<LiteRef[]>([]);
+  const [banks, setBanks] = useState<BankLite[]>([]); // Cài APP — danh mục ngân hàng
   const [posModelId, setPosModelId] = useState(device.posModelId ? String(device.posModelId) : '');
   const [supplierId, setSupplierId] = useState(device.supplierId ? String(device.supplierId) : '');
   const [bank, setBank] = useState(device.bank ?? '');
+  const [bankId, setBankId] = useState(device.bankId != null ? String(device.bankId) : ''); // Cài APP ('' = máy trắng)
   const [importPrice, setImportPrice] = useState(device.importPrice != null ? String(device.importPrice) : '');
   const [importedAt, setImportedAt] = useState(device.importedAt ? device.importedAt.slice(0, 10) : '');
   const [warehouseLoc, setWarehouseLoc] = useState(device.warehouseLoc ?? '');
@@ -409,6 +425,7 @@ function EditDeviceModal({ device, onClose, onDone }: { device: PosDto; onClose:
   useEffect(() => {
     window.api.posModelLite().then((r) => r.ok && r.data && setModels(r.data));
     window.api.supplierLite().then((r) => r.ok && r.data && setSuppliers(r.data));
+    window.api.bankLite().then((r) => r.ok && r.data && setBanks(r.data));
   }, []);
 
   async function save(): Promise<void> {
@@ -417,6 +434,7 @@ function EditDeviceModal({ device, onClose, onDone }: { device: PosDto; onClose:
       posModelId: posModelId ? Number(posModelId) : null,
       supplierId: supplierId ? Number(supplierId) : null,
       bank: bank.trim() || null,
+      bankId: bankId ? Number(bankId) : null,
       importPrice: importPrice ? Number(importPrice) : null,
       importedAt: importedAt ? new Date(importedAt).toISOString() : null,
       warehouseLoc: warehouseLoc.trim() || null,
@@ -445,6 +463,12 @@ function EditDeviceModal({ device, onClose, onDone }: { device: PosDto; onClose:
           <select className={inputCls} value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
             <option value="">— Không chọn —</option>
             {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </Field>
+        <Field label="Cài APP (ngân hàng)" hint="Máy trắng = chưa cài app. TID chỉ gán được khi cùng ngân hàng với app này.">
+          <select className={inputCls} value={bankId} onChange={(e) => setBankId(e.target.value)}>
+            <option value="">— Máy trắng (chưa cài app) —</option>
+            {banks.map((b) => <option key={b.id} value={b.id}>{b.code} · {b.name}</option>)}
           </select>
         </Field>
         <Field label="Ngân hàng (ghi chú)">

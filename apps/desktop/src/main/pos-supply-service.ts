@@ -439,6 +439,7 @@ export interface CreatePosIntakeInput {
   importedAt: string; // yyyy-mm-dd hoặc ISO
   note?: string | null;
   warehouseId?: number | null; // Model 1 — nhập vào KHO nào (set PosDevice.warehouseId khi máy IN_STOCK)
+  bankId?: number | null; // Cài APP (Mr.Long 13/7) — app ngân hàng cài sẵn (null/0 = MÁY TRẮNG, mặc định). Chỉ set khi tạo máy MỚI.
 }
 export interface UpdatePosIntakeInput {
   posModelId?: number;
@@ -534,6 +535,12 @@ export async function createPosIntake(input: CreatePosIntakeInput): Promise<Muta
     const wh = await db.warehouse.findFirst({ where: { id: input.warehouseId, deletedAt: null }, select: { id: true } });
     if (!wh) return { ok: false, error: 'NOT_FOUND', message: 'Kho nhập đã chọn không tồn tại (hoặc đã bị xóa).' };
   }
+  // Cài APP — nếu chọn app ngân hàng (bankId>0) phải tồn tại + còn dùng (ACTIVE). null/0 = máy trắng.
+  if (input.bankId != null && input.bankId > 0) {
+    const bk = await db.bank.findFirst({ where: { id: input.bankId, deletedAt: null }, select: { id: true, status: true } });
+    if (!bk) return { ok: false, error: 'NOT_FOUND', message: 'Ngân hàng (app) đã chọn không tồn tại.' };
+    if (bk.status !== 'ACTIVE') return { ok: false, error: 'VALIDATION', message: 'Ngân hàng (app) đã ngừng sử dụng — không thể cài lên máy.' };
+  }
   const dup = dupResult(await db.posIntake.findFirst({ where: { serial } }), 'Seri number', serial);
   if (dup) return dup;
   // PHASE K1 (Q-P1, desync #22): tạo phiếu nhập + UPSERT PosDevice IN_STOCK + ghi AssetEvent(STOCK_IN)
@@ -557,7 +564,8 @@ export async function createPosIntake(input: CreatePosIntakeInput): Promise<Muta
       let eventType: string;
       if (!existing) {
         // Máy mới nhập kho → IN_STOCK + gán KHO (Model 1: warehouseId≠null ⟺ IN_STOCK).
-        await tx.posDevice.create({ data: { serial, status: 'IN_STOCK', ...intakeCols, warehouseId: input.warehouseId ?? null, createdBy: user.id } });
+        // Cài APP: set bankId khi tạo MÁY MỚI (null/0 = máy trắng). Re-intake máy cũ KHÔNG đổi app (đổi qua Sửa máy).
+        await tx.posDevice.create({ data: { serial, status: 'IN_STOCK', ...intakeCols, warehouseId: input.warehouseId ?? null, bankId: input.bankId && input.bankId > 0 ? input.bankId : null, createdBy: user.id } });
         fromState = null;
         eventType = 'STOCK_IN';
       } else {

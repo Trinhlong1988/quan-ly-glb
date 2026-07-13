@@ -10,6 +10,7 @@ import * as saleSvc from './device-sale-service.js';
 import * as warehouseSvc from './warehouse-service.js';
 import * as handoverSvc from './handover-service.js';
 import * as depositSvc from './deposit-service.js';
+import * as bankSvc from './bank-config-service.js';
 import * as dashboardSvc from './dashboard-service.js';
 import type { Db } from '@glb/database';
 
@@ -49,6 +50,9 @@ export async function runHandoverSelfTest(): Promise<number> {
   const fund = await db.fund.create({ data: { code: 'QUHO', name: 'Quỹ test loại giao', type: 'CASH', openingBalance: 0n } });
   const whMain = await warehouseSvc.createWarehouse({ code: 'HOMAIN', name: 'Kho HO chính', address: 'HO · 1 Phố Giao' });
   const whBack = await warehouseSvc.createWarehouse({ code: 'HOBACK', name: 'Kho HO thu về', address: 'HO · 2 Ngõ Về' });
+  // Cài APP (Mr.Long 13/7) — máy gán TID kèm giao (Ca6) phải cài app cùng bank với TID. 1 bank app dùng chung.
+  const appBank = await bankSvc.createBank({ name: 'NH App HO', code: 'NHAPHO42' });
+  assert('bank app test tạo được', appBank.ok === true, appBank.error);
 
   // Loại giao builtin (seed): tra theo moneyKind.
   const types = (await handoverSvc.listHandoverTypes()).data ?? [];
@@ -150,8 +154,9 @@ export async function runHandoverSelfTest(): Promise<number> {
 
   // ══ Ca 6: GIAO TID KÈM MÁY — Thuê / Cọc / Bán(chặn) ══
   const dt3 = await doanhThu(db); const fb3 = await fundBalance(db, fund.id);
-  await posSvc.createPos({ serial: 'SN-HO-5' });
-  await tidSvc.createTid({ tid: 'HO-TID-1', bank: 'VCB', openedAt: '2026-05-01T00:00:00Z' });
+  const posHo5 = await posSvc.createPos({ serial: 'SN-HO-5' });
+  await posSvc.updatePos(posHo5.id!, { bankId: appBank.id! }); // cài app cùng bank với HO-TID-1
+  await tidSvc.createTid({ tid: 'HO-TID-1', bank: 'VCB', bankId: appBank.id!, openedAt: '2026-05-01T00:00:00Z' });
   const assignRent = await tidSvc.assignTid('HO-TID-1', { posSerial: 'SN-HO-5', customerId: cid, handoverTypeId: tRent!.id, handoverAmount: 500_000, fundId: fund.id, method: 'CASH', occurredAt: '2026-06-08T09:00:00Z' });
   assert('TID+thuê: assign ok', assignRent.ok === true, assignRent.error);
   const dev5 = await db.posDevice.findUnique({ where: { serial: 'SN-HO-5' } });
@@ -160,16 +165,18 @@ export async function runHandoverSelfTest(): Promise<number> {
   assert('TID+thuê: quỹ +500k', (await fundBalance(db, fund.id)) - fb3 === 500_000n);
 
   const fb4 = await fundBalance(db, fund.id);
-  await posSvc.createPos({ serial: 'SN-HO-6' });
-  await tidSvc.createTid({ tid: 'HO-TID-2', bank: 'VCB', openedAt: '2026-05-01T00:00:00Z' });
+  const posHo6 = await posSvc.createPos({ serial: 'SN-HO-6' });
+  await posSvc.updatePos(posHo6.id!, { bankId: appBank.id! }); // cài app cùng bank với HO-TID-2
+  await tidSvc.createTid({ tid: 'HO-TID-2', bank: 'VCB', bankId: appBank.id!, openedAt: '2026-05-01T00:00:00Z' });
   const assignDep = await tidSvc.assignTid('HO-TID-2', { posSerial: 'SN-HO-6', customerId: cid, handoverTypeId: tDeposit!.id, handoverAmount: 700_000, fundId: fund.id, method: 'CASH', occurredAt: '2026-06-09T09:00:00Z' });
   assert('TID+cọc: assign ok', assignDep.ok === true, assignDep.error);
   const dep6 = await db.deviceDeposit.findFirst({ where: { deviceSerial: 'SN-HO-6', tid: 'HO-TID-2', status: 'OPEN' } });
   assert('TID+cọc: DeviceDeposit OPEN gắn máy+TID đúng 700k', dep6 != null && dep6.amount === 700_000n, { amt: Number(dep6?.amount) });
   assert('TID+cọc: quỹ +700k', (await fundBalance(db, fund.id)) - fb4 === 700_000n);
 
-  await posSvc.createPos({ serial: 'SN-HO-7' });
-  await tidSvc.createTid({ tid: 'HO-TID-3', bank: 'VCB', openedAt: '2026-05-01T00:00:00Z' });
+  const posHo7 = await posSvc.createPos({ serial: 'SN-HO-7' });
+  await posSvc.updatePos(posHo7.id!, { bankId: appBank.id! }); // cài app bankX để chạm đúng USE_SALE_FLOW (không phải MACHINE_BLANK)
+  await tidSvc.createTid({ tid: 'HO-TID-3', bank: 'VCB', bankId: appBank.id!, openedAt: '2026-05-01T00:00:00Z' });
   const assignSale = await tidSvc.assignTid('HO-TID-3', { posSerial: 'SN-HO-7', customerId: cid, handoverTypeId: tSale!.id, handoverAmount: 100_000, fundId: fund.id, occurredAt: '2026-06-10T09:00:00Z' });
   assert('TID+bán: assign hình thức Bán → USE_SALE_FLOW (chặn)', assignSale.ok === false && assignSale.error === 'USE_SALE_FLOW', { err: assignSale.error });
 
