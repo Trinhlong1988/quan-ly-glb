@@ -44,7 +44,7 @@ import * as entityCancelSvc from './entity-cancel-service.js';
 import * as exportReqSvc from './export-request-service.js';
 import * as storageSvc from './storage-service.js';
 import * as healthSvc from './health-scan.js';
-import { getRemembered, saveRemembered, clearRemembered } from './remember.js';
+import { getRemembered, getRememberedUsername, saveRemembered, clearRemembered } from './remember.js';
 import { getServerConfig, testServerConfig, saveServerConfig } from './db.js';
 import type { ServerConfigInput } from '@glb/shared';
 
@@ -92,7 +92,18 @@ export function registerIpc(): void {
     return auth.resetLevel2Password(level1, oldLevel2, newLevel2, confirmLevel2);
   });
   ipcMain.handle('auth:validatePassword', async (_e, pwd: string) => validatePassword(pwd));
-  ipcMain.handle('auth:getRemembered', async () => getRemembered());
+  // P1-03: renderer CHỈ nhận username (điền sẵn), KHÔNG nhận mật khẩu. Đăng nhập-đã-nhớ do MAIN tự giải mã.
+  ipcMain.handle('auth:getRemembered', async () => {
+    const username = getRememberedUsername();
+    return username ? { username } : null;
+  });
+  ipcMain.handle('auth:loginRemembered', async (_e, args: { force?: boolean }) => {
+    const creds = getRemembered(); // đọc + giải mã TRONG main, không trả mật khẩu ra ngoài
+    if (!creds) return { ok: false, error: 'NO_REMEMBERED', message: 'Chưa lưu đăng nhập.' };
+    const result = await auth.login(creds.username, creds.password, { force: args?.force, deviceInfo: os.hostname(), deviceId: deviceId() });
+    if (result.ok) saveRemembered(creds.username, creds.password); // gia hạn bản nhớ
+    return result;
+  });
   ipcMain.handle('auth:saveRemembered', async (_e, args: { username: string; password: string }) => {
     saveRemembered(args.username, args.password);
     return { ok: true };
@@ -434,9 +445,9 @@ export function registerIpc(): void {
   // ── P1.2 Approval Engine — hủy bill có duyệt (phân vai trong service) ──
   ipcMain.handle('approval:requestCancel', async (_e, args: { transactionId: number; reason: string }) => approvalSvc.requestCancelBill(args.transactionId, args.reason));
   ipcMain.handle('approval:list', async (_e, status?: string) => approvalSvc.listCancelRequests(status));
-  ipcMain.handle('approval:approve', async (_e, args: { requestId: number; note?: string }) => approvalSvc.approveCancelBill(args.requestId, args.note));
+  ipcMain.handle('approval:approve', async (_e, args: { requestId: number; password: string; note?: string }) => approvalSvc.approveCancelBill(args.requestId, args.password, args.note));
   ipcMain.handle('approval:reject', async (_e, args: { requestId: number; note: string }) => approvalSvc.rejectCancelBill(args.requestId, args.note));
-  ipcMain.handle('approval:approveBulk', async (_e, args: { requestIds: number[]; note?: string }) => approvalSvc.approveCancelBills(args.requestIds, args.note));
+  ipcMain.handle('approval:approveBulk', async (_e, args: { requestIds: number[]; password: string; note?: string }) => approvalSvc.approveCancelBills(args.requestIds, args.password, args.note));
   ipcMain.handle('approval:rejectBulk', async (_e, args: { requestIds: number[]; note: string }) => approvalSvc.rejectCancelBills(args.requestIds, args.note));
   // R34 — Duyệt hủy (xóa qua duyệt) cho TID / POS / Khách hàng / Nhân sự (engine generic riêng).
   ipcMain.handle('entityCancel:request', async (_e, a: { entityType: string; entityId: number; reason: string }) => entityCancelSvc.requestEntityCancel(a.entityType, a.entityId, a.reason));

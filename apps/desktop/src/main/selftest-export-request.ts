@@ -174,11 +174,38 @@ export async function runExportRequestSelfTest(): Promise<number> {
   const devKem = await db.posDevice.findUnique({ where: { serial: sKem } });
   assert('máy bán kèm → SOLD, khách = người mua', devKem?.status === 'SOLD' && devKem?.currentCustomerId === cust.id, { st: devKem?.status });
   const tidKem = await db.tid.findUnique({ where: { tid: 'YCXK-TID-KEM' } });
-  assert('TID kèm được giao (deliveredAt set)', tidKem?.deliveredAt != null, { del: tidKem?.deliveredAt });
+  // TID BÁN KÈM máy → SOLD (bán theo máy), gỡ khỏi máy (posSerial null), sang khách mua — KHÔNG phải "delivered".
+  assert('TID kèm bán theo máy → SOLD + gỡ khỏi máy + sang khách mua', tidKem?.status === 'SOLD' && tidKem?.posSerial == null && tidKem?.customerId === cust.id, { st: tidKem?.status, pos: tidKem?.posSerial, cust: tidKem?.customerId });
   assert('doanh thu +3tr (bán máy kèm TID)', (await doanhThu(db)) - dtK === 3_000_000n, { delta: Number((await doanhThu(db)) - dtK) });
   assert('quỹ +3tr (thu CK đủ)', (await fundBalance(db, fund.id)) - fbK === 3_000_000n);
   const ckEntry = await db.cashEntry.findFirst({ where: { method: 'CK' }, orderBy: { id: 'desc' } });
   assert('bút toán tiền ghi method=CK', ckEntry != null && ckEntry?.method === 'CK', { entry: ckEntry?.method });
+
+  // ══ Ca 6c (PING P0-05): ALLOWLIST hình thức thanh toán — giá trị lạ → VALIDATION, KHÔNG âm thầm CASH ══
+  const base = { kind: 'POS' as const, handoverKind: 'SALE' as const, bankId: appBank.id!, customerId: cust.id!, unitPrice: 100_000, quantity: 1, paidAmount: 0, fundId: fund.id };
+  const mBank = await exportReqSvc.createExportRequest({ ...base, method: 'BANK' });
+  assert('P0-05: method="BANK" → VALIDATION (không ghi CASH ngầm)', mBank.ok === false && mBank.error === 'VALIDATION', mBank);
+  const mEmpty = await exportReqSvc.createExportRequest({ ...base, method: '   ' });
+  assert('P0-05: method rỗng/space → VALIDATION', mEmpty.ok === false && mEmpty.error === 'VALIDATION', mEmpty);
+  const mLower = await exportReqSvc.createExportRequest({ ...base, method: ' ck ' });
+  assert('P0-05: method=" ck " normalize hợp lệ → CK', mLower.ok === true, mLower);
+  assert('P0-05: normalize lưu đúng CK', (await db.exportRequest.findUnique({ where: { id: mLower.id! } }))?.method === 'CK');
+  const mDefault = await exportReqSvc.createExportRequest({ ...base });
+  assert('P0-05: không truyền method → mặc định CASH', mDefault.ok === true && (await db.exportRequest.findUnique({ where: { id: mDefault.id! } }))?.method === 'CASH', mDefault);
+  await exportReqSvc.cancelExportRequest(mLower.id!, 'dọn'); await exportReqSvc.cancelExportRequest(mDefault.id!, 'dọn');
+
+  // ══ Ca 6d (PING P0-06): tiền KHÔNG mất chữ số — chuỗi-chữ-số parse thẳng BigInt; > MAX_SAFE → VALIDATION ══
+  const mHuge = await exportReqSvc.createExportRequest({ ...base, unitPrice: (Number.MAX_SAFE_INTEGER + 2) });
+  assert('P0-06: đơn giá > MAX_SAFE_INTEGER → VALIDATION (chống làm tròn ngầm)', mHuge.ok === false && mHuge.error === 'VALIDATION', mHuge);
+  const mNeg = await exportReqSvc.createExportRequest({ ...base, unitPrice: -5 });
+  assert('P0-06: đơn giá âm → VALIDATION', mNeg.ok === false && mNeg.error === 'VALIDATION', mNeg);
+  const mFrac = await exportReqSvc.createExportRequest({ ...base, unitPrice: 100.5 });
+  assert('P0-06: đơn giá thập phân → VALIDATION', mFrac.ok === false && mFrac.error === 'VALIDATION', mFrac);
+  // Chuỗi-chữ-số lớn (12 chữ số = 100 tỷ) parse THẲNG sang BigInt, không qua Number → chính xác tuyệt đối.
+  const mStr = await exportReqSvc.createExportRequest({ ...base, unitPrice: '100000000000' as unknown as number });
+  assert('P0-06: đơn giá chuỗi "100000000000" → OK', mStr.ok === true, mStr);
+  assert('P0-06: chuỗi lưu đúng 100 tỷ (không mất chữ số)', (await db.exportRequest.findUnique({ where: { id: mStr.id! } }))?.unitPrice === 100_000_000_000n);
+  await exportReqSvc.cancelExportRequest(mStr.id!, 'dọn');
 
   // ══ Ca 7: SELF-duyệt bởi người TẠO (không phải Admin) → FORBIDDEN ══
   await userSvc.createUser({ fullName: 'YCXK Kho', phone: '0900000431', email: null, username: 'ycxkwh01', password: 'Pass@1234', roleCodes: ['WAREHOUSE'] });

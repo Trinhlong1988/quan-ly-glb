@@ -92,7 +92,7 @@ async function runConcurrencyCases(): Promise<number> {
 
     await logout();
     await login('conc20mgr', PW); // me() = mgr cho cả N lời gọi song song
-    const results = (await Promise.all(Array.from({ length: N }, () => approveCancelBill(reqId)))) as MRes[];
+    const results = (await Promise.all(Array.from({ length: N }, () => approveCancelBill(reqId, PW)))) as MRes[];
     const wins = results.filter((r) => r.ok).length;
     const already = results.filter((r) => !r.ok && r.error === 'ALREADY_DECIDED').length;
     const other = results.filter((r) => !r.ok && r.error !== 'ALREADY_DECIDED');

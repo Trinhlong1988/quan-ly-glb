@@ -64,11 +64,11 @@ export async function runApprovalSelfTest(): Promise<number> {
   ok('bill sang CANCEL_PENDING', bAccRow?.status === 'CANCEL_PENDING', { status: bAccRow?.status });
 
   // ═══ 3a) acc KHÔNG duyệt được (thiếu quyền); mgr duyệt yêu cầu của acc → OK ═══
-  const accApprove = await approveCancelBill(reqAcc.id!);
+  const accApprove = await approveCancelBill(reqAcc.id!, PW);
   ok('acc tự duyệt → FORBIDDEN (không có BILL_CANCEL_APPROVE)', accApprove.ok === false && accApprove.error === 'FORBIDDEN', accApprove);
   await logout();
   await login('mgruser01', PW);
-  const mgrApprovesAcc = await approveCancelBill(reqAcc.id!);
+  const mgrApprovesAcc = await approveCancelBill(reqAcc.id!, PW);
   ok('mgr duyệt yêu cầu của acc (nhân viên) → OK', mgrApprovesAcc.ok === true, mgrApprovesAcc);
   const bAccAfter = await db.transaction.findUnique({ where: { id: bAcc } });
   ok('approve → bill CANCELLED + cancelReason + cancelRequestId', bAccAfter?.status === 'CANCELLED' && bAccAfter?.cancelReason === 'Nhập nhầm số tiền' && bAccAfter?.cancelRequestId === reqAcc.id, { s: bAccAfter?.status, rid: bAccAfter?.cancelRequestId });
@@ -77,15 +77,15 @@ export async function runApprovalSelfTest(): Promise<number> {
   const bMgr = await mkBill(); // mgr đang đăng nhập
   const reqMgr = await requestCancelBill(bMgr, 'Quản lý yêu cầu hủy');
   ok('mgr tạo yêu cầu hủy → ok', reqMgr.ok === true, reqMgr);
-  const mgrSelf = await approveCancelBill(reqMgr.id!);
+  const mgrSelf = await approveCancelBill(reqMgr.id!, PW);
   ok('mgr tự duyệt yêu cầu của mình → SELF_APPROVAL_FORBIDDEN', mgrSelf.ok === false && mgrSelf.error === 'SELF_APPROVAL_FORBIDDEN', mgrSelf);
   await logout();
   await login('mgruser02', PW);
-  const mgr2Approves = await approveCancelBill(reqMgr.id!);
+  const mgr2Approves = await approveCancelBill(reqMgr.id!, PW);
   ok('mgr2 (không Admin) duyệt yêu cầu của mgr → NEED_ELEVATED', mgr2Approves.ok === false && mgr2Approves.error === 'NEED_ELEVATED', mgr2Approves);
   await logout();
   await login('adminx002', PW);
-  const adminApprovesMgr = await approveCancelBill(reqMgr.id!);
+  const adminApprovesMgr = await approveCancelBill(reqMgr.id!, PW);
   ok('Admin duyệt yêu cầu của mgr → OK', adminApprovesMgr.ok === true, adminApprovesMgr);
 
   // ═══ 5) REJECT → bill về POSTED ═══
@@ -126,9 +126,9 @@ export async function runApprovalSelfTest(): Promise<number> {
   await logout();
   await login('mgruser01', PW);
   const auditBefore = await db.auditLog.count();
-  const denyState = await approveCancelBill(reqAudit.id!); // mgr duyệt yêu cầu của acc → OK thực ra. Đổi: test INVALID_STATE
+  const denyState = await approveCancelBill(reqAudit.id!, PW); // mgr duyệt yêu cầu của acc → OK thực ra. Đổi: test INVALID_STATE
   // reqAudit vừa được duyệt ở trên → duyệt lại lần 2 = INVALID_STATE (nhánh từ chối)
-  const denyInvalid = await approveCancelBill(reqAudit.id!);
+  const denyInvalid = await approveCancelBill(reqAudit.id!, PW);
   const auditAfter = await db.auditLog.count();
   ok('I-A5: duyệt lại yêu cầu đã xử lý → ALREADY_DECIDED', denyInvalid.ok === false && denyInvalid.error === 'ALREADY_DECIDED', denyInvalid);
   ok('I-A5: nhánh từ chối GHI audit (audit_logs tăng)', auditAfter > auditBefore, { before: auditBefore, after: auditAfter, firstOk: denyState.ok });
@@ -150,7 +150,7 @@ export async function runApprovalSelfTest(): Promise<number> {
   await login('mgruser01', PW);
   const bMgrOwn = await mkBill();
   const rqMgrOwn = await requestCancelBill(bMgrOwn, 'bulk của chính mgr'); // mgr tự tạo → mgr KHÔNG tự duyệt được
-  const bulk = await approveCancelBills([rq1.id!, rq2.id!, rqMgrOwn.id!]);
+  const bulk = await approveCancelBills([rq1.id!, rq2.id!, rqMgrOwn.id!], PW);
   ok('bulk: duyệt được 2 (của acc), bỏ qua 1 (của chính mgr)', bulk.ok === true && bulk.done === 2 && bulk.skipped.length === 1, bulk);
   ok('bulk: cái bỏ qua đúng lý do SELF_APPROVAL_FORBIDDEN', bulk.skipped[0]?.reason === 'SELF_APPROVAL_FORBIDDEN', bulk.skipped);
   const bb1row = await db.transaction.findUnique({ where: { id: bb1 } });
@@ -162,11 +162,38 @@ export async function runApprovalSelfTest(): Promise<number> {
   await db.user.update({ where: { id: (admin2 as { id: number }).id }, data: { deletedAt: new Date() } }); // xóa mềm admin2 → còn 1 elevated
   const bSolo = await mkBill();
   const reqSolo = await requestCancelBill(bSolo, 'admin duy nhất tự hủy');
-  const soloApprove = await approveCancelBill(reqSolo.id!);
+  const soloApprove = await approveCancelBill(reqSolo.id!, ADMIN_PW);
   ok('fallback: Admin DUY NHẤT tự duyệt yêu cầu của mình → OK', soloApprove.ok === true, soloApprove);
   const bSoloRow = await db.transaction.findUnique({ where: { id: bSolo } });
   const reqSoloRow = await db.approvalRequest.findUnique({ where: { id: reqSolo.id! } });
   ok('Admin tự duyệt bill của mình → CANCELLED + decisionNote ghi "Admin tự duyệt"', bSoloRow?.status === 'CANCELLED' && (reqSoloRow?.decisionNote ?? '').includes('Admin tự duyệt'), { note: reqSoloRow?.decisionNote });
+
+  // ═══ P0-03 (PING audit): DUYỆT hủy bill BẮT BUỘC verify mật khẩu THẬT (tự-duyệt không được bỏ qua) ═══
+  // adminroot đang đăng nhập, là Admin DUY NHẤT (admin2 đã xóa mềm) → tự-duyệt hợp lệ NHƯNG phải đúng mật khẩu.
+  const bPw = await mkBill();
+  const reqPw = await requestCancelBill(bPw, 'P0-03 kiểm mật khẩu');
+  const apNoPw = await approveCancelBill(reqPw.id!, '');
+  ok('P0-03: tự duyệt KHÔNG nhập mật khẩu → VALIDATION', apNoPw.ok === false && apNoPw.error === 'VALIDATION', apNoPw);
+  const apWrongPw = await approveCancelBill(reqPw.id!, 'sai-mat-khau-hoan-toan');
+  ok('P0-03: tự duyệt SAI mật khẩu → WRONG_PASSWORD', apWrongPw.ok === false && apWrongPw.error === 'WRONG_PASSWORD', apWrongPw);
+  const bPwStill = await db.transaction.findUnique({ where: { id: bPw } });
+  ok('P0-03: sai/thiếu mật khẩu → bill VẪN CANCEL_PENDING (chưa hủy)', bPwStill?.status === 'CANCEL_PENDING', { s: bPwStill?.status });
+  const apGoodPw = await approveCancelBill(reqPw.id!, ADMIN_PW);
+  ok('P0-03: tự duyệt ĐÚNG mật khẩu → OK (bill CANCELLED)', apGoodPw.ok === true, apGoodPw);
+  const bPwDone = await db.transaction.findUnique({ where: { id: bPw } });
+  ok('P0-03: sau mật khẩu đúng → bill CANCELLED', bPwDone?.status === 'CANCELLED', { s: bPwDone?.status });
+
+  // ═══ P0-04 (PING audit): TỪ CHỐI PHẢI kiểm bill transition — bill đã lệch trạng thái → INVALID_STATE + Approval giữ PENDING ═══
+  const bDiv = await mkBill();
+  const reqDiv = await requestCancelBill(bDiv, 'P0-04 lệch trạng thái');
+  const bDivRow0 = await db.transaction.findUnique({ where: { id: bDiv } });
+  ok('P0-04: setup bill CANCEL_PENDING + request PENDING', bDivRow0?.status === 'CANCEL_PENDING', { s: bDivRow0?.status });
+  // Ép bill rời CANCEL_PENDING (mô phỏng lệch trạng thái do đường khác) trong khi request VẪN PENDING.
+  await db.transaction.update({ where: { id: bDiv }, data: { status: 'POSTED' } });
+  const rejDiv = await rejectCancelBill(reqDiv.id!, 'thử từ chối khi bill đã lệch');
+  ok('P0-04: reject khi bill KHÔNG còn CANCEL_PENDING → INVALID_STATE', rejDiv.ok === false && rejDiv.error === 'INVALID_STATE', rejDiv);
+  const reqDivRow = await db.approvalRequest.findUnique({ where: { id: reqDiv.id! } });
+  ok('P0-04: reject thất bại → Approval VẪN PENDING (không lệch REJECTED)', reqDivRow?.status === 'PENDING', { s: reqDivRow?.status });
 
   // ═══ 11) BULK XÓA USER (§7.1 #10): trộn user hợp lệ + chính-mình → hợp lệ xóa, tự-mình bị skip ═══
   // adminroot đang đăng nhập & là Admin DUY NHẤT còn lại (admin2 đã xóa mềm ở bước fallback).

@@ -22,6 +22,7 @@ const api = {
     ipcRenderer.invoke('auth:resetLevel2', { level1, oldLevel2, newLevel2, confirmLevel2 }),
   validatePassword: (pwd: string) => ipcRenderer.invoke('auth:validatePassword', pwd),
   getRemembered: () => ipcRenderer.invoke('auth:getRemembered'),
+  loginRemembered: (force?: boolean) => ipcRenderer.invoke('auth:loginRemembered', { force }),
   saveRemembered: (username: string, password: string) =>
     ipcRenderer.invoke('auth:saveRemembered', { username, password }),
   clearRemembered: () => ipcRenderer.invoke('auth:clearRemembered'),
@@ -285,9 +286,9 @@ const api = {
   // Duyệt hủy bill (P1.2 Approval Engine)
   cancelRequest: (transactionId: number, reason: string) => ipcRenderer.invoke('approval:requestCancel', { transactionId, reason }),
   cancelRequestList: (status?: string) => ipcRenderer.invoke('approval:list', status),
-  cancelApprove: (requestId: number, note?: string) => ipcRenderer.invoke('approval:approve', { requestId, note }),
+  cancelApprove: (requestId: number, password: string, note?: string) => ipcRenderer.invoke('approval:approve', { requestId, password, note }),
   cancelReject: (requestId: number, note: string) => ipcRenderer.invoke('approval:reject', { requestId, note }),
-  cancelApproveBulk: (requestIds: number[], note?: string) => ipcRenderer.invoke('approval:approveBulk', { requestIds, note }),
+  cancelApproveBulk: (requestIds: number[], password: string, note?: string) => ipcRenderer.invoke('approval:approveBulk', { requestIds, password, note }),
   cancelRejectBulk: (requestIds: number[], note: string) => ipcRenderer.invoke('approval:rejectBulk', { requestIds, note }),
   // R34 — Duyệt hủy (xóa qua duyệt) TID/POS/Khách/Nhân sự.
   entityCancelRequest: (entityType: string, entityId: number, reason: string) => ipcRenderer.invoke('entityCancel:request', { entityType, entityId, reason }),

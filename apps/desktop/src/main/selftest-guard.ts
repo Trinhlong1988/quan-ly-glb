@@ -64,7 +64,7 @@ export async function runGuardSelfTest(): Promise<number> {
   // ═══ (b) DUYỆT 2 LẦN → lần 2 ALREADY_DECIDED, KHÔNG audit/notify thêm, bill CANCELLED đúng 1 lần ═══
   await logout();
   await login('gdmgruser1', PW);
-  const apv1 = await approveCancelBill(rA1.id!);
+  const apv1 = await approveCancelBill(rA1.id!, PW);
   ok('(b) duyệt lần 1 → ok', apv1.ok === true, apv1);
   const bAAfter1 = await db.transaction.findUnique({ where: { id: bA } });
   ok('(b) bill CANCELLED sau duyệt lần 1', bAAfter1?.status === 'CANCELLED', { status: bAAfter1?.status });
@@ -73,7 +73,7 @@ export async function runGuardSelfTest(): Promise<number> {
   const notifyApvBefore = await db.message.count({ where: { recipientId: accId, category: 'BILL_CANCEL_APPROVED', kind: 'SYSTEM', senderId: null } });
   ok('(b) người tạo có đúng 1 thông báo ĐÃ DUYỆT sau lần 1', notifyApvBefore === 1, { notifyApvBefore });
   const cancelledAt1 = bAAfter1?.cancelledAt?.getTime();
-  const apv2 = await approveCancelBill(rA1.id!);
+  const apv2 = await approveCancelBill(rA1.id!, PW);
   ok('(b) duyệt lần 2 → ALREADY_DECIDED', apv2.ok === false && apv2.error === 'ALREADY_DECIDED', apv2);
   const auditAfter = await db.auditLog.count();
   ok('(b) KHÔNG ghi thêm audit ở lần duyệt thứ 2', auditAfter === auditBefore, { auditBefore, auditAfter });

@@ -1,6 +1,7 @@
 // R46/R41 — 1 tài khoản 1 thiết bị + nhịp tim + danh sách đang đăng nhập — self-test (GLB_SELFTEST=35).
 // DB throwaway Postgres (advisory lock cần Postgres). Số thật, real service.
 import { login, logout, heartbeat, listOnlineUsers } from './auth-service.js';
+import { lockUser as adminLockUser } from './user-service.js';
 import { getDb } from './db.js';
 import { hashPassword } from '@glb/business-rules';
 
@@ -108,6 +109,41 @@ export async function runSessionSelfTest(): Promise<number> {
   ok('quá cooldown (>15p) + mật khẩu đúng → TỰ MỞ KHÓA + đăng nhập ok', unlocked.ok === true, { err: unlocked.error });
   const lu2 = await db.user.findUnique({ where: { id: lockUser.id } });
   ok('tự mở khóa → status ACTIVE + reset đếm sai', lu2?.status === 'ACTIVE' && lu2?.failedAttempts === 0, { status: lu2?.status, fa: lu2?.failedAttempts });
+
+  // ═══ 13) P0-01 (PING) — khóa TAY của Admin (ADMIN_LOCK) KHÔNG tự mở qua login dù quá cooldown ═══
+  await login('adminroot', PW, { force: true, deviceId: 'GUID-ADM' }); // đảm bảo phiên adminroot để gọi service
+  const mUser = await db.user.create({ data: { username: 'manlock0001', fullName: 'Manual Lock', passwordHash: hashPassword('User@123456'), status: 'ACTIVE' } });
+  const lk = await adminLockUser(mUser.id);
+  ok('P0-01: admin khóa tay ok', lk.ok === true, lk);
+  const mrow = await db.user.findUnique({ where: { id: mUser.id } });
+  ok('P0-01: khóa tay → LOCKED + lockReason ADMIN_LOCK + lockedAt null', mrow?.status === 'LOCKED' && mrow?.lockReason === 'ADMIN_LOCK' && mrow?.lockedAt === null, { s: mrow?.status, lr: mrow?.lockReason, la: mrow?.lockedAt });
+  // Ép "quá cooldown" (đặt lockedAt quá khứ) — khóa TAY vẫn KHÔNG được tự mở vì lockReason≠AUTH_FAILURE.
+  await db.user.update({ where: { id: mUser.id }, data: { lockedAt: new Date(Date.now() - 60 * 60 * 1000) } });
+  const tryMan = await login('manlock0001', 'User@123456', { deviceId: 'G-MAN' });
+  ok('P0-01: khóa tay + quá cooldown → VẪN không đăng nhập (không tự mở)', tryMan.ok === false, { err: tryMan.error });
+  ok('P0-01: sau login, tài khoản khóa tay VẪN LOCKED', (await db.user.findUnique({ where: { id: mUser.id } }))?.status === 'LOCKED');
+
+  // ═══ 13b) P0-01 — kịch bản mỏ-neo-cũ: auto-lock → admin mở → admin khóa lại → login KHÔNG tự mở ═══
+  const stale = await db.user.create({ data: { username: 'stalelk0001', fullName: 'Stale Lock', passwordHash: hashPassword('User@123456'), status: 'LOCKED', lockReason: 'AUTH_FAILURE', lockedAt: new Date(Date.now() - 60 * 60 * 1000), failedAttempts: 5 } });
+  await login('adminroot', PW, { force: true, deviceId: 'GUID-ADM2' });
+  // admin khóa TAY (dù đang auto-lock) → chuyển thành ADMIN_LOCK, lockedAt=null → không còn mỏ neo tự-mở.
+  await adminLockUser(stale.id);
+  const staleRow = await db.user.findUnique({ where: { id: stale.id } });
+  ok('P0-01: khóa tay đè auto-lock cũ → ADMIN_LOCK + lockedAt null (xóa mỏ neo)', staleRow?.lockReason === 'ADMIN_LOCK' && staleRow?.lockedAt === null, { lr: staleRow?.lockReason, la: staleRow?.lockedAt });
+  const tryStale = await login('stalelk0001', 'User@123456', { deviceId: 'G-STALE' });
+  ok('P0-01: login sau khóa-tay-đè → KHÔNG tự mở (giữ khóa)', tryStale.ok === false && (await db.user.findUnique({ where: { id: stale.id } }))?.status === 'LOCKED', { err: tryStale.error });
+
+  // ═══ 14) P0-02 (PING) — N login sai SONG SONG: bộ đếm đúng bằng N (atomic increment, không mất lần) ═══
+  const raceU = await db.user.create({ data: { username: 'racefail01', fullName: 'Race Fail', passwordHash: hashPassword('User@123456'), status: 'ACTIVE' } });
+  const N = 4; // < ngưỡng 5 → chưa khóa, kiểm counter chính xác
+  await Promise.all(Array.from({ length: N }, () => login('racefail01', 'SAI_MK', { deviceId: 'G-RACE' })));
+  const rrow = await db.user.findUnique({ where: { id: raceU.id } });
+  ok('P0-02: N=4 login sai SONG SONG → failedAttempts === 4 (không mất lần do race)', rrow?.failedAttempts === N, { fa: rrow?.failedAttempts });
+  // Chạm ngưỡng song song → CHỈ 1 transition LOCKED + lockReason AUTH_FAILURE.
+  const raceL = await db.user.create({ data: { username: 'racelock01', fullName: 'Race Lock', passwordHash: hashPassword('User@123456'), status: 'ACTIVE', failedAttempts: 4 } });
+  await Promise.all(Array.from({ length: 4 }, () => login('racelock01', 'SAI_MK', { deviceId: 'G-RACE2' })));
+  const rlrow = await db.user.findUnique({ where: { id: raceL.id } });
+  ok('P0-02: chạm ngưỡng song song → LOCKED + AUTH_FAILURE (đúng 1 transition)', rlrow?.status === 'LOCKED' && rlrow?.lockReason === 'AUTH_FAILURE', { s: rlrow?.status, lr: rlrow?.lockReason, fa: rlrow?.failedAttempts });
 
   await logout();
   // eslint-disable-next-line no-console

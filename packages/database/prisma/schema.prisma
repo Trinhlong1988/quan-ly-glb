@@ -25,7 +25,8 @@ model User {
   status              String    @default("ACTIVE") // ACTIVE|PENDING|LOCKED|DISABLED|DELETED
   forceChangePassword Boolean   @default(false) @map("force_change_password")
   failedAttempts      Int       @default(0) @map("failed_attempts") // đếm mọi lần xác thực SAI (đăng nhập/đổi mật khẩu/pass cấp 2). ≥5 → tự khóa
-  lockedAt            DateTime? @map("locked_at") @db.Timestamptz(3) // thời điểm bị tự khóa do sai quá số lần
+  lockedAt            DateTime? @map("locked_at") @db.Timestamptz(3) // mỏ neo TỰ-MỞ-KHÓA cho khóa-tạm (AUTH_FAILURE); null với khóa tay
+  lockReason          String?   @map("lock_reason") // P0-01: LÝ DO khóa — AUTH_FAILURE (tự khóa sai mật khẩu, tự mở sau cooldown) | ADMIN_LOCK (admin khóa tay, KHÔNG tự mở). Mở rộng: SECURITY_HOLD | EMPLOYMENT_ENDED
   level2Hash          String?   @map("level2_hash") // băm bcrypt (cost cao) mật khẩu CẤP 2 — chỉ Admin/Manager đặt; dùng cho xóa vĩnh viễn
   level2SetAt         DateTime? @map("level2_set_at") @db.Timestamptz(3)
   createdBy           Int?      @map("created_by")

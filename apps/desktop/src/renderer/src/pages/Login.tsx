@@ -12,13 +12,12 @@ export function Login({ onLoggedIn }: { onLoggedIn: (u: AuthUser, mustChange: bo
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // Prefill from safeStorage-backed "remember me".
+  // P1-03: chỉ điền sẵn TÊN đăng nhập (mật khẩu KHÔNG rời main). Đăng nhập-đã-nhớ do main tự giải mã + login.
   useEffect(() => {
     let alive = true;
     window.api.getRemembered().then((creds) => {
       if (alive && creds) {
         setUsername(creds.username);
-        setPassword(creds.password);
         setRemember(true);
       }
     });
@@ -26,6 +25,28 @@ export function Login({ onLoggedIn }: { onLoggedIn: (u: AuthUser, mustChange: bo
       alive = false;
     };
   }, []);
+
+  // Đăng nhập bằng bản đã nhớ (main giải mã mật khẩu) — có xử lý phiên-ở-thiết-bị-khác như đăng nhập thường.
+  async function doLoginRemembered(force: boolean): Promise<void> {
+    const res = await window.api.loginRemembered(force);
+    if (res.ok && res.user) {
+      toast.success(`Xin chào ${res.user.fullName}`);
+      onLoggedIn(res.user, !!res.mustChangePassword);
+      return;
+    }
+    if (res.error === 'SESSION_ACTIVE_ELSEWHERE') {
+      const agree = await toast.confirm(
+        `Tài khoản đang đăng nhập ở "${res.otherDevice ?? 'thiết bị khác'}".\n\nĐăng nhập tại đây sẽ ĐĂNG XUẤT thiết bị kia. Tiếp tục?`,
+        { title: 'Đang đăng nhập ở thiết bị khác', okLabel: 'Đăng nhập tại đây', cancelLabel: 'Hủy' }
+      );
+      if (agree) await doLoginRemembered(true);
+      return;
+    }
+    if (res.error === 'NO_REMEMBERED') return; // chưa lưu → nhập tay bình thường
+    const msg = res.message ?? 'Đăng nhập không hợp lệ.';
+    setError(msg);
+    toast.alert(msg);
+  }
 
   // R46: đăng nhập; nếu tài khoản đang đăng nhập ở thiết bị khác → hỏi xác nhận → đăng nhập lại với force=true
   // (đăng xuất thiết bị kia). Đệ quy 1 lần sau khi người dùng đồng ý.
@@ -52,6 +73,18 @@ export function Login({ onLoggedIn }: { onLoggedIn: (u: AuthUser, mustChange: bo
   async function submit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     setError(null);
+    // P1-03: đã nhớ đăng nhập + để trống ô mật khẩu → dùng bản nhớ (main tự giải mã), không cần gõ lại.
+    if (remember && !password && username) {
+      setBusy(true);
+      try {
+        await doLoginRemembered(false);
+      } catch {
+        setError('Lỗi hệ thống khi đăng nhập.');
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     if (!username || !password) {
       setError('Vui lòng nhập tên đăng nhập và mật khẩu.');
       return;

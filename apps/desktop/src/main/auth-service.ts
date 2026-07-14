@@ -24,20 +24,26 @@ import { notifyAdmins } from './message-service.js';
  * Bỏ qua nếu tài khoản đã LOCKED/DELETED. Trả về true nếu vừa bị khóa ở lần này.
  */
 async function registerFailedAuth(db: Db, userId: number, reasonLabel: string): Promise<boolean> {
+  // P0-02: ATOMIC increment (KHÔNG read-modify-write) — 2 login sai song song không ghi đè mất lần đếm.
+  // updateMany có điều kiện status → chỉ tăng khi CHƯA khóa/xóa (thắng-thua nguyên tử ở tầng DB).
+  const bumped = await db.user.updateMany({
+    where: { id: userId, status: { notIn: ['LOCKED', 'DELETED'] } },
+    data: { failedAttempts: { increment: 1 } }
+  });
+  if (bumped.count === 0) return false; // đã khóa/xóa từ trước → không tính thêm
   const row = await db.user.findUnique({
     where: { id: userId },
     select: { id: true, username: true, fullName: true, status: true, failedAttempts: true }
   });
-  if (!row) return false;
-  if (row.status === 'LOCKED' || row.status === 'DELETED') return false;
-  const failed = row.failedAttempts + 1;
-  const lock = reachesLockout(failed);
-  await db.user.update({
-    where: { id: userId },
-    data: lock
-      ? { failedAttempts: failed, status: 'LOCKED', lockedAt: new Date() }
-      : { failedAttempts: failed }
+  if (!row || row.status === 'LOCKED' || row.status === 'DELETED') return false;
+  const failed = row.failedAttempts; // đã là giá trị SAU tăng (đọc lại sau atomic bump)
+  if (!reachesLockout(failed)) return false;
+  // Chuyển LOCKED có ĐIỀU KIỆN (chống 2 luồng cùng chạm ngưỡng cùng khóa 2 lần) — chỉ 1 luồng count>0.
+  const lockedNow = await db.user.updateMany({
+    where: { id: userId, status: { notIn: ['LOCKED', 'DELETED'] } },
+    data: { status: 'LOCKED', lockedAt: new Date(), lockReason: 'AUTH_FAILURE' }
   });
+  const lock = lockedNow.count > 0;
   if (lock) {
     await writeAudit(db, {
       actorUserId: userId,
@@ -146,9 +152,16 @@ export async function login(username: string, password: string, opts: LoginOpts 
   const db = getDb();
   let row = await db.user.findFirst({ where: { username, deletedAt: null } });
 
-  // #1 — Nếu đang LOCKED do sai mật khẩu nhưng ĐÃ QUA cooldown → tự mở khóa rồi mới xét đăng nhập.
-  if (row && row.status === 'LOCKED' && row.lockedAt && Date.now() - row.lockedAt.getTime() >= LOCKOUT_COOLDOWN_MS) {
-    await db.user.update({ where: { id: row.id }, data: { status: 'ACTIVE', failedAttempts: 0, lockedAt: null } });
+  // #1 — CHỈ tự mở khóa khi khóa-TẠM do sai mật khẩu (lockReason=AUTH_FAILURE) VÀ đã qua cooldown.
+  // P0-01: khóa TAY của Admin (ADMIN_LOCK / SECURITY_HOLD / EMPLOYMENT_ENDED) KHÔNG BAO GIỜ tự mở qua login.
+  if (
+    row &&
+    row.status === 'LOCKED' &&
+    row.lockReason === 'AUTH_FAILURE' &&
+    row.lockedAt &&
+    Date.now() - row.lockedAt.getTime() >= LOCKOUT_COOLDOWN_MS
+  ) {
+    await db.user.update({ where: { id: row.id }, data: { status: 'ACTIVE', failedAttempts: 0, lockedAt: null, lockReason: null } });
     await writeAudit(db, { actorUserId: row.id, action: 'USER_AUTO_UNLOCKED', targetType: 'User', targetId: String(row.id), after: { username: row.username, reason: 'hết thời gian tạm khóa' } });
     row = await db.user.findFirst({ where: { username, deletedAt: null } });
   }
@@ -449,8 +462,9 @@ export async function adminResetPassword(
       passwordHash: hashPassword(newPassword),
       forceChangePassword: true,
       failedAttempts: 0,
-      // Đặt lại mật khẩu cũng MỞ KHÓA nếu tài khoản đang bị tự khóa.
-      ...(target.status === 'LOCKED' ? { status: 'ACTIVE', lockedAt: null } : {})
+      // Đặt lại mật khẩu MỞ KHÓA nếu đang khóa-TẠM do sai mật khẩu (AUTH_FAILURE). Khóa TAY (ADMIN_LOCK…)
+      // KHÔNG tự mở khi reset mật khẩu — admin phải mở tay tường minh (P0-01 giữ đúng chính sách khóa).
+      ...(target.status === 'LOCKED' && target.lockReason === 'AUTH_FAILURE' ? { status: 'ACTIVE', lockedAt: null, lockReason: null } : {})
     }
   });
 

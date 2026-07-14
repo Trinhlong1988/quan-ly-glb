@@ -108,12 +108,12 @@ export async function runNotifySelfTest(): Promise<number> {
   // ═══ 4) DUYỆT yêu cầu của acc (mgrA duyệt) → acc nhận APPROVED (=1) ═══
   await logout();
   await login('nfmgruser1', PW);
-  const apv = await approveCancelBill(reqAcc.id!);
+  const apv = await approveCancelBill(reqAcc.id!, PW);
   ok('mgrA duyệt yêu cầu của acc → ok', apv.ok === true, apv);
   ok('4) acc nhận thông báo ĐÃ DUYỆT (=1)', (await cnt(accId, APV)) === 1);
 
   // ═══ 6) IDEMPOTENT: duyệt lại yêu cầu đã xử lý → INVALID_STATE, KHÔNG đẩy thêm ═══
-  const apvAgain = await approveCancelBill(reqAcc.id!);
+  const apvAgain = await approveCancelBill(reqAcc.id!, PW);
   ok('6) duyệt lại → ALREADY_DECIDED', apvAgain.ok === false && apvAgain.error === 'ALREADY_DECIDED', apvAgain);
   ok('6) acc VẪN chỉ có 1 thông báo ĐÃ DUYỆT (không nhân đôi)', (await cnt(accId, APV)) === 1);
 

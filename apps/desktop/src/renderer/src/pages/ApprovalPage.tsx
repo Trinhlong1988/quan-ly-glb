@@ -5,7 +5,6 @@ import { fmtDate, hasPermission } from '@glb/shared';
 import type { CancelRequestDto, EntityCancelRequestDto } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
 import { Modal } from '../components/Modal.js';
-import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { Field, inputCls } from '../components/Field.js';
 import { Button } from '../components/Button.js';
 import { StatBar } from '../components/StatBar.js';
@@ -92,8 +91,8 @@ export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
     }
   }
 
-  async function doApprove(row: CancelRequestDto): Promise<void> {
-    const res = await window.api.cancelApprove(row.id);
+  async function doApprove(row: CancelRequestDto, password: string, note?: string): Promise<void> {
+    const res = await window.api.cancelApprove(row.id, password, note);
     if (res.ok) toast.success(`Đã duyệt hủy bill ${row.billCode ?? row.transactionId}.`);
     else toast.alert(res.message ?? 'Không duyệt được yêu cầu.', 'Duyệt thất bại');
     setDialog(null);
@@ -106,8 +105,8 @@ export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
     setDialog(null);
     await reload();
   }
-  async function doApproveBulk(): Promise<void> {
-    const res = await window.api.cancelApproveBulk([...sel.selected]);
+  async function doApproveBulk(password: string): Promise<void> {
+    const res = await window.api.cancelApproveBulk([...sel.selected], password);
     if (res.ok) summarize('Đã duyệt', res.done ?? 0, res.skipped);
     else toast.alert(res.message ?? 'Duyệt hàng loạt thất bại.', 'Duyệt thất bại');
     setDialog(null);
@@ -316,21 +315,19 @@ export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
       )}
 
       {dialog?.kind === 'approve' && (
-        <ConfirmDialog
+        <ApprovePasswordModal
           title="Duyệt hủy bill"
-          message={`Duyệt yêu cầu hủy bill "${dialog.row.billCode ?? dialog.row.transactionId}" (${money(dialog.row.amount)})? Bill sẽ chuyển sang Đã hủy và không còn tính vào doanh thu.`}
-          confirmLabel="Duyệt hủy"
-          onCancel={() => setDialog(null)}
-          onConfirm={() => doApprove(dialog.row)}
+          message={`Duyệt yêu cầu hủy bill "${dialog.row.billCode ?? dialog.row.transactionId}" (${money(dialog.row.amount)})? Bill sẽ chuyển sang Đã hủy và không còn tính vào doanh thu. Nhập mật khẩu của bạn để xác nhận.`}
+          onClose={() => setDialog(null)}
+          onSubmit={(password, note) => doApprove(dialog.row, password, note)}
         />
       )}
       {dialog?.kind === 'approveBulk' && (
-        <ConfirmDialog
+        <ApprovePasswordModal
           title="Duyệt các yêu cầu đã chọn"
-          message={`Duyệt ${sel.count} yêu cầu hủy đã chọn? Yêu cầu nào bạn không đủ thẩm quyền sẽ được bỏ qua kèm lý do.`}
-          confirmLabel={`Duyệt ${sel.count} yêu cầu`}
-          onCancel={() => setDialog(null)}
-          onConfirm={() => doApproveBulk()}
+          message={`Duyệt ${sel.count} yêu cầu hủy đã chọn? Yêu cầu nào bạn không đủ thẩm quyền sẽ được bỏ qua kèm lý do. Nhập mật khẩu của bạn để xác nhận.`}
+          onClose={() => setDialog(null)}
+          onSubmit={(password) => doApproveBulk(password)}
         />
       )}
       {dialog?.kind === 'reject' && (

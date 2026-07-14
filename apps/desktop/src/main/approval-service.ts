@@ -5,7 +5,7 @@
 import { auditSnapshot } from '@glb/business-rules';
 import { hasPermission, type AuthUser } from '@glb/shared';
 import type { Db } from '@glb/database';
-import { requirePermission } from './guard.js';
+import { requirePermission, verifyActorPassword } from './guard.js';
 import { writeAudit } from './audit.js';
 
 const REQUEST = 'BILL_CANCEL_REQUEST';
@@ -221,12 +221,13 @@ async function approveOne(db: Db, user: AuthUser, requestId: number, decisionNot
       });
       if (billMoved.count === 0)
         throw new TxGuardError('INVALID_STATE', 'Bill không ở trạng thái chờ hủy (có thể đã đổi trạng thái).');
+      // P0-07: ghi audit TRONG cùng transaction (txc) → state-transition + dấu vết commit/rollback ATOMIC.
+      await writeAudit(txc, { actorUserId: user.id, action: 'BILL_CANCEL_APPROVED', targetType: 'Transaction', targetId: String(tx.id), before: auditSnapshot({ status: tx.status, revenueAmount: tx.revenueAmount }), after: auditSnapshot({ status: 'CANCELLED', requestId: req.id, note }) });
     });
   } catch (e) {
     if (e instanceof TxGuardError) return { ok: false, error: e.code, message: e.userMessage };
     throw e;
   }
-  await writeAudit(db, { actorUserId: user.id, action: 'BILL_CANCEL_APPROVED', targetType: 'Transaction', targetId: String(tx.id), before: auditSnapshot({ status: tx.status, revenueAmount: tx.revenueAmount }), after: auditSnapshot({ status: 'CANCELLED', requestId: req.id, note }) });
   // F-NOTIF: báo kết quả cho người tạo yêu cầu (§②b) — chỉ chạy ở nhánh thành công.
   try {
     await pushSystemNotice(
@@ -258,17 +259,22 @@ async function rejectOne(db: Db, user: AuthUser, requestId: number, decisionNote
         data: { status: 'REJECTED', decidedBy: user.id, decidedAt, decisionNote: note }
       });
       if (reqMoved.count === 0) throw new TxGuardError('INVALID_STATE', 'Yêu cầu đã được xử lý.');
-      // Hoàn bill về POSTED — chỉ khi đang chờ hủy (guard theo trạng thái, không ép trạng thái khác).
-      await txc.transaction.updateMany({
+      // P0-04: HOÀN bill CANCEL_PENDING→POSTED PHẢI kiểm count===1 (đối xứng approve). Nếu bill đã đổi
+      // trạng thái (POSTED/CANCELLED bởi đường khác) mà vẫn REJECTED yêu cầu → Approval & Bill LỆCH nhau.
+      // count!==1 → ném INVALID_STATE → ROLLBACK cả việc REJECTED yêu cầu (giữ nguyên PENDING).
+      const billMoved = await txc.transaction.updateMany({
         where: { id: req.entityId, status: 'CANCEL_PENDING' },
         data: { status: 'POSTED', updatedBy: user.id }
       });
+      if (billMoved.count !== 1)
+        throw new TxGuardError('INVALID_STATE', 'Bill không còn ở trạng thái chờ hủy — không thể hoàn về đã ghi.');
+      // P0-07: audit TRONG cùng transaction — REJECTED + hoàn bill + dấu vết commit/rollback ATOMIC.
+      await writeAudit(txc, { actorUserId: user.id, action: 'BILL_CANCEL_REJECTED', targetType: 'Transaction', targetId: String(req.entityId), after: auditSnapshot({ requestId: req.id, note }) });
     });
   } catch (e) {
     if (e instanceof TxGuardError) return { ok: false, error: e.code, message: e.userMessage };
     throw e;
   }
-  await writeAudit(db, { actorUserId: user.id, action: 'BILL_CANCEL_REJECTED', targetType: 'Transaction', targetId: String(req.entityId), after: auditSnapshot({ requestId: req.id, note }) });
   // F-NOTIF: báo kết quả cho người tạo yêu cầu (§②b) — chỉ chạy ở nhánh thành công.
   try {
     const txForNotice = await db.transaction.findUnique({ where: { id: req.entityId }, select: { code: true } });
@@ -286,9 +292,16 @@ async function rejectOne(db: Db, user: AuthUser, requestId: number, decisionNote
   return { ok: true, id: req.id };
 }
 
-export async function approveCancelBill(requestId: number, decisionNote?: string): Promise<MutationResult> {
+export async function approveCancelBill(requestId: number, actorPassword: string, decisionNote?: string): Promise<MutationResult> {
   const g = await requirePermission(APPROVE, { action: 'BILL_CANCEL_APPROVED', targetType: 'ApprovalRequest', targetId: String(requestId) });
   if (!g.ok) return g;
+  // P0-03: DUYỆT hủy bill BẮT BUỘC verify mật khẩu người duyệt THẬT ở service (đồng bộ entity-cancel).
+  // Trước đây note ghi "đã nhập mật khẩu" nhưng KHÔNG verify → tự-duyệt bỏ qua xác thực. Rỗng→VALIDATION.
+  if (!actorPassword) return { ok: false, error: 'VALIDATION', message: 'Vui lòng nhập mật khẩu để xác nhận.' };
+  if (!(await verifyActorPassword(g.user, actorPassword))) {
+    await writeAudit(g.db, { actorUserId: g.user.id, action: 'BILL_CANCEL_APPROVED', targetType: 'ApprovalRequest', targetId: String(requestId), after: { denied: true, reason: 'WRONG_PASSWORD' } });
+    return { ok: false, error: 'WRONG_PASSWORD', message: 'Mật khẩu xác nhận không đúng.' };
+  }
   const r = await approveOne(g.db, g.user, requestId, decisionNote);
   return r.ok ? { ok: true, id: r.id } : { ok: false, error: r.error, message: r.message };
 }
@@ -303,10 +316,16 @@ export async function rejectCancelBill(requestId: number, decisionNote: string):
 // ═════════════════════════════════════════════════════════════════════════════
 // DUYỆT / TỪ CHỐI HÀNG LOẠT (§4.4b) — mỗi cái áp phân vai riêng, cái không được phép thì SKIP
 // ═════════════════════════════════════════════════════════════════════════════
-export async function approveCancelBills(requestIds: number[], decisionNote?: string): Promise<BulkResult> {
+export async function approveCancelBills(requestIds: number[], actorPassword: string, decisionNote?: string): Promise<BulkResult> {
   const g = await requirePermission(APPROVE, { action: 'BILL_CANCEL_APPROVED', targetType: 'ApprovalRequest' });
   if (!g.ok) return { ...g, done: 0, skipped: [] };
   if (!requestIds || requestIds.length === 0) return { ok: false, error: 'VALIDATION', message: 'Chưa chọn yêu cầu.', done: 0, skipped: [] };
+  // P0-03: verify mật khẩu 1 LẦN cho cả lô (mọi phiếu đều qua xác thực người duyệt, gồm phiếu tự-tạo).
+  if (!actorPassword) return { ok: false, error: 'VALIDATION', message: 'Vui lòng nhập mật khẩu để xác nhận.', done: 0, skipped: [] };
+  if (!(await verifyActorPassword(g.user, actorPassword))) {
+    await writeAudit(g.db, { actorUserId: g.user.id, action: 'BILL_CANCEL_APPROVED', targetType: 'ApprovalRequest', after: { denied: true, reason: 'WRONG_PASSWORD', bulk: true } });
+    return { ok: false, error: 'WRONG_PASSWORD', message: 'Mật khẩu xác nhận không đúng.', done: 0, skipped: [] };
+  }
   let done = 0;
   const skipped: BulkResult['skipped'] = [];
   for (const id of requestIds) {
@@ -358,10 +377,12 @@ export async function listCancelRequests(status = 'PENDING'): Promise<{ ok: bool
   const txs = new Map((await db.transaction.findMany({ where: { id: { in: txIds } }, select: { id: true, code: true, amount: true } })).map((t) => [t.id, t]));
   const reqUserIds = [...new Set(rows.map((r) => r.requestedBy))];
   const names = new Map((await db.user.findMany({ where: { id: { in: reqUserIds } }, select: { id: true, fullName: true, username: true } })).map((u) => [u.id, u.fullName || u.username]));
+  // P2-01: nạp quyền requester 1 LẦN cho mỗi user PHÂN BIỆT (không N+1 theo từng phiếu trong vòng lặp).
+  const approverMap = new Map<number, boolean>();
+  for (const rid of reqUserIds) approverMap.set(rid, (await userPermSet(db, rid)).has(APPROVE));
   const data: CancelRequestDto[] = [];
   for (const r of rows) {
-    const requesterPerms = await userPermSet(db, r.requestedBy);
-    const requesterIsApprover = requesterPerms.has(APPROVE);
+    const requesterIsApprover = approverMap.get(r.requestedBy) ?? false;
     const isSelf = user.id === r.requestedBy;
     // Mr.Long 13/7: ADMIN (elevated) được tự duyệt yêu cầu của mình (chốt = nhập mật khẩu khi duyệt).
     let canApprove = true;

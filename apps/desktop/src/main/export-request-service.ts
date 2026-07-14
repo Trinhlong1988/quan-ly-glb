@@ -53,18 +53,34 @@ async function withRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<T> {
   throw last;
 }
 
-/** VND nguyên từ number. allowZero=false → bắt buộc > 0. Ném ReqAbort nếu không hợp lệ. */
+/** VND nguyên. allowZero=false → bắt buộc > 0. Ném ReqAbort nếu không hợp lệ.
+ *  P0-06: nhận chuỗi-chữ-số PARSE THẲNG sang BigInt (không qua Number → không mất chữ số). Nhận number thì
+ *  CHẶN > MAX_SAFE_INTEGER (2^53) để không có giá trị bị làm tròn âm thầm trước khi lưu (chuẩn tiền BigInt B39). */
 function toVnd(v: unknown, label: string, opts: { allowZero?: boolean } = {}): bigint {
-  const n = typeof v === 'number' ? v : Number(v);
-  if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0 || (!opts.allowZero && n === 0)) {
+  const bad = (): never => {
     throw new ReqAbort({ ok: false, error: 'VALIDATION', message: `${label} phải là số nguyên ${opts.allowZero ? '≥ 0' : '> 0'} (VND).` });
+  };
+  let amount: bigint;
+  if (typeof v === 'bigint') {
+    amount = v;
+  } else if (typeof v === 'string') {
+    const raw = v.trim();
+    if (!/^\d+$/.test(raw)) bad(); // chỉ chữ số (không dấu, không thập phân, không âm)
+    amount = BigInt(raw);
+  } else {
+    const n = typeof v === 'number' ? v : Number(v);
+    if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) bad();
+    if (n > Number.MAX_SAFE_INTEGER) bad(); // chống làm tròn âm thầm trước BigInt
+    amount = BigInt(n);
   }
-  return BigInt(n);
+  if (amount < 0n || (!opts.allowZero && amount === 0n)) bad();
+  return amount;
 }
 
 const KINDS = new Set(['POS', 'TID']);
 const HANDOVER_KINDS = new Set(['SALE', 'RENT']);
 const PRICE_MODES = new Set(['LISTED', 'CUSTOM']);
+const PAYMENT_METHODS = new Set(['CASH', 'CK']); // P0-05 allowlist hình thức thanh toán
 
 // ═════════════════════════════════════════════════════════════════════════════
 // TẠO YÊU CẦU (không động tiền/kho — chỉ ghi phiếu PENDING)
@@ -150,7 +166,10 @@ export async function createExportRequest(input: CreateExportRequestInput): Prom
     }
 
     // Hình thức thanh toán (Mr.Long 14/7): CASH | CK. Áp cho mọi bút toán tiền khi duyệt.
-    const method = String(input.method ?? 'CASH').toUpperCase() === 'CK' ? 'CK' : 'CASH';
+    // P0-05: ALLOWLIST — normalize trim+upper rồi CHẶN giá trị lạ (BANK/TRANSFER/typo) bằng VALIDATION,
+    // KHÔNG âm thầm ép về CASH (sai báo cáo dòng tiền). Không truyền = mặc định CASH (đúng policy).
+    const method = String(input.method ?? 'CASH').trim().toUpperCase();
+    if (!PAYMENT_METHODS.has(method)) throw new ReqAbort({ ok: false, error: 'VALIDATION', message: 'Hình thức thanh toán chỉ có Tiền mặt (CASH) hoặc Chuyển khoản (CK).' });
     const code = await nextCode('YCXK', db);
     const created = await db.exportRequest.create({
       data: {
@@ -517,17 +536,17 @@ export async function approveExportRequest(requestId: number, lines: ApproveLine
         }
         const moved = await tx.exportRequest.updateMany({ where: { id: req.id, status: 'PENDING' }, data: { status: 'APPROVED', decidedBy: user.id, decidedAt: occurredAt, decisionNote: decidedNote } });
         if (moved.count === 0) throw new ReqAbort({ ok: false, error: 'ALREADY_DECIDED', message: 'Yêu cầu đã được xử lý.' });
+        // P0-07: audit tổng-hợp duyệt phiếu GHI TRONG cùng $transaction với trừ tiền/tồn kho → atomic.
+        await writeAudit(tx, {
+          actorUserId: user.id, action: 'EXPORT_REQUEST_APPROVED', targetType: 'ExportRequest', targetId: String(req.id),
+          after: auditSnapshot({ code: req.code, kind: req.kind, handoverKind: req.handoverKind, quantity: req.quantity, lines: sorted.map((l) => ({ seq: l.seq, posSerial: l.posSerial ?? null, tid: l.tid ?? null })), note: decidedNote })
+        });
       });
     });
   } catch (e) {
     if (e instanceof ReqAbort) return e.result;
     throw e;
   }
-
-  await writeAudit(db, {
-    actorUserId: user.id, action: 'EXPORT_REQUEST_APPROVED', targetType: 'ExportRequest', targetId: String(req.id),
-    after: auditSnapshot({ code: req.code, kind: req.kind, handoverKind: req.handoverKind, quantity: req.quantity, lines: sorted.map((l) => ({ seq: l.seq, posSerial: l.posSerial ?? null, tid: l.tid ?? null })), note: decidedNote })
-  });
   return { ok: true, id: req.id };
 }
 

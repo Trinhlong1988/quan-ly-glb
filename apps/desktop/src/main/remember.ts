@@ -33,6 +33,11 @@ export function clearRemembered(): void {
   }
 }
 
+/** P1-03: chỉ TÊN đăng nhập được phép ra renderer (điền sẵn ô). Mật khẩu KHÔNG BAO GIỜ rời main. */
+export function getRememberedUsername(): string | null {
+  return getRemembered()?.username ?? null;
+}
+
 export function getRemembered(): RememberedCreds | null {
   try {
     if (!existsSync(file()) || !safeStorage.isEncryptionAvailable()) return null;

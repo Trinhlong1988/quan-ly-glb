@@ -1508,7 +1508,8 @@ export interface GlbApi {
   setLevel2(level1: string, newLevel2: string, confirmLevel2: string): Promise<MutationOutcome>;
   resetLevel2(level1: string, oldLevel2: string, newLevel2: string, confirmLevel2: string): Promise<MutationOutcome>;
   validatePassword(pwd: string): Promise<ValidationResult>;
-  getRemembered(): Promise<RememberedCreds | null>;
+  getRemembered(): Promise<{ username: string } | null>;
+  loginRemembered(force?: boolean): Promise<LoginOutcome>;
   saveRemembered(username: string, password: string): Promise<{ ok: boolean }>;
   clearRemembered(): Promise<{ ok: boolean }>;
 
@@ -1771,9 +1772,9 @@ export interface GlbApi {
   // ── P1.2 Approval Engine (hủy bill có duyệt) ──
   cancelRequest(transactionId: number, reason: string): Promise<MutationOutcome>;
   cancelRequestList(status?: string): Promise<ListResult<CancelRequestDto>>;
-  cancelApprove(requestId: number, note?: string): Promise<MutationOutcome>;
+  cancelApprove(requestId: number, password: string, note?: string): Promise<MutationOutcome>;
   cancelReject(requestId: number, note: string): Promise<MutationOutcome>;
-  cancelApproveBulk(requestIds: number[], note?: string): Promise<BulkSkipOutcome>;
+  cancelApproveBulk(requestIds: number[], password: string, note?: string): Promise<BulkSkipOutcome>;
   cancelRejectBulk(requestIds: number[], note: string): Promise<BulkSkipOutcome>;
 
   // ── R34 Duyệt hủy (xóa qua duyệt) TID/POS/Khách/Nhân sự ──

@@ -366,14 +366,23 @@ async function setUserLock(id: number, lock: boolean): Promise<MutationResult> {
       return { ok: false, error: 'LAST_ADMIN', message: 'Không thể khóa Admin cuối cùng.' };
     }
   }
-  await db.user.update({ where: { id }, data: { status: lock ? 'LOCKED' : 'ACTIVE' } });
+  // P0-01: `lockedAt` LÀ MỎ NEO tự-mở-khóa của khóa-TẠM (auth failure). Khóa/mở TAY của Admin PHẢI
+  // đặt lockedAt=null → login (auth-service #1) chỉ tự mở khi lockedAt!=null → khóa tay KHÔNG BAO GIỜ tự mở.
+  // Nếu không clear, một lần auto-lock cũ để lại lockedAt=T1; admin mở rồi khóa lại → login thấy lockedAt cũ
+  // >15′ → tự mở khóa tay của admin (bug lệch chính sách khóa). Mở tay cũng reset bộ đếm sai.
+  await db.user.update({
+    where: { id },
+    data: lock
+      ? { status: 'LOCKED', lockedAt: null, lockReason: 'ADMIN_LOCK' } // khóa TAY → không có mỏ neo tự-mở
+      : { status: 'ACTIVE', lockedAt: null, lockReason: null, failedAttempts: 0 }
+  });
   await writeAudit(db, {
     actorUserId: user.id,
     action,
     targetType: 'User',
     targetId: String(id),
     before: { status: row.status },
-    after: { status: lock ? 'LOCKED' : 'ACTIVE' }
+    after: { status: lock ? 'LOCKED' : 'ACTIVE', manual: true }
   });
   return { ok: true, id };
 }
