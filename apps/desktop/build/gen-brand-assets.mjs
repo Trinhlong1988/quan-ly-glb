@@ -7,15 +7,16 @@ const fs = require('fs');
 const OUT = 'D:/TT HKD AI/tools/quan-ly-glb/apps/desktop/build';
 const BRAND = '#1657d0', BRAND2 = '#1247ae';
 
-// ShieldCheck (lucide) — nét trắng, giống logo màn đăng nhập.
+// Chữ "G" kiểu Google (Mr.Long 14/7): vòng cung dày MỞ bên phải + thanh ngang (crossbar) — 1 màu.
+// Toạ độ chuẩn viewBox 24 (tâm 12,12, bán kính 7) để dùng chung transform như trước.
 const shieldPaths = (stroke, sw) =>
-  `<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="none" stroke="${stroke}" stroke-width="${sw}" stroke-linejoin="round"/>` +
-  `<path d="m9 12 2 2 4-4" fill="none" stroke="${stroke}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  `<path d="M18.58 14.39 A7 7 0 1 1 18.58 9.61" fill="none" stroke="${stroke}" stroke-width="${sw}" stroke-linecap="butt"/>` +
+  `<path d="M12 12 H18.7" fill="none" stroke="${stroke}" stroke-width="${sw}" stroke-linecap="butt"/>`;
 
 // ---- ICON 256 (ô bo góc xanh + shield trắng) ----
 const iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
   <rect width="256" height="256" rx="52" fill="${BRAND}"/>
-  <g transform="translate(52,50) scale(6.33)">${shieldPaths('#ffffff', 1.8)}</g>
+  <g transform="translate(52,50) scale(6.33)">${shieldPaths('#ffffff', 3.2)}</g>
 </svg>`;
 
 function buildIco(images) {
