@@ -15,6 +15,7 @@ import {
   KeyRound,
   TrendingUp,
   ClipboardCheck,
+  PackageOpen,
   Loader2,
   RefreshCw,
   UserRound,
@@ -37,6 +38,7 @@ import { BankConfigPage } from './BankConfigPage.js';
 import { DossierPage } from './DossierPage.js';
 import { RevenueDebtPage } from './RevenueDebtPage.js';
 import { ApprovalPage } from './ApprovalPage.js';
+import { ExportApprovalPage } from './ExportApprovalPage.js';
 import { UpdateBanner } from '../components/UpdateBanner.js';
 import { useRealtime } from '../lib/realtime.js';
 
@@ -73,6 +75,8 @@ const MENU: MenuItem[] = [
   { key: 'bankcfg', label: 'Quản Lý Ngân Hàng - Đối Tác', icon: <Landmark className="h-[18px] w-[18px]" />, perms: ['CONFIG_BANK_VIEW', 'CONFIG_FEE_VIEW', 'CONFIG_INDUSTRY_VIEW', 'CONFIG_HANDOVER_VIEW'] },
   // R34: "Duyệt Hủy" gộp yêu cầu hủy bill + hủy dữ liệu (TID/POS/Khách/Nhân sự). Hiện với ai có bất kỳ quyền duyệt.
   { key: 'approval', label: 'Quản lý dữ liệu yêu cầu duyệt hủy', icon: <ClipboardCheck className="h-[18px] w-[18px]" />, perms: ['BILL_CANCEL_APPROVE', 'TID_CANCEL_APPROVE', 'POS_CANCEL_APPROVE', 'CUSTOMER_CANCEL_APPROVE', 'USER_CANCEL_APPROVE'], badge: 'pendingCancels' },
+  // PHASE 4 — "Duyệt xuất kho": duyệt phiếu yêu cầu xuất kho (chọn seri/TID + trừ tồn kho). Menu RIÊNG (luồng khác duyệt-hủy).
+  { key: 'exportapproval', label: 'Duyệt xuất kho', icon: <PackageOpen className="h-[18px] w-[18px]" />, perms: ['EXPORT_REQUEST_APPROVE'] },
   { key: 'system', label: 'Quản Lý Cấu Hình Hệ Thống', icon: <Settings className="h-[18px] w-[18px]" />, perms: ['AUDIT_LOG_VIEW', 'SYSTEM_SETTING_VIEW', 'BACKUP_CREATE', 'BACKUP_RESTORE', 'STORAGE_VIEW', 'TRASH_VIEW'] }
 ];
 
@@ -290,6 +294,7 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
           {activeItem?.key === 'finance' && <FinancePage user={user} />}
           {activeItem?.key === 'revdebt' && <RevenueDebtPage user={user} />}
           {activeItem?.key === 'approval' && <ApprovalPage user={user} />}
+          {activeItem?.key === 'exportapproval' && <ExportApprovalPage user={user} />}
           {activeItem?.key === 'system' && <SystemConfigPage user={user} />}
         </main>
       </div>

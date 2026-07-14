@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Plus, Loader2, CreditCard, Link2, RefreshCw, Undo2, PackageCheck, Send, Download, History, Tag, Trophy, FilterX, Percent, Trash2, Banknote, Pencil } from 'lucide-react';
+import { Plus, Loader2, CreditCard, Link2, RefreshCw, Undo2, PackageCheck, Send, Download, History, Tag, Trophy, FilterX, Percent, Trash2, Banknote, Pencil, PackageOpen } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
-import { hasPermission, fmtDate } from '@glb/shared';
+import { hasPermission, hasAnyPermission, fmtDate } from '@glb/shared';
 import type { TidDto, UndeliveredTidDto, PosDto, CustomerDto, FundDto, TidRefs, TimelineEventDto, CreateTidInput, ConfigTidInput, TidRevenueRankRow, TidSellFeeRowDto, FeeTypeDto, HandoverTypeLite } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
 import { isStaleWrite, STALE_TITLE } from '../lib/optlock.js';
@@ -20,9 +20,11 @@ import { usePagination } from '../components/Pagination.js';
 import { exportCsv } from '../lib/exportCsv.js';
 import { StatusTab, FeePreview } from './TidConfigPage.js';
 import { TabBar, TabButton } from '../components/Tabs.js';
+// PHASE 3 — tab "Yêu cầu xuất kho TID" (tạo phiếu TID chưa seri → duyệt sau).
+import { ExportRequestPanel } from '../components/ExportRequestPanel.js';
 
 const TID_STATUSES = ['UNASSIGNED', 'ACTIVE', 'DEAD', 'CLOSED', 'RECALLED'];
-type Tab = 'all' | 'undelivered' | 'status' | 'ranking';
+type Tab = 'all' | 'undelivered' | 'exportreq' | 'status' | 'ranking';
 
 /** VND, nhóm 3 số bằng dấu chấm (KHÔNG toLocaleString — R_UI QA gate). Giữ dấu âm. Đồng bộ RevenuePage. */
 function money(n: number): string {
@@ -40,6 +42,7 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
   const canRevenue = hasPermission(user, 'REVENUE_VIEW'); // #13: tab xếp hạng doanh số (dữ liệu tài chính)
   const canCancelReq = hasPermission(user, 'TID_CANCEL_REQUEST'); // R34: yêu cầu hủy (xóa mềm qua duyệt)
   const canSell = hasPermission(user, 'DEVICE_SALE_MANAGE'); // Bán TID rời (doanh thu — quyền tiền, không dùng TID_MANAGE)
+  const canExportReq = hasAnyPermission(user, ['EXPORT_REQUEST_VIEW', 'EXPORT_REQUEST_CREATE']); // PHASE 3 — yêu cầu xuất kho TID
 
   const [tab, setTab] = useState<Tab>('all');
   const [rows, setRows] = useState<TidDto[]>([]);
@@ -106,7 +109,7 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
     setLoading(false);
   }
   useEffect(() => {
-    if (tab !== 'status' && tab !== 'ranking') void reload();
+    if (tab !== 'status' && tab !== 'ranking' && tab !== 'exportreq') void reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, statusFilter, assignFilter, deliverFilter, industryFilter, holdingCustomerFilter, dossierSourceFilter, deliveredFrom, deliveredTo]);
 
@@ -195,6 +198,11 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
         <TabButton active={tab === 'undelivered'} onClick={() => setTab('undelivered')} icon={<PackageCheck className="h-4 w-4" />}>
           TID chưa giao {undelivered.length > 0 && <span className="ml-1 rounded-full bg-danger px-1.5 text-xs text-white">{undelivered.length}</span>}
         </TabButton>
+        {canExportReq && (
+          <TabButton active={tab === 'exportreq'} onClick={() => setTab('exportreq')} icon={<PackageOpen className="h-4 w-4" />}>
+            Yêu cầu xuất kho TID
+          </TabButton>
+        )}
         {canRevenue && (
           <TabButton active={tab === 'ranking'} onClick={() => setTab('ranking')} icon={<Trophy className="h-4 w-4" />}>
             Xếp hạng doanh số
@@ -209,6 +217,7 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
 
       {tab === 'status' && <StatusTab canManage={canConfig} />}
       {tab === 'ranking' && <RevenueRankingTab />}
+      {tab === 'exportreq' && <ExportRequestPanel user={user} kind="TID" />}
 
       {/* 2 nhóm StatBar theo 2 chiều độc lập (§3.4). Đếm CLIENT từ tidList (trả full). */}
       {tab === 'all' && (

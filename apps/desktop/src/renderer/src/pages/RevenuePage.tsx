@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Ban, Trash2, Loader2, TrendingUp, Download, Receipt, Handshake, Users, FilterX, RefreshCw } from 'lucide-react';
+import { Plus, Ban, Trash2, Loader2, TrendingUp, Download, Receipt, Handshake, Users, FilterX, RefreshCw, Pencil } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate, groupDigits } from '@glb/shared';
 import type {
@@ -53,6 +53,17 @@ function BillStatusBadge({ status }: { status: string }): JSX.Element {
 
 const emptySummary: RevenueSummary = { count: 0, totalAmount: 0, totalRevenuePartner: 0, totalRevenueSell: 0, totalRevenue: 0 };
 
+/** #4 — giá trị điền sẵn cho form Ghi nhận giao dịch khi Điều chỉnh (từ bill cũ). Tất cả dạng chuỗi (state form). */
+interface TxnFormInitial {
+  bankId?: string;
+  hkdName?: string;
+  tidId?: string;
+  cardTypeId?: string;
+  feeTypeId?: string;
+  amount?: string;
+  note?: string;
+}
+
 export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
   const toast = useToast();
   const canManage = hasPermission(user, 'REVENUE_MANAGE');
@@ -89,9 +100,11 @@ export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
   const [depositsHeldRows, setDepositsHeldRows] = useState<DepositHeldRow[]>([]);
 
   const [showForm, setShowForm] = useState(false); // GD chỉ GHI NHẬN (create); bill bất biến — sửa = hủy+tạo lại (BILL_IMMUTABLE)
+  const [formInitial, setFormInitial] = useState<TxnFormInitial | undefined>(undefined); // #4 — điền sẵn khi Điều chỉnh
   const [del, setDel] = useState<TransactionDto | null>(null);
   const [bulkDel, setBulkDel] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<TransactionDto | null>(null);
+  const [adjustTarget, setAdjustTarget] = useState<TransactionDto | null>(null); // #4 — Điều chỉnh (hủy cũ + tạo mới)
   const sel = useRowSelection();
 
   function buildFilter(pg: number): Record<string, unknown> {
@@ -177,6 +190,29 @@ export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
     else toast.alert(res.message ?? 'Không gửi được yêu cầu hủy.', 'Yêu cầu hủy thất bại');
     setCancelTarget(null);
     await reload();
+  }
+
+  // #4 Điều chỉnh bill (phương án 1 Mr.Long): bill bất biến → tạo YÊU CẦU HỦY bill cũ (qua duyệt) rồi
+  // MỞ SẴN form tạo bill mới, điền sẵn TID/thẻ/loại phí/số tiền của bill cũ để sửa + tạo lại.
+  async function doAdjust(t: TransactionDto, reason: string): Promise<void> {
+    const res = await window.api.cancelRequest(t.id, reason);
+    if (res.ok) {
+      toast.success(`Đã gửi yêu cầu hủy bill ${t.code ?? t.id} — điền form để tạo bill mới thay thế.`);
+      setFormInitial({
+        bankId: t.bankId != null ? String(t.bankId) : '',
+        hkdName: t.hkdName ?? '',
+        tidId: String(t.tidId),
+        cardTypeId: t.cardTypeId != null ? String(t.cardTypeId) : '',
+        feeTypeId: t.feeTypeId != null ? String(t.feeTypeId) : '',
+        amount: String(t.amount),
+        note: t.note ?? ''
+      });
+      setShowForm(true);
+      await reload();
+    } else {
+      toast.alert(res.message ?? 'Không gửi được yêu cầu hủy.', 'Điều chỉnh thất bại');
+    }
+    setAdjustTarget(null);
   }
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -378,6 +414,9 @@ export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
                 <td className="px-3 py-3 text-center">{r.settled ? <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-xs font-medium text-emerald-600">Đã thu</span> : <span className="rounded bg-amber-50 px-1.5 py-0.5 text-xs font-medium text-amber-600">Chưa</span>}</td>
                 {showActions && (
                   <td className="px-3 py-3"><div className="flex justify-end gap-1">
+                    {canManage && canRequestCancel && r.status === 'POSTED' && (
+                      <IconBtn title="Điều chỉnh (yêu cầu hủy bill cũ + tạo bill mới)" variant="edit" onClick={() => setAdjustTarget(r)}><Pencil className="h-4 w-4" /></IconBtn>
+                    )}
                     {canRequestCancel && r.status === 'POSTED' && (
                       <IconBtn title="Yêu cầu hủy bill" variant="edit" onClick={() => setCancelTarget(r)}><Ban className="h-4 w-4" /></IconBtn>
                     )}
@@ -402,11 +441,36 @@ export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
         </div>
       )}
 
-      {showForm && <TransactionForm tids={tids} feeTypes={feeTypes} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); void reload(); }} />}
+      {showForm && <TransactionForm tids={tids} feeTypes={feeTypes} initial={formInitial} onClose={() => { setShowForm(false); setFormInitial(undefined); }} onSaved={() => { setShowForm(false); setFormInitial(undefined); void reload(); }} />}
       {del && <ConfirmDialog title="Xóa giao dịch" message={`Giao dịch "${del.code ?? del.id}" (${money(del.amount)}) sẽ vào Thùng rác (có thể phục hồi). Nhập lại mật khẩu để xác nhận.`} confirmLabel="Xóa" danger requirePassword onCancel={() => setDel(null)} onConfirm={(pwd) => doDelete(del, pwd)} />}
       {bulkDel && <ConfirmDialog title="Xóa nhiều giao dịch" message={`${sel.count} giao dịch đã chọn sẽ vào Thùng rác (có thể phục hồi). Nhập lại mật khẩu để xác nhận.`} confirmLabel={`Xóa ${sel.count} mục`} danger requirePassword onCancel={() => setBulkDel(false)} onConfirm={(pwd) => doBulkDelete(pwd)} />}
       {cancelTarget && <CancelReasonModal bill={cancelTarget} onClose={() => setCancelTarget(null)} onSubmit={(reason) => doRequestCancel(cancelTarget, reason)} />}
+      {adjustTarget && <AdjustReasonModal bill={adjustTarget} onClose={() => setAdjustTarget(null)} onSubmit={(reason) => doAdjust(adjustTarget, reason)} />}
     </div>
+  );
+}
+
+/** #4 — Ô lý do khi Điều chỉnh bill: gửi yêu cầu hủy bill cũ (qua duyệt) + mở form tạo bill mới điền sẵn. */
+function AdjustReasonModal({ bill, onClose, onSubmit }: { bill: TransactionDto; onClose: () => void; onSubmit: (reason: string) => Promise<void> }): JSX.Element {
+  const toast = useToast();
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  async function submit(): Promise<void> {
+    if (!reason.trim()) return toast.alert('Vui lòng nhập lý do điều chỉnh (làm lý do hủy bill cũ).', 'Thiếu lý do');
+    setBusy(true);
+    try { await onSubmit(reason.trim()); } finally { setBusy(false); }
+  }
+  return (
+    <Modal title={`Điều chỉnh bill ${bill.code ?? bill.id}`} onClose={onClose} width="max-w-md">
+      <p className="mb-3 text-sm text-slate-600">Bill đã ghi là <b>bất biến</b>. Điều chỉnh = gửi <b>yêu cầu hủy</b> bill cũ (Quản lý/Admin duyệt) và mở sẵn form <b>tạo bill mới</b> đã điền TID / loại thẻ / loại phí / số tiền của bill cũ để bạn sửa lại. Bill cũ giữ nguyên tới khi được duyệt hủy.</p>
+      <Field label="Lý do điều chỉnh" required>
+        <textarea className={inputCls + ' min-h-[80px] resize-y'} value={reason} autoFocus onChange={(e) => setReason(e.target.value)} placeholder="Ví dụ: nhập nhầm số tiền / sai loại thẻ — tạo lại bill đúng…" />
+      </Field>
+      <div className="mt-6 flex justify-end gap-2">
+        <Button variant="neutral" onClick={onClose}>Hủy</Button>
+        <Button variant="confirm" onClick={submit} disabled={busy} icon={busy ? <Loader2 className="h-4 w-4 animate-spin" /> : undefined}>Gửi yêu cầu hủy & mở form mới</Button>
+      </div>
+    </Modal>
   );
 }
 
@@ -440,20 +504,21 @@ function pctText(p: number | null): string {
   return `${String(p).replace('.', ',')}%`;
 }
 
-function TransactionForm({ tids, feeTypes, onClose, onSaved }: { tids: ConfigTidDto[]; feeTypes: FeeTypeDto[]; onClose: () => void; onSaved: () => void }): JSX.Element {
+function TransactionForm({ tids, feeTypes, initial, onClose, onSaved }: { tids: ConfigTidDto[]; feeTypes: FeeTypeDto[]; initial?: TxnFormInitial; onClose: () => void; onSaved: () => void }): JSX.Element {
   const toast = useToast();
   // #10 — luồng CASCADING theo thứ tự Mr.Long: Ngân hàng → Tên HKD → TID → Loại thẻ → Loại phí → …
-  const [bankId, setBankId] = useState('');
-  const [hkdName, setHkdName] = useState('');
-  const [tidId, setTidId] = useState('');
-  const [cardTypeId, setCardTypeId] = useState('');
+  // #4 — điền sẵn từ `initial` khi Điều chỉnh (tạo lại bill từ bill cũ vừa gửi yêu cầu hủy).
+  const [bankId, setBankId] = useState(initial?.bankId ?? '');
+  const [hkdName, setHkdName] = useState(initial?.hkdName ?? '');
+  const [tidId, setTidId] = useState(initial?.tidId ?? '');
+  const [cardTypeId, setCardTypeId] = useState(initial?.cardTypeId ?? '');
   // Loại phí: MẶC ĐỊNH phần tử ĐẦU danh sách (Mr.Long "hiển thị theo thứ tự 1").
-  const [feeTypeId, setFeeTypeId] = useState(feeTypes[0] ? String(feeTypes[0].id) : '');
-  const [amount, setAmount] = useState('');
+  const [feeTypeId, setFeeTypeId] = useState(initial?.feeTypeId ?? (feeTypes[0] ? String(feeTypes[0].id) : ''));
+  const [amount, setAmount] = useState(initial?.amount ?? '');
   const [txnDate, setTxnDate] = useState(new Date().toISOString().slice(0, 10));
   // #8 — Giờ giao dịch: mặc định GIỜ HIỆN TẠI lúc mở form (HH:mm), cho sửa; ghép ngày+giờ khi lưu.
   const [txnTime, setTxnTime] = useState(() => new Date().toTimeString().slice(0, 5));
-  const [note, setNote] = useState('');
+  const [note, setNote] = useState(initial?.note ?? '');
   const [cards, setCards] = useState<CardTypeDto[]>([]);
   // #6 — biểu phí tham chiếu cho (TID × thẻ × loại phí) đang chọn.
   const [sellFee, setSellFee] = useState<TidSellFeeRowDto | null>(null);

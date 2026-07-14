@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Loader2, HardDrive, History, Wrench, Download, List, PackagePlus, Building2, Cpu, Tag, Trash2, Banknote, Undo2, Pencil, Warehouse as WarehouseIcon } from 'lucide-react';
+import { Loader2, HardDrive, History, Wrench, Download, List, PackagePlus, Building2, Cpu, Tag, Trash2, Banknote, Undo2, Pencil, Warehouse as WarehouseIcon, PackageOpen } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
-import { hasPermission, fmtDate, fmtTimeSec } from '@glb/shared';
+import { hasPermission, hasAnyPermission, fmtDate, fmtTimeSec } from '@glb/shared';
 import type { PosDto, TimelineEventDto, CustomerDto, FundDto, LiteRef, WarehouseLite, UpdatePosInput, HandoverTypeLite, BankLite } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
 import { isStaleWrite, STALE_TITLE } from '../lib/optlock.js';
@@ -23,6 +23,8 @@ import { exportCsv } from '../lib/exportCsv.js';
 import { SupplierTab, ModelTab, StatusTab, IntakeTab } from './PosSupplyPage.js';
 // Nhóm 1 — "Danh mục kho" gộp thành TAB ĐẦU của trang này (tái dùng nguyên component, không viết lại).
 import { WarehousePage } from './WarehousePage.js';
+// PHASE 2 — tab "Yêu cầu xuất kho" (tạo phiếu POS chưa seri → duyệt sau).
+import { ExportRequestPanel } from '../components/ExportRequestPanel.js';
 
 /** Định dạng tiền VND (nhóm 3 chữ số kiểu Việt Nam) — không dùng toLocaleString. */
 function fmtVnd(n: number | null): string {
@@ -30,7 +32,7 @@ function fmtVnd(n: number | null): string {
   return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ' ₫';
 }
 
-type PosTab = 'warehouse' | 'devices' | 'intake' | 'supplier' | 'model' | 'status';
+type PosTab = 'warehouse' | 'devices' | 'exportreq' | 'intake' | 'supplier' | 'model' | 'status';
 
 /** PHASE K1 (§2.3) — 1 trang "Quản Lý Máy POS" nhiều tab. Danh sách máy (POS_*) + cấu hình cung ứng
  * (CONFIG_POS_SUPPLY_*). Ẩn/hiện từng tab theo quyền (rủi ro #4: quyền lệch sau gộp menu). */
@@ -39,9 +41,12 @@ export function PosPage({ user }: { user: AuthUser }): JSX.Element {
   const canConfigView = hasPermission(user, 'CONFIG_POS_SUPPLY_VIEW');
   const canConfigManage = hasPermission(user, 'CONFIG_POS_SUPPLY_MANAGE');
   const canWarehouseView = hasPermission(user, 'CONFIG_WAREHOUSE_VIEW');
+  const canExportReq = hasAnyPermission(user, ['EXPORT_REQUEST_VIEW', 'EXPORT_REQUEST_CREATE']);
 
   const allTabs: { key: PosTab; label: string; icon: JSX.Element; show: boolean }[] = [
     { key: 'devices', label: 'Danh sách máy', icon: <List className="h-4 w-4" />, show: canView },
+    // PHASE 2 — cụm "Yêu cầu xuất kho" POS (tạo phiếu chưa seri; duyệt ở trang "Duyệt xuất kho").
+    { key: 'exportreq', label: 'Yêu cầu xuất kho', icon: <PackageOpen className="h-4 w-4" />, show: canExportReq },
     { key: 'intake', label: 'Nhập kho', icon: <PackagePlus className="h-4 w-4" />, show: canConfigView },
     { key: 'supplier', label: 'Nhà cung cấp', icon: <Building2 className="h-4 w-4" />, show: canConfigView },
     { key: 'model', label: 'Chủng loại POS', icon: <Cpu className="h-4 w-4" />, show: canConfigView },
@@ -68,6 +73,7 @@ export function PosPage({ user }: { user: AuthUser }): JSX.Element {
       </TabBar>
       {tab === 'warehouse' && <WarehousePage user={user} />}
       {tab === 'devices' && <DeviceListTab user={user} />}
+      {tab === 'exportreq' && <ExportRequestPanel user={user} kind="POS" />}
       {tab === 'intake' && <IntakeTab canManage={canConfigManage} />}
       {tab === 'supplier' && <SupplierTab canManage={canConfigManage} />}
       {tab === 'model' && <ModelTab canManage={canConfigManage} />}

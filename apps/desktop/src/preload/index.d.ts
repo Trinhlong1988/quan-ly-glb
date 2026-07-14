@@ -476,6 +476,80 @@ export interface ListResult<T> {
   message?: string;
 }
 
+// ── Yêu cầu xuất kho POS/TID (PHASE 1 engine — Mr.Long 13/7) ──
+export interface CreateExportRequestInput {
+  kind: string; // POS | TID
+  handoverKind: string; // SALE | RENT
+  withTid?: boolean; // POS giao KÈM TID (assign khi duyệt); kind TID luôn false
+  bankId?: number | null;
+  partnerId?: number | null; // đối tác (bắt buộc cho TID)
+  customerId: number;
+  cardTypeId?: number | null;
+  feeTypeId?: number | null;
+  priceMode?: string; // LISTED | CUSTOM
+  unitPrice: number; // đơn giá 1 đơn vị (VND) > 0
+  quantity: number; // > 0
+  depositAmount?: number | null; // cọc kèm (≥ 0)
+  paidAmount?: number | null; // SALE thu ngay khi duyệt (0..amount); RENT phải = 0
+  fundId?: number | null; // quỹ nhận tiền khi duyệt (bắt buộc khi có tiền)
+  note?: string | null;
+}
+export interface ExportRequestDto {
+  id: number;
+  code: string | null;
+  kind: string;
+  handoverKind: string;
+  withTid: boolean;
+  status: string;
+  priceMode: string;
+  unitPrice: number;
+  quantity: number;
+  amount: number;
+  depositAmount: number;
+  paidAmount: number;
+  customerId: number;
+  customerName: string | null;
+  requesterUserId: number;
+  requesterName: string | null;
+  bankId: number | null;
+  bankName: string | null;
+  partnerId: number | null;
+  feeTypeId: number | null;
+  feeTypeName: string | null;
+  fundId: number | null;
+  note: string | null;
+  requestedAt: string;
+  decidedBy: number | null;
+  decidedByName: string | null;
+  decidedAt: string | null;
+  decisionNote: string | null;
+  isMine: boolean;
+}
+export interface ExportRequestKpi {
+  pending: number;
+  approved: number;
+  rejected: number;
+  cancelled: number;
+  total: number;
+}
+export interface ExportRequestFilter {
+  status?: string;
+  kind?: string;
+  mine?: boolean;
+}
+export interface ApproveExportLineInput {
+  seq: number; // 1..N (khớp quantity, không trùng)
+  posSerial?: string | null;
+  tid?: string | null;
+}
+export interface ExportRequestListResult {
+  ok: boolean;
+  data?: ExportRequestDto[];
+  kpi?: ExportRequestKpi;
+  error?: string;
+  message?: string;
+}
+
 // ── G-CFG.1 DTOs (Cấu hình ngân hàng §C1–C4) ──
 export interface AuditTrail {
   createdBy: number | null;
@@ -1504,6 +1578,13 @@ export interface GlbApi {
   tidMarkDelivered(tid: string, input: MarkDeliveredInput): Promise<MutationOutcome>;
   tidSellFeeList(tidId: number, feeTypeId: number): Promise<{ ok: boolean; data?: TidSellFeeListDto; error?: string; message?: string }>;
   tidSellFeeSet(input: SetTidSellFeesInput): Promise<MutationOutcome>;
+
+  // Yêu cầu xuất kho POS/TID (PHASE 1 engine)
+  exportReqCreate(input: CreateExportRequestInput): Promise<MutationOutcome>;
+  exportReqList(filter?: ExportRequestFilter): Promise<ExportRequestListResult>;
+  exportReqApprove(requestId: number, lines: ApproveExportLineInput[], password: string, note?: string): Promise<MutationOutcome>;
+  exportReqReject(requestId: number, note: string): Promise<MutationOutcome>;
+  exportReqCancel(requestId: number, note?: string): Promise<MutationOutcome>;
 
   notifyUndeliveredSummary(): Promise<{ ok: boolean; data?: UndeliveredSummary; error?: string; message?: string }>;
   notifyPushUndelivered(): Promise<{ ok: boolean; stub: true; message?: string; error?: string }>;
