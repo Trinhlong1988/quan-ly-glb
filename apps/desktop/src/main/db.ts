@@ -939,10 +939,22 @@ export async function getServerConfig(): Promise<{
   needsConfig: boolean;
   serverRole: boolean;
   configured: boolean;
-  config: NormalizedServerConfig;
+  passwordSet: boolean;
+  config: Omit<NormalizedServerConfig, 'password'> & { password: '' };
 }> {
   const status = await getDbStatus();
-  return { ...status, configured: readServerConfig() != null, config: currentServerConfig() };
+  const cfg = currentServerConfig();
+  // P1-02 (invariant #6): TUYỆT ĐỐI KHÔNG trả mật khẩu DB ra renderer. Chỉ báo passwordSet để form biết
+  // "đã có mật khẩu — để trống nếu giữ nguyên". Mật khẩu ở lại main (server-config.json).
+  return { ...status, configured: readServerConfig() != null, passwordSet: cfg.password !== '', config: { ...cfg, password: '' } };
+}
+
+/** P1-02: bổ khuyết mật khẩu từ cấu hình đã lưu khi input để trống (sửa host/cổng không phải gõ lại mật khẩu). */
+function fillPasswordFromStored(input: ServerConfigInput): ServerConfigInput {
+  if ((input.password ?? '').trim() !== '') return input;
+  const stored = readServerConfig();
+  if (stored?.password) return { ...input, password: stored.password };
+  return input;
 }
 
 /** Gói lỗi pg thành thông điệp tiếng Việt dễ hiểu (giữ nguyên chi tiết gốc phía sau). */
@@ -959,7 +971,7 @@ function friendlyPgError(err: unknown): string {
 
 /** IPC `serverConfig:test` — thử `new Client(...).connect()` (pg) với timeout, KHÔNG ghi file. */
 export async function testServerConfig(input: ServerConfigInput): Promise<{ ok: boolean; error?: string }> {
-  const v = validateServerConfig(input);
+  const v = validateServerConfig(fillPasswordFromStored(input));
   if (!v.valid || !v.config) return { ok: false, error: v.error ?? 'Cấu hình không hợp lệ.' };
   const c = v.config;
   const client = new Client({
@@ -1008,7 +1020,7 @@ async function reinitDb(): Promise<{ ok: boolean; error?: string }> {
 
 /** IPC `serverConfig:save` — validate → ghi server-config.json → init lại kết nối. */
 export async function saveServerConfig(input: ServerConfigInput): Promise<{ ok: boolean; error?: string }> {
-  const v = validateServerConfig(input);
+  const v = validateServerConfig(fillPasswordFromStored(input));
   if (!v.valid || !v.config) return { ok: false, error: v.error ?? 'Cấu hình không hợp lệ.' };
   try {
     writeFileSync(serverConfigPath(), JSON.stringify(v.config, null, 2), 'utf8');

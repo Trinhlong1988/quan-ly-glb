@@ -38,7 +38,8 @@ export interface ServerConfigDto {
   port: number;
   database: string;
   user: string;
-  password: string;
+  /** P1-02: LUÔN rỗng ra renderer — mật khẩu DB không rời main. Xem ServerConfigStatus.passwordSet. */
+  password: '';
 }
 export interface ServerConfigInputDto {
   host?: string;
@@ -52,6 +53,7 @@ export interface ServerConfigStatus {
   needsConfig: boolean;
   serverRole: boolean;
   configured: boolean;
+  passwordSet: boolean;
   config: ServerConfigDto;
 }
 

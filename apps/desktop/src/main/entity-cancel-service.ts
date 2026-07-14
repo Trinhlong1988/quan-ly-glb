@@ -14,6 +14,7 @@ import { requirePermission, verifyActorPassword } from './guard.js';
 import { writeAudit } from './audit.js';
 import { me } from './auth-service.js';
 import { getDb } from './db.js';
+import { customerLiveRelationGuard } from './customer-service.js';
 
 const ADMIN_ROLE_CODE = 'ADMIN';
 
@@ -81,9 +82,20 @@ const REGISTRY: Record<string, EntityConfig> = {
     precheck: async (db, id) => {
       const t = await db.tid.findUnique({ where: { id } });
       if (!t || t.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'TID không tồn tại hoặc đã xóa.' };
+      // P1-08 (invariant #7): chặn xóa TID còn quan hệ SỐNG → tránh mồ côi dữ liệu.
+      if (t.posSerial != null) return { ok: false, error: 'IN_USE', message: `TID đang gắn máy POS ${t.posSerial}. Thu hồi TID khỏi máy trước khi hủy.` };
+      const openDep = await db.deviceDeposit.count({ where: { tid: t.tid, status: 'OPEN' } });
+      if (openDep > 0) return { ok: false, error: 'IN_USE', message: `TID còn ${openDep} khoản cọc chưa tất toán. Xử lý cọc trước khi hủy.` };
+      const pendIds = (await db.exportRequest.findMany({ where: { status: 'PENDING' }, select: { id: true } })).map((r) => r.id);
+      const pendReq = pendIds.length ? await db.exportRequestLine.count({ where: { tid: t.tid, exportRequestId: { in: pendIds } } }) : 0;
+      if (pendReq > 0) return { ok: false, error: 'IN_USE', message: 'TID đang nằm trong yêu cầu xuất kho CHỜ DUYỆT. Xử lý phiếu trước khi hủy.' };
       return { ok: true };
     },
     applyCancel: async (txc, id, approver) => {
+      // P1-08: re-guard TRONG tx lúc DUYỆT (quan hệ có thể phát sinh giữa yêu cầu→duyệt).
+      const t = await txc.tid.findUnique({ where: { id }, select: { tid: true, posSerial: true } });
+      if (t?.posSerial != null) throw new TxGuardError('IN_USE', `TID đang gắn máy POS ${t.posSerial}. Thu hồi trước khi hủy.`);
+      if (t && (await txc.deviceDeposit.count({ where: { tid: t.tid, status: 'OPEN' } })) > 0) throw new TxGuardError('IN_USE', 'TID còn cọc chưa tất toán.');
       const moved = await txc.tid.updateMany({ where: { id, deletedAt: null }, data: { deletedAt: new Date(), deletedBy: approver.id, updatedBy: approver.id } });
       if (moved.count === 0) throw new TxGuardError('INVALID_STATE', 'TID đã bị xóa hoặc đổi trạng thái.');
     }
@@ -124,9 +136,16 @@ const REGISTRY: Record<string, EntityConfig> = {
     precheck: async (db, id) => {
       const c = await db.customer.findUnique({ where: { id } });
       if (!c || c.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Khách hàng không tồn tại hoặc đã xóa.' };
+      // P1-08 (invariant #7): chặn xóa khách còn quan hệ SỐNG (giữ máy/TID/cọc) → tránh mồ côi tham chiếu.
+      const g = await customerLiveRelationGuard(db, id);
+      if (g) return { ok: false, error: g.error ?? 'IN_USE', message: g.message ?? 'Khách còn quan hệ sống, không thể hủy.' };
       return { ok: true };
     },
     applyCancel: async (txc, id, approver) => {
+      // P1-08: re-guard TRONG tx lúc DUYỆT — chặn mồ côi nếu khách nhận máy/TID/cọc sau khi tạo yêu cầu.
+      if ((await txc.posDevice.count({ where: { currentCustomerId: id, deletedAt: null } })) > 0) throw new TxGuardError('IN_USE', 'Khách đang giữ máy POS. Thu hồi trước khi hủy.');
+      if ((await txc.tid.count({ where: { customerId: id, deletedAt: null, deliveredAt: { not: null } } })) > 0) throw new TxGuardError('IN_USE', 'Khách đang giữ TID đã giao. Thu hồi trước khi hủy.');
+      if ((await txc.deviceDeposit.count({ where: { customerId: id, status: 'OPEN' } })) > 0) throw new TxGuardError('IN_USE', 'Khách còn cọc chưa tất toán.');
       const moved = await txc.customer.updateMany({ where: { id, deletedAt: null }, data: { deletedAt: new Date(), deletedBy: approver.id } });
       if (moved.count === 0) throw new TxGuardError('INVALID_STATE', 'Khách hàng đã bị xóa.');
     }

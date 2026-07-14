@@ -74,9 +74,10 @@ export async function runServerConfigSelfTest(): Promise<number> {
     const t4 = await testServerConfig({ ...good, host: '' });
     ok('testServerConfig(no host) => validation fail', t4.ok === false && !!t4.error, t4);
 
-    // 5) Validation gating: thiếu mật khẩu → fail sớm.
+    // 5) Validation gating: thiếu mật khẩu VÀ chưa có cấu hình lưu → fail sớm (xóa file để xác định).
+    if (existsSync(cfgPath)) rmSync(cfgPath);
     const t5 = await testServerConfig({ ...good, password: '' });
-    ok('testServerConfig(no password) => validation fail', t5.ok === false && !!t5.error, t5);
+    ok('testServerConfig(no password, chưa lưu) => validation fail', t5.ok === false && !!t5.error, t5);
 
     // 6) saveServerConfig(good) → ghi file + reinit + probe => ok.
     const s1 = await saveServerConfig(good);
@@ -105,6 +106,12 @@ export async function runServerConfigSelfTest(): Promise<number> {
 
     // 10) getServerConfig trả config đổ form (không rỗng host sau khi lưu).
     ok('getServerConfig.config.host khớp', st.config.host === good.host, { host: st.config.host });
+
+    // 11) P1-02 (invariant #6): getServerConfig KHÔNG lộ mật khẩu DB ra renderer; passwordSet=true báo đã có.
+    ok('P1-02: getServerConfig KHÔNG trả mật khẩu (password="")', (st.config as { password?: string }).password === '' && (st as { passwordSet?: boolean }).passwordSet === true, { pw: (st.config as { password?: string }).password, set: (st as { passwordSet?: boolean }).passwordSet });
+    // 12) P1-02: sau khi đã lưu, test/save với mật khẩu TRỐNG → dùng lại mật khẩu đã lưu (không phải gõ lại).
+    const tBlank = await testServerConfig({ ...good, password: '' });
+    ok('P1-02: mật khẩu trống sau khi đã lưu => dùng mật khẩu cũ (kết nối ok)', tBlank.ok === true, tBlank);
   } finally {
     // Khôi phục nguyên trạng file server-config trên máy build.
     if (backup !== null) writeFileSync(cfgPath, backup, 'utf8');

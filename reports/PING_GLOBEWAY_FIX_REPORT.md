@@ -8,7 +8,7 @@
 ```
 Branch:          main
 Input SHA:       d52186015f1b11d0ff32274b512245fa53dabc3f  (v0.2.31)
-Output SHA:      <cập nhật sau commit đợt sửa PING>
+Output SHA:      bba3d3d (v0.2.32 — P0 batch) · <đợt 2 P1/P2: cập nhật sau commit> (v0.2.33)
 Date:            2026-07-14
 Node:            v24.14.1
 Package manager: npm workspaces (monorepo apps/desktop + packages/{shared,business-rules,database})
@@ -36,13 +36,13 @@ OS:              Windows 10 Pro 19045
 | ID | Trạng thái | File/symbol | Xử lý |
 |---|---|---|---|
 | P1-01 | **CONFIRMED** | `index.ts:98-104` initDb lỗi bị nuốt → vẫn registerIpc + createWindow | DEFERRED (đề xuất fail-closed) |
-| P1-02 | **PARTIAL / accepted** | serverConfig thick-client giữ creds | Đã xác nhận thiết kế thick-client (nêu remaining risk) |
+| P1-02 | **CONFIRMED** | `db.ts:currentServerConfig/getServerConfig` trả **password DB** ra renderer (prefill ô mật khẩu) | **FIXED** (get trả username-only + `passwordSet`; blank khi save/test = giữ mật khẩu cũ). ST22 §11/§12 |
 | P1-03 | **CONFIRMED** | `remember.ts:getRemembered` trả plaintext password về renderer (mâu thuẫn comment) | **FIXED** (username-only + `loginRemembered` giải mã trong main) |
 | P1-04 | **CONFIRMED (partial)** | `index.ts` `sandbox:false`; không có wrapper verify sender tập trung | DEFERRED (ràng buộc electron-vite CJS preload) |
-| P1-05 | **NEEDS_REVIEW** | ngày nghiệp vụ nhận ISO string, chưa có parser `YYYY-MM-DD` chặt | DEFERRED (chưa tái hiện lỗi cụ thể trên đường nhập hiện tại) |
+| P1-05 | **CONFIRMED** | `transaction-service.ts:parseDate` `new Date('2026-02-31')` cuộn âm thầm sang 03-03 | **FIXED** (strict Y-M-D round-trip UTC → ngày không tồn tại = null → VALIDATION). ST15 A2 |
 | P1-06 | **NOT_REPRODUCIBLE** | không có filter enum status tự-do làm rỗng danh sách ngầm | Không sửa |
 | P1-07 | **CONFIRMED (partial)** | `pos-service.ts:254` serial chỉ `.trim()`, không upper/collapse, không `serialNormalized` unique | DEFERRED (cần migration + quét near-dup) |
-| P1-08 | **CONFIRMED** | `customer-service.ts:deleteCustomer` + entity-cancel customer: xóa mềm KHÔNG guard quan hệ sống | DEFERRED (guard đa quan hệ, phạm vi lớn) |
+| P1-08 | **CONFIRMED** | `customer-service.ts:deleteCustomer` + entity-cancel customer/TID: xóa mềm KHÔNG guard quan hệ sống | **FIXED** (`customerLiveRelationGuard` + TID precheck; re-guard trong tx lúc duyệt). ST34 P1-08/P1-08b |
 | P1-09 | **CONFIRMED** | `approval-service.ts` đọc quyền requester tại lúc DUYỆT (`userPermSet(db,requestedBy)`), không snapshot lúc tạo | DEFERRED (đổi policy — cần Mr.Long chốt) |
 
 ### P2 — hiệu năng / tin cậy
@@ -112,6 +112,21 @@ P0 = 7/7 PASS. P1-03 + P2-01 FIXED. Còn lại P1/P2 phân loại DEFERRED/accep
 7. **P2-02/P2-03:** upload magic-bytes/stream; map lỗi PG → mã an toàn (tránh lộ host/user).
 8. **Money string↔bigint TOÀN TUYẾN:** đã chuẩn hóa INPUT (toVnd string→bigint + chặn MAX_SAFE) + đã có BigInt cột DB (B39). DTO tài chính còn dùng `Number(bigint)` khi xuất (an toàn trong biên VND ≤ 2^53, nhưng chưa "string thuần" toàn tuyến) — rollout hết mọi service là hạng mục lớn, đề xuất lịch riêng + guard.
 9. **P0-07 mô hình audit:** đã đưa audit VÀO transaction ở mutation P0. Lưu ý: `writeAudit` cố tình nuốt lỗi (best-effort, không làm sập nghiệp vụ) — nếu Mr.Long muốn "audit-fail → rollback nghiệp vụ" (model A cứng) thì cần đổi chính sách writeAudit (ảnh hưởng toàn app).
+
+## E2. 8 INVARIANT (mục tiêu cuối tài liệu) — trạng thái
+
+| # | Invariant | Trạng thái | Chứng minh |
+|---|---|---|---|
+| 1 | Không ai tự mở khóa trái policy | ✅ ĐÓNG | P0-01 lockReason gate · ST35 §13/§13b |
+| 2 | Không request đồng thời mất đếm / duyệt 2 lần | ✅ ĐÓNG | P0-02 atomic · P0-04 count · ST20/ST35 §14 |
+| 3 | Không dữ liệu tài chính sai vì normalize/float | ✅ ĐÓNG | P0-05 allowlist · P0-06 BigInt · ST43 Ca6c/6d |
+| 4 | Không approval lệch trạng thái entity | ✅ ĐÓNG | P0-04 billMoved.count===1 · ST18 |
+| 5 | Không mutation quan trọng thiếu audit | ✅ ĐÓNG | P0-07 audit trong $transaction |
+| 6 | Không secret từ main sang renderer | ✅ ĐÓNG | P1-02 serverConfig + P1-03 remember · ST22 §11/§12 |
+| 7 | Không entity lịch sử tài chính bị xóa gây orphan | ✅ ĐÓNG | P1-08 relation guard + re-guard tx · ST34 P1-08 |
+| 8 | Không báo cáo rỗng giả do filter/ngày sai | ✅ ĐÓNG | P1-05 strict date · P1-06 N/A · ST15 A2 |
+
+**Cả 8 invariant đều có FIX + regression FAIL-trước/PASS-sau.** Các mục DEFERRED còn lại (P1-01/04/07/09, P2-02/03) là HARDENING, KHÔNG vi phạm invariant nào ở trên.
 
 ## F. Bài học & đổi quy trình (bắt buộc theo hiến pháp)
 

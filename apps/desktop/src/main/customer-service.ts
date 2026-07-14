@@ -274,6 +274,21 @@ export async function updateCustomer(id: number, input: UpdateCustomerInput): Pr
 }
 
 /** CUSTOMER_DELETE — soft-delete + re-enter password (§14) + audit. */
+/**
+ * P1-08 (invariant #7): chặn xóa khách hàng còn QUAN HỆ SỐNG để không mồ côi tham chiếu tài chính/tài sản.
+ * Trả về MutationResult lỗi (IN_USE) nếu còn giữ máy POS / TID / cọc chưa tất toán; null nếu xóa được.
+ * Dùng chung cho deleteCustomer (trực tiếp) LẪN entity-cancel Customer.precheck (xóa qua duyệt).
+ */
+export async function customerLiveRelationGuard(db: Db, id: number): Promise<MutationResult | null> {
+  const holdPos = await db.posDevice.count({ where: { currentCustomerId: id, deletedAt: null } });
+  if (holdPos > 0) return { ok: false, error: 'IN_USE', message: `Khách đang giữ ${holdPos} máy POS. Thu hồi máy trước khi hủy khách.` };
+  const holdTid = await db.tid.count({ where: { customerId: id, deletedAt: null, deliveredAt: { not: null } } });
+  if (holdTid > 0) return { ok: false, error: 'IN_USE', message: `Khách đang giữ ${holdTid} TID đã giao. Thu hồi TID trước khi hủy khách.` };
+  const openDep = await db.deviceDeposit.count({ where: { customerId: id, status: 'OPEN' } });
+  if (openDep > 0) return { ok: false, error: 'IN_USE', message: `Khách còn ${openDep} khoản cọc chưa tất toán. Xử lý cọc trước khi hủy khách.` };
+  return null;
+}
+
 export async function deleteCustomer(id: number, password: string): Promise<MutationResult> {
   const g = await requirePermission('CUSTOMER_DELETE', { action: 'CUSTOMER_DELETED', targetType: 'Customer', targetId: String(id) });
   if (!g.ok) return g;
@@ -292,6 +307,13 @@ export async function deleteCustomer(id: number, password: string): Promise<Muta
 
   const row = await db.customer.findUnique({ where: { id } });
   if (!row || row.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Khách hàng không tồn tại.' };
+
+  // P1-08: chặn xóa khi còn giữ máy/TID/cọc (tránh mồ côi tham chiếu).
+  const rel = await customerLiveRelationGuard(db, id);
+  if (rel) {
+    await writeAudit(db, { actorUserId: user.id, action: 'CUSTOMER_DELETED', targetType: 'Customer', targetId: String(id), after: { denied: true, reason: rel.error } });
+    return rel;
+  }
 
   await db.customer.update({ where: { id }, data: { deletedAt: new Date(), deletedBy: user.id } });
   await writeAudit(db, {

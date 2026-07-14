@@ -25,7 +25,10 @@ export function ServerConfig({ onConfigured }: { onConfigured: () => void }): JS
   const [test, setTest] = useState<TestState>({ kind: 'idle' });
   const [saving, setSaving] = useState(false);
 
-  // Đổ sẵn cấu hình hiện có (trường hợp sửa cấu hình sai) — mật khẩu cũng được gợi ý để chỉnh nhanh.
+  const [passwordSet, setPasswordSet] = useState(false);
+
+  // Đổ sẵn cấu hình hiện có (sửa cấu hình sai). P1-02: KHÔNG nhận mật khẩu từ main (không lộ secret) —
+  // chỉ biết đã-có-mật-khẩu (passwordSet) để hiện gợi ý "để trống nếu giữ nguyên".
   useEffect(() => {
     let alive = true;
     window.api.serverConfigGet().then((st) => {
@@ -35,7 +38,7 @@ export function ServerConfig({ onConfigured }: { onConfigured: () => void }): JS
       if (c.port) setPort(String(c.port));
       if (c.database) setDatabase(c.database);
       if (c.user) setUser(c.user);
-      if (c.password) setPassword(c.password);
+      setPasswordSet(!!st.passwordSet);
     });
     return () => {
       alive = false;
@@ -157,14 +160,14 @@ export function ServerConfig({ onConfigured }: { onConfigured: () => void }): JS
             />
           </Field>
 
-          <Field label="Mật khẩu" required>
+          <Field label="Mật khẩu" required={!passwordSet} hint={passwordSet ? 'Đã lưu mật khẩu — để trống nếu giữ nguyên.' : undefined}>
             <PasswordInput
               value={password}
               onChange={(e) => {
                 setPassword(e.target.value);
                 setTest({ kind: 'idle' });
               }}
-              placeholder="••••••••"
+              placeholder={passwordSet ? '•••••••• (giữ nguyên)' : '••••••••'}
             />
           </Field>
 

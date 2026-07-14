@@ -36,12 +36,23 @@ async function resolveUserNames(db: Db, ids: (number | null | undefined)[]): Pro
   for (const u of users) map.set(u.id, u.fullName || u.username);
   return map;
 }
-/** ISO string / Date → Date hợp lệ, hoặc null. */
+/** ISO string / Date → Date hợp lệ, hoặc null.
+ *  P1-05 (invariant #8): chuỗi ngày `YYYY-MM-DD` (ô nhập ngày) phải là ngày CÓ THẬT — chống JS cuộn âm thầm
+ *  (2026-02-31 → 03-03, 2026-13-01 → năm sau). Kiểm Y-M-D round-trip theo UTC; lệch = ngày không tồn tại → null. */
 function parseDate(v: unknown): Date | null {
   if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v;
   if (typeof v !== 'string' || !v.trim()) return null;
-  const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? null : d;
+  const s = v.trim();
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:$|T)/.exec(s); // date-only hoặc ISO có phần ngày rõ ràng
+  if (m) {
+    const y = Number(m[1]), mo = Number(m[2]), da = Number(m[3]);
+    // date-only ('YYYY-MM-DD') và ISO 'Z' đều parse theo UTC → so getUTC* khớp thành phần chuỗi.
+    const isUtc = s.length === 10 || /[zZ]$/.test(s) || !/T/.test(s);
+    if (isUtc && (d.getUTCFullYear() !== y || d.getUTCMonth() + 1 !== mo || d.getUTCDate() !== da)) return null;
+  }
+  return d;
 }
 /** Số tiền VND: số nguyên ≥ 0. */
 function parseAmount(v: unknown): number | null {

@@ -141,6 +141,40 @@ export async function runEntityCancelSelfTest(): Promise<number> {
   const p2Alive = await db.posDevice.findUnique({ where: { id: p2.id } });
   ok('bulk: 2 máy CHƯA bị xóa (không xóa cứng, chờ duyệt)', p1Alive?.deletedAt == null && p2Alive?.deletedAt == null);
 
+  // ═══ P1-08 (PING invariant #7): CHẶN hủy khách/TID còn QUAN HỆ SỐNG (chống mồ côi tham chiếu) ═══
+  await logout();
+  await login('adminroot', ADMIN_PW);
+  const custHold = await db.customer.create({ data: { code: 'KHHOLD', fullName: 'Khách Giữ Máy', nickname: 'KH' } });
+  const posHeld = await db.posDevice.create({ data: { serial: 'POSHELD', status: 'DEPLOYED', bankId: bank.id, currentCustomerId: custHold.id } });
+  const reqHold = await requestEntityCancel('Customer', custHold.id, 'thử hủy khách đang giữ máy');
+  ok('P1-08: hủy khách đang giữ máy POS → IN_USE (chống mồ côi)', reqHold.ok === false && reqHold.error === 'IN_USE', reqHold);
+  await db.posDevice.update({ where: { id: posHeld.id }, data: { currentCustomerId: null, status: 'IN_STOCK' } });
+  const reqHold2 = await requestEntityCancel('Customer', custHold.id, 'khách đã trả máy');
+  ok('P1-08: khách đã trả máy → tạo yêu cầu hủy được', reqHold2.ok === true, reqHold2);
+  // TID còn gắn máy (posSerial) → chặn.
+  const tidOn = await db.tid.create({ data: { tid: 'TIDON', hkdName: 'HKD On', bankId: bank.id, partnerId: partner.id, status: 'ACTIVE', posSerial: 'POSHELD' } });
+  const reqTidOn = await requestEntityCancel('Tid', tidOn.id, 'thử hủy TID đang gắn máy');
+  ok('P1-08: hủy TID đang gắn máy POS → IN_USE', reqTidOn.ok === false && reqTidOn.error === 'IN_USE', reqTidOn);
+  // TID còn cọc OPEN → chặn.
+  const tidDep = await db.tid.create({ data: { tid: 'TIDDEP', hkdName: 'HKD Dep', bankId: bank.id, partnerId: partner.id, status: 'ACTIVE' } });
+  await db.deviceDeposit.create({ data: { customerId: custHold.id, tid: 'TIDDEP', amount: 500_000n, status: 'OPEN', occurredAt: new Date('2026-07-01T00:00:00.000Z') } });
+  const reqTidDep = await requestEntityCancel('Tid', tidDep.id, 'thử hủy TID còn cọc');
+  ok('P1-08: hủy TID còn cọc OPEN → IN_USE', reqTidDep.ok === false && reqTidDep.error === 'IN_USE', reqTidDep);
+
+  // ═══ P1-08b: RE-GUARD lúc DUYỆT — khách SẠCH lúc tạo yêu cầu, nhận máy TRƯỚC khi duyệt → duyệt chặn IN_USE ═══
+  const custRace = await db.customer.create({ data: { code: 'KHRACE', fullName: 'Khách Race', nickname: 'KR' } });
+  await logout();
+  await login('mgrcx001', PW);
+  const reqRace = await requestEntityCancel('Customer', custRace.id, 'hủy khách sạch');
+  ok('P1-08b: tạo yêu cầu hủy khách sạch ok', reqRace.ok === true, reqRace);
+  await db.posDevice.update({ where: { id: posHeld.id }, data: { currentCustomerId: custRace.id, status: 'DEPLOYED' } }); // nhận máy sau khi tạo yêu cầu
+  await logout();
+  await login('adminroot', ADMIN_PW);
+  const apprRace = await approveEntityCancel('Customer', reqRace.id!, ADMIN_PW);
+  ok('P1-08b: duyệt hủy khách vừa nhận máy → IN_USE (re-guard trong tx)', apprRace.ok === false && apprRace.error === 'IN_USE', apprRace);
+  const custRaceRow = await db.customer.findUnique({ where: { id: custRace.id } });
+  ok('P1-08b: khách KHÔNG bị xóa (re-guard rollback)', custRaceRow?.deletedAt == null, { del: custRaceRow?.deletedAt });
+
   await logout();
   // eslint-disable-next-line no-console
   console.log(`ENTITYCANCEL34 SUMMARY | pass=${pass} fail=${fail}`);

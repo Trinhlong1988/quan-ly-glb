@@ -71,6 +71,19 @@ export async function runRevenueSelfTest(): Promise<number> {
   ok('sinh mã GD tự động', t1?.code === 'GD' + String(c1.id).padStart(5, '0'), { code: t1?.code });
   ok('khách mặc định lấy theo TID', t1?.customerId === cust.id, { got: t1?.customerId });
 
+  // ═══════════ A2) P1-05 (PING invariant #8) — NGÀY nghiệp vụ phải CÓ THẬT (chống cuộn âm thầm) ═══════════
+  const dOverflow = await createTransaction({ feeTypeId: ft.id, tidId: tid.id, cardTypeId: card.id, amount: 1_000_000, txnDate: '2026-02-31' });
+  ok('P1-05: ngày 2026-02-31 (không tồn tại) → VALIDATION, KHÔNG cuộn sang 03-03', dOverflow.ok === false && dOverflow.error === 'VALIDATION', dOverflow);
+  const dMonth = await createTransaction({ feeTypeId: ft.id, tidId: tid.id, cardTypeId: card.id, amount: 1_000_000, txnDate: '2026-13-01' });
+  ok('P1-05: tháng 13 → VALIDATION (không cuộn sang năm sau)', dMonth.ok === false && dMonth.error === 'VALIDATION', dMonth);
+  const dFmt = await createTransaction({ feeTypeId: ft.id, tidId: tid.id, cardTypeId: card.id, amount: 1_000_000, txnDate: '13/07/2026' });
+  ok('P1-05: định dạng dd/mm/yyyy → VALIDATION', dFmt.ok === false && dFmt.error === 'VALIDATION', dFmt);
+  const dLeap = await createTransaction({ feeTypeId: ft.id, tidId: tid.id, cardTypeId: card.id, amount: 1_000_000, txnDate: '2028-02-29' });
+  ok('P1-05: 2028-02-29 (năm nhuận thật) → hợp lệ', dLeap.ok === true, dLeap);
+  if (dLeap.ok && dLeap.id) await db.transaction.update({ where: { id: dLeap.id }, data: { deletedAt: new Date() } }); // dọn để không ảnh hưởng tổng doanh thu bên dưới
+  const dLeapBad = await createTransaction({ feeTypeId: ft.id, tidId: tid.id, cardTypeId: card.id, amount: 1_000_000, txnDate: '2026-02-29' });
+  ok('P1-05: 2026-02-29 (không nhuận) → VALIDATION', dLeapBad.ok === false && dLeapBad.error === 'VALIDATION', dLeapBad);
+
   // ═══════════ B) SNAPSHOT — đổi biểu phí sau KHÔNG làm sai doanh thu đã ghi ═══════════
   await db.feeRate.update({ where: { id: rate.id }, data: { phiMua: 9000, phiCaiMay: 0 } });
   await db.feeSellQuote.update({ where: { id: quote.id }, data: { phiBan: 9000 } });
