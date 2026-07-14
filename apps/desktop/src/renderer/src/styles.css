@@ -28,6 +28,13 @@ body,
   height: 100%;
 }
 
+/* Mr.Long 15/7 — chuyển menu kiểu web hiện đại: content nổi lên + mờ dần (3D pop). */
+@keyframes pageIn {
+  from { opacity: 0; transform: translateY(12px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+.page-enter { animation: pageIn 0.3s cubic-bezier(0.22, 0.61, 0.36, 1); }
+
 body {
   margin: 0;
   font-family: var(--font-sans);

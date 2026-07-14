@@ -23,7 +23,8 @@ import {
   Coins,
   PiggyBank,
   Clock,
-  Search as SearchIcon
+  Search as SearchIcon,
+  Camera
 } from 'lucide-react';
 
 const SEARCH_KIND_LABEL: Record<string, string> = { customer: 'Khách hàng', tid: 'TID', pos: 'Máy POS', transaction: 'Giao dịch' };
@@ -109,6 +110,7 @@ function TopbarClock(): JSX.Element {
 }
 import type { DashboardStats, OnlineUserDto, SearchHitDto } from '../../../preload/index.d';
 import { GLogo } from '../components/GLogo.js';
+import { useToast } from '../lib/toast.js';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, hasAnyPermission } from '@glb/shared';
 import { MessagesDrawer } from '../components/MessagesDrawer.js';
@@ -166,6 +168,7 @@ const MENU: MenuItem[] = [
 ];
 
 export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => void }): JSX.Element {
+  const toast = useToast();
   const visible = MENU.filter((m) => !m.perms || hasAnyPermission(user, m.perms));
   const [active, setActive] = useState(visible[0]?.key ?? 'dashboard');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -252,7 +255,7 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
                   (m.indent ? 'pl-8 pr-2.5 ' : 'px-2.5 ') +
                   // Mr.Long 14/7 — nút menu ĐANG CHỌN nổi 3D rõ: gradient sáng + bóng đậm + viền sáng + nhấc nhẹ.
                   (isActive
-                    ? 'bg-gradient-to-br from-brand to-brand-hover font-semibold text-white shadow-lg shadow-brand/50 ring-1 ring-white/20 -translate-y-px'
+                    ? 'bg-gradient-to-br from-[#2a72ef] to-brand-hover font-semibold text-white shadow-xl shadow-brand/60 ring-1 ring-white/30 -translate-y-0.5 scale-[1.02]'
                     : 'font-medium text-sidebar-text hover:-translate-y-px hover:bg-white/5 hover:text-white hover:shadow-md hover:shadow-black/20')
                 }
               >
@@ -309,6 +312,17 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
           </div>
           <div className="flex items-center gap-2">
             <TopbarClock />
+            <button
+              onClick={async () => {
+                const res = await window.api.captureRegion();
+                if (res.ok && res.path) toast.success('Đã lưu ảnh: ' + res.path);
+                else if (res.error !== 'CANCELLED') toast.alert(res.message ?? 'Chụp màn hình thất bại.', 'Lỗi chụp');
+              }}
+              title="Chụp vùng màn hình (kéo chọn vùng, lưu vào Pictures/GLB-Screenshots)"
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-appbg hover:text-brand"
+            >
+              <Camera className="h-[19px] w-[19px]" />
+            </button>
             {canInbox && (
               <button
                 onClick={() => setShowInbox(true)}
@@ -375,6 +389,8 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
 
         {/* Content */}
         <main className="flex-1 overflow-auto p-6">
+          {/* Mr.Long 15/7 — hiệu ứng 3D nổi khi chuyển menu: key={active} → re-mount + animation pageIn. */}
+          <div key={active} className="page-enter">
           {activeItem?.key === 'dashboard' && <Home user={user} visibleCount={visible.length} />}
           {activeItem?.key === 'pos' && <PosPage user={user} />}
           {activeItem?.key === 'tid' && <TidPage user={user} />}
@@ -386,6 +402,7 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
           {activeItem?.key === 'approval' && <ApprovalPage user={user} />}
           {activeItem?.key === 'exportapproval' && <ExportApprovalPage user={user} />}
           {activeItem?.key === 'system' && <SystemConfigPage user={user} />}
+          </div>
         </main>
       </div>
 

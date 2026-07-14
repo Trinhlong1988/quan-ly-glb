@@ -1791,6 +1791,8 @@ export interface GlbApi {
   cancelRequest(transactionId: number, reason: string): Promise<MutationOutcome>;
   cancelRequestList(status?: string): Promise<ListResult<CancelRequestDto>>;
   globalSearch(q: string): Promise<{ ok: boolean; error?: string; message?: string; data?: SearchHitDto[] }>;
+  captureRegion(): Promise<{ ok: boolean; path?: string; dir?: string; error?: string; message?: string }>;
+  openScreenshotDir(): Promise<{ ok: boolean; dir?: string }>;
   cancelApprove(requestId: number, password: string, note?: string): Promise<MutationOutcome>;
   cancelReject(requestId: number, note: string): Promise<MutationOutcome>;
   cancelApproveBulk(requestIds: number[], password: string, note?: string): Promise<BulkSkipOutcome>;
