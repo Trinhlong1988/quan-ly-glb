@@ -15,6 +15,7 @@ import { StaleBanner } from '../lib/realtime.js';
 import { ImportButton } from '../components/ImportModal.js';
 import { StatusBadge, useStatusOptions, statusSelectOptions, toneCls } from '../components/StatusBadge.js';
 import { exportCsv } from '../lib/exportCsv.js';
+import { useRowSelection, SelectAllCell, SelectCell } from '../components/Selection.js';
 
 // Bộ đếm TOÀN CỤC (độc lập bộ lọc list) cho dash StatBar — khớp shape countCustomers ở main.
 type CustomerCounts = { total: number; active: number; locked: number; cancelled: number };
@@ -33,10 +34,37 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<CustomerDto | null>(null);
   const [cancelTarget, setCancelTarget] = useState<RequestCancelTarget | null>(null);
+  const sel = useRowSelection(); // Mr.Long 15/7 — tích chọn nhiều khách để yêu cầu hủy hàng loạt
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const canCreate = hasPermission(user, 'CUSTOMER_CREATE');
   const canUpdate = hasPermission(user, 'CUSTOMER_UPDATE');
   const canCancelReq = hasPermission(user, 'CUSTOMER_CANCEL_REQUEST');
+
+  /** Yêu cầu hủy HÀNG LOẠT các khách đã tích: mỗi id gọi entityCancelRequest (backend re-check quyền + guard quan hệ
+   *  sống từng ID). Tổng hợp thành công/thất bại từng cái — KHÔNG báo thành công toàn bộ sai sự thật. */
+  async function doBulkCancel(): Promise<void> {
+    const ids = [...sel.selected];
+    if (ids.length === 0) return;
+    const okConfirm = await toast.confirm(
+      `Yêu cầu hủy ${ids.length} khách hàng đã chọn? Mỗi khách sẽ tạo 1 yêu cầu hủy (chờ người có quyền duyệt). Khách đang giữ máy/TID/cọc sẽ bị từ chối.`,
+      { title: 'Yêu cầu hủy hàng loạt', okLabel: `Tạo ${ids.length} yêu cầu`, cancelLabel: 'Hủy' }
+    );
+    if (!okConfirm) return;
+    setBulkBusy(true);
+    let done = 0;
+    const failed: string[] = [];
+    for (const id of ids) {
+      const res = await window.api.entityCancelRequest('Customer', id, 'Yêu cầu hủy hàng loạt');
+      if (res.ok) done++;
+      else failed.push(`#${id}: ${res.message ?? res.error}`);
+    }
+    setBulkBusy(false);
+    sel.clear();
+    await reload();
+    if (failed.length) toast.alert(`Đã tạo ${done} yêu cầu. Bỏ qua ${failed.length}:\n${failed.slice(0, 8).join('\n')}`, 'Kết quả hàng loạt');
+    else toast.success(`Đã tạo ${done} yêu cầu hủy — chờ duyệt.`);
+  }
 
   async function reload(): Promise<void> {
     setLoading(true);
@@ -131,10 +159,21 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
       />
 
       <StaleBanner domain="Customer" onReload={reload} className="mb-2" />
+
+      {/* Mr.Long 15/7 — thanh thao tác hàng loạt: hiện khi có tích chọn; chỉ khi có quyền yêu cầu hủy. */}
+      {canCancelReq && sel.count > 0 && (
+        <div className="mb-3 flex items-center gap-3 rounded-lg border border-brand/30 bg-brand-tint px-4 py-2.5">
+          <span className="text-sm font-medium text-brand">Đã chọn {sel.count} khách hàng</span>
+          <div className="flex-1" />
+          <Button variant="neutral" onClick={sel.clear}>Bỏ chọn tất cả</Button>
+          <Button variant="danger" disabled={bulkBusy} onClick={doBulkCancel}>Yêu cầu hủy đã chọn ({sel.count})</Button>
+        </div>
+      )}
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
+              {canCancelReq && <th className="w-10 px-4 py-3"><SelectAllCell ids={rows.map((r) => r.id)} sel={sel} /></th>}
               <th className="px-4 py-3">Mã khách hàng</th>
               <th className="px-4 py-3">Khách hàng</th>
               <th className="px-4 py-3">Trạng thái</th>
@@ -146,14 +185,14 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
           <tbody className="divide-y divide-line">
             {loading && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={canCancelReq ? 7 : 6} className="px-4 py-8 text-center text-slate-400">
                   <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                 </td>
               </tr>
             )}
             {!loading && rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-slate-400">
+                <td colSpan={canCancelReq ? 7 : 6} className="px-4 py-10 text-center text-slate-400">
                   <UserRound className="mx-auto mb-2 h-6 w-6" />
                   Chưa có khách hàng.
                 </td>
@@ -162,6 +201,7 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
             {!loading &&
               rows.map((c) => (
                 <tr key={c.id} className="hover:bg-appbg/60">
+                  {canCancelReq && <td className="px-4 py-3"><SelectCell id={c.id} sel={sel} /></td>}
                   <td className="px-4 py-3 font-mono text-xs font-semibold text-brand whitespace-nowrap">{c.code}</td>
                   <td className="px-4 py-3">
                     <div className="font-medium text-slate-800">{c.nickname}</div>
