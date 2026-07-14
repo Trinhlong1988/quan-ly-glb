@@ -2,7 +2,7 @@
 // DB throwaway Postgres (advisory lock cần Postgres). Số thật, real service.
 import { login, logout, heartbeat, listOnlineUsers } from './auth-service.js';
 import { lockUser as adminLockUser } from './user-service.js';
-import { getDb } from './db.js';
+import { getDb, ensureCriticalSchema } from './db.js';
 import { hashPassword } from '@glb/business-rules';
 
 let pass = 0, fail = 0;
@@ -19,6 +19,17 @@ export async function runSessionSelfTest(): Promise<number> {
   const uid = admin.id;
   const countSessions = async (): Promise<number> => db.loginSession.count({ where: { userId: uid } });
   const countLive = async (): Promise<number> => db.loginSession.count({ where: { userId: uid, expiresAt: { gt: new Date() }, lastSeenAt: { gt: new Date(Date.now() - 45_000) } } });
+
+  // ═══ 0) BUG DB-TIẾN-HÓA (0.2.34): thiếu cột users.lock_reason → login ném "column does not exist"
+  //        ("Lỗi hệ thống khi đăng nhập"); ensureCriticalSchema PHẢI tự thêm lại cột → login OK. ═══
+  await db.$executeRawUnsafe('ALTER TABLE "users" DROP COLUMN IF EXISTS "lock_reason"');
+  let brokeErr = '';
+  try { await login('adminroot', PW, { deviceId: 'G-BREAK' }); } catch (e) { brokeErr = e instanceof Error ? e.message : String(e); }
+  ok('DB-tiến-hóa: thiếu lock_reason → login NÉM (mô phỏng đúng lỗi 0.2.34)', /lock_reason|column/i.test(brokeErr), { err: brokeErr.slice(0, 80) });
+  await ensureCriticalSchema(db);
+  const healLogin = await login('adminroot', PW, { deviceId: 'G-HEAL' });
+  ok('DB-tiến-hóa: sau ensureCriticalSchema (self-heal cột) → login THÀNH CÔNG (hết "Lỗi hệ thống")', healLogin.ok === true, { err: healLogin.error });
+  await logout();
 
   // ═══ 1) Đăng nhập lần đầu → tạo 1 phiên ═══
   const r1 = await login('adminroot', PW, { deviceInfo: 'MAY-A' });

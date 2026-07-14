@@ -28,6 +28,28 @@ export function parseVndInput(raw: string): number | null {
   return Number(s);
 }
 
+/** G2 (PING) — CHUẨN money-string ↔ bigint. int8 (BIGINT) tối đa = 9_223_372_036_854_775_807. */
+export const MAX_VND = 9223372036854775807n;
+
+/**
+ * Parse CHUỖI tiền (IPC input) → bigint đồng, hoặc null nếu KHÔNG hợp lệ.
+ * CHẶN: format sai / thập phân / âm / khoảng trắng giữa / scientific notation (1e5) / vượt int8 / overflow.
+ * KHÔNG dùng Number trung gian → không mất chữ số. Chuỗi rỗng → null (chưa nhập).
+ */
+export function parseVndStrict(raw: unknown): bigint | null {
+  if (typeof raw === 'bigint') return raw >= 0n && raw <= MAX_VND ? raw : null;
+  const s = String(raw ?? '').trim();
+  if (s === '') return null;
+  if (!/^\d+$/.test(s)) return null; // chỉ chữ số thuần: loại 'e'/'.'/'-'/dấu phân tách
+  const v = BigInt(s);
+  return v <= MAX_VND ? v : null;
+}
+
+/** Serialize bigint tiền → chuỗi thập phân cho IPC output/DTO (không scientific, không mất chữ số). */
+export function serializeVnd(v: bigint): string {
+  return v.toString();
+}
+
 export interface PartialDateResult {
   /** yyyy-mm-dd khi đủ 3 phần hợp lệ; null khi đang gõ dở HOẶC sai. */
   value: string | null;

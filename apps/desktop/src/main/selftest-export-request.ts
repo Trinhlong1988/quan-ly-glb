@@ -206,6 +206,20 @@ export async function runExportRequestSelfTest(): Promise<number> {
   assert('P0-06: đơn giá chuỗi "100000000000" → OK', mStr.ok === true, mStr);
   assert('P0-06: chuỗi lưu đúng 100 tỷ (không mất chữ số)', (await db.exportRequest.findUnique({ where: { id: mStr.id! } }))?.unitPrice === 100_000_000_000n);
   await exportReqSvc.cancelExportRequest(mStr.id!, 'dọn');
+  // G2 biên int8: đúng int8-max lưu được; vượt int8 → VALIDATION; scientific → VALIDATION.
+  const mInt8 = await exportReqSvc.createExportRequest({ ...base, unitPrice: '9223372036854775807' as unknown as number });
+  assert('G2: đơn giá = int8 MAX (9.2e18) → OK, lưu đúng', mInt8.ok === true && (await db.exportRequest.findUnique({ where: { id: mInt8.id! } }))?.unitPrice === 9223372036854775807n, mInt8);
+  if (mInt8.ok && mInt8.id) await exportReqSvc.cancelExportRequest(mInt8.id, 'dọn');
+  const mOver = await exportReqSvc.createExportRequest({ ...base, unitPrice: '9223372036854775808' as unknown as number });
+  assert('G2: đơn giá vượt int8 (max+1) → VALIDATION', mOver.ok === false && mOver.error === 'VALIDATION', mOver);
+  const mSci = await exportReqSvc.createExportRequest({ ...base, unitPrice: '1e9' as unknown as number });
+  assert('G2: đơn giá scientific "1e9" → VALIDATION', mSci.ok === false && mSci.error === 'VALIDATION', mSci);
+  // G2 OVERFLOW phép nhân: unitPrice = int8 MAX, quantity 2 → thành tiền = 2×int8 > int8 → VALIDATION (domain, KHÔNG để Prisma ném).
+  const mMul = await exportReqSvc.createExportRequest({ ...base, unitPrice: '9223372036854775807' as unknown as number, quantity: 2 });
+  assert('G2: unitPrice×quantity vượt int8 → VALIDATION (chặn ở domain)', mMul.ok === false && mMul.error === 'VALIDATION', mMul);
+  // G2 so sánh BIGINT chính xác quanh 2^53: paidAmount (2^53+1) > amount (2^53) → VALIDATION (Number sẽ coi bằng nhau → lọt).
+  const mPaid = await exportReqSvc.createExportRequest({ ...base, unitPrice: '9007199254740992' as unknown as number, quantity: 1, paidAmount: '9007199254740993' as unknown as number });
+  assert('G2: paidAmount(2^53+1) > amount(2^53) → VALIDATION (so sánh bigint)', mPaid.ok === false && mPaid.error === 'VALIDATION', mPaid);
 
   // ══ Ca 7: SELF-duyệt bởi người TẠO (không phải Admin) → FORBIDDEN ══
   await userSvc.createUser({ fullName: 'YCXK Kho', phone: '0900000431', email: null, username: 'ycxkwh01', password: 'Pass@1234', roleCodes: ['WAREHOUSE'] });

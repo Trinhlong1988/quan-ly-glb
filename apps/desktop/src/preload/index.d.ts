@@ -33,6 +33,15 @@ export interface RememberedCreds {
 }
 
 // G10.3 Cấu hình máy chủ (client first-run) — DTO cho màn "Cấu hình máy chủ".
+export interface SearchHitDto {
+  kind: 'customer' | 'tid' | 'pos' | 'transaction';
+  id: number;
+  code: string;
+  label: string;
+  sub?: string;
+  page: string;
+}
+
 export interface ServerConfigDto {
   host: string;
   port: number;
@@ -489,10 +498,11 @@ export interface CreateExportRequestInput {
   cardTypeId?: number | null;
   feeTypeId?: number | null;
   priceMode?: string; // LISTED | CUSTOM
-  unitPrice: number; // đơn giá 1 đơn vị (VND) > 0
+  // G2: CONTRACT IPC money = CHUỖI thập phân đồng VND (string THUẦN, KHÔNG string|number). Renderer luôn gửi chuỗi.
+  unitPrice: string; // đơn giá 1 đơn vị (VND) > 0
   quantity: number; // > 0
-  depositAmount?: number | null; // cọc kèm (≥ 0)
-  paidAmount?: number | null; // SALE thu ngay khi duyệt (0..amount); RENT phải = 0
+  depositAmount?: string | null; // cọc kèm (≥ 0)
+  paidAmount?: string | null; // SALE thu ngay khi duyệt (0..amount); RENT phải = 0
   fundId?: number | null; // quỹ nhận tiền khi duyệt (bắt buộc khi có tiền)
   method?: string | null; // CASH | CK
   note?: string | null;
@@ -506,11 +516,11 @@ export interface ExportRequestDto {
   method: string;
   status: string;
   priceMode: string;
-  unitPrice: number;
+  unitPrice: string; // G2: money ĐẦU RA = chuỗi thập phân đồng VND
   quantity: number;
-  amount: number;
-  depositAmount: number;
-  paidAmount: number;
+  amount: string;
+  depositAmount: string;
+  paidAmount: string;
   customerId: number;
   customerName: string | null;
   requesterUserId: number;
@@ -778,6 +788,9 @@ export interface CancelRequestDto {
   requestedBy: number;
   requestedByName: string | null;
   requestedAt: string;
+  decidedByName: string | null;
+  decidedAt: string | null;
+  decisionNote: string | null;
   canApprove: boolean;
   isSelf: boolean;
 }
@@ -794,6 +807,9 @@ export interface EntityCancelRequestDto {
   requestedBy: number;
   requestedByName: string | null;
   requestedAt: string;
+  decidedByName: string | null;
+  decidedAt: string | null;
+  decisionNote: string | null;
   canApprove: boolean;
   isSelf: boolean;
 }
@@ -1774,6 +1790,7 @@ export interface GlbApi {
   // ── P1.2 Approval Engine (hủy bill có duyệt) ──
   cancelRequest(transactionId: number, reason: string): Promise<MutationOutcome>;
   cancelRequestList(status?: string): Promise<ListResult<CancelRequestDto>>;
+  globalSearch(q: string): Promise<{ ok: boolean; error?: string; message?: string; data?: SearchHitDto[] }>;
   cancelApprove(requestId: number, password: string, note?: string): Promise<MutationOutcome>;
   cancelReject(requestId: number, note: string): Promise<MutationOutcome>;
   cancelApproveBulk(requestIds: number[], password: string, note?: string): Promise<BulkSkipOutcome>;

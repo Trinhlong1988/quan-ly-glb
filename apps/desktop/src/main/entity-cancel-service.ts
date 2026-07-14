@@ -11,7 +11,7 @@ import { auditSnapshot } from '@glb/business-rules';
 import { hasPermission, type AuthUser, type AuditAction } from '@glb/shared';
 import type { Db } from '@glb/database';
 import { requirePermission, verifyActorPassword } from './guard.js';
-import { writeAudit } from './audit.js';
+import { writeAudit, writeAuditStrict, bumpChangeToken } from './audit.js';
 import { me } from './auth-service.js';
 import { getDb } from './db.js';
 import { customerLiveRelationGuard } from './customer-service.js';
@@ -306,12 +306,14 @@ async function approveOne(db: Db, cfg: EntityConfig, user: AuthUser, requestId: 
       const reqMoved = await txc.approvalRequest.updateMany({ where: { id: req.id, status: 'PENDING' }, data: { status: 'APPROVED', decidedBy: user.id, decidedAt, decisionNote: note } });
       if (reqMoved.count === 0) throw new TxGuardError('ALREADY_DECIDED', 'Yêu cầu đã được xử lý (không còn chờ duyệt).');
       await cfg.applyCancel(txc, req.entityId, user, req.reason);
+      // G1: audit NGHIÊM trong tx (tier-1 approval/hủy) — audit fail → rollback cả việc xóa mềm entity.
+      await writeAuditStrict(txc, { actorUserId: user.id, action: cfg.auditApproved, targetType: cfg.entityType, targetId: String(req.entityId), after: auditSnapshot({ requestId: req.id, label, note }) });
     });
   } catch (e) {
     if (e instanceof TxGuardError) return { ok: false, error: e.code, message: e.userMessage };
     throw e;
   }
-  await writeAudit(db, { actorUserId: user.id, action: cfg.auditApproved, targetType: cfg.entityType, targetId: String(req.entityId), after: auditSnapshot({ requestId: req.id, label, note }) });
+  await bumpChangeToken(db, cfg.entityType);
   try {
     await pushSystemNotice(db, [req.requestedBy], cfg.auditApproved, `Yêu cầu hủy ${cfg.label} ${label} đã được DUYỆT`, `Yêu cầu hủy ${cfg.label} ${label} của bạn đã được duyệt.${note ? ' Ghi chú: ' + note + '.' : ''}`);
   } catch {
@@ -382,6 +384,9 @@ export interface EntityCancelRequestDto {
   requestedBy: number;
   requestedByName: string | null;
   requestedAt: string;
+  decidedByName: string | null; // người DUYỆT (danh sách "đã duyệt/đã xóa")
+  decidedAt: string | null;
+  decisionNote: string | null;
   canApprove: boolean;
   isSelf: boolean; // bạn là người TẠO yêu cầu này (chặn tự-duyệt R34) → hiện để bạn biết phiếu đang chờ người khác duyệt.
 }
@@ -401,7 +406,8 @@ export async function listEntityCancelRequests(status = 'PENDING', entityTypeFil
 
   const rows = await db.approvalRequest.findMany({ where: { entityType: { in: allowed }, action: 'CANCEL', status }, orderBy: { requestedAt: 'desc' } });
   const reqUserIds = [...new Set(rows.map((r) => r.requestedBy))];
-  const names = new Map((await db.user.findMany({ where: { id: { in: reqUserIds } }, select: { id: true, fullName: true, username: true } })).map((u) => [u.id, u.fullName || u.username]));
+  const nameIds = [...new Set([...reqUserIds, ...rows.map((r) => r.decidedBy).filter((x): x is number => x != null)])];
+  const names = new Map((await db.user.findMany({ where: { id: { in: nameIds } }, select: { id: true, fullName: true, username: true } })).map((u) => [u.id, u.fullName || u.username]));
 
   const data: EntityCancelRequestDto[] = [];
   for (const r of rows) {
@@ -427,6 +433,9 @@ export async function listEntityCancelRequests(status = 'PENDING', entityTypeFil
       requestedBy: r.requestedBy,
       requestedByName: names.get(r.requestedBy) ?? null,
       requestedAt: r.requestedAt.toISOString(),
+      decidedByName: r.decidedBy != null ? names.get(r.decidedBy) ?? null : null,
+      decidedAt: r.decidedAt ? r.decidedAt.toISOString() : null,
+      decisionNote: r.decisionNote ?? null,
       canApprove,
       isSelf
     });

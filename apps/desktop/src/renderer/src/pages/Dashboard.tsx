@@ -21,9 +21,89 @@ import {
   UserRound,
   BarChart3,
   Coins,
-  PiggyBank
+  PiggyBank,
+  Clock,
+  Search as SearchIcon
 } from 'lucide-react';
-import type { DashboardStats, OnlineUserDto } from '../../../preload/index.d';
+
+const SEARCH_KIND_LABEL: Record<string, string> = { customer: 'Khách hàng', tid: 'TID', pos: 'Máy POS', transaction: 'Giao dịch' };
+
+/** Tìm kiếm toàn cục trên topbar — debounce 250ms, chỉ trả bản ghi có quyền (backend), nhóm theo loại, điều hướng khi chọn.
+ *  Không phát request cho chuỗi < 2 ký tự; hủy kết quả cũ (token) chống race; Esc đóng. */
+function TopbarSearch({ onNavigate }: { onNavigate: (page: string) => void }): JSX.Element {
+  const [q, setQ] = useState('');
+  const [hits, setHits] = useState<SearchHitDto[]>([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    const query = q.trim();
+    if (query.length < 2) { setHits([]); setLoading(false); return; }
+    let alive = true;
+    setLoading(true);
+    const t = setTimeout(async () => {
+      const res = await window.api.globalSearch(query);
+      if (!alive) return;
+      setHits(res.ok && res.data ? res.data : []);
+      setLoading(false);
+    }, 250);
+    return () => { alive = false; clearTimeout(t); };
+  }, [q]);
+  return (
+    <div className="relative w-72" onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setOpen(false); }}>
+      <div className="flex items-center gap-2 rounded-lg border border-line bg-appbg px-3 py-1.5 focus-within:border-brand">
+        <SearchIcon className="h-4 w-4 shrink-0 text-slate-400" />
+        <input
+          value={q}
+          onChange={(e) => { setQ(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={(e) => { if (e.key === 'Escape') { setOpen(false); (e.target as HTMLInputElement).blur(); } }}
+          placeholder="Tìm khách / TID / máy POS / mã GD…"
+          className="w-full bg-transparent text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none"
+        />
+      </div>
+      {open && q.trim().length >= 2 && (
+        <div className="absolute left-0 z-40 mt-1 max-h-96 w-96 overflow-y-auto rounded-lg border border-line bg-white py-1 shadow-xl">
+          {loading && <div className="px-3 py-2 text-xs text-slate-400">Đang tìm…</div>}
+          {!loading && hits.length === 0 && <div className="px-3 py-2 text-xs text-slate-400">Không có kết quả cho “{q.trim()}”.</div>}
+          {!loading && hits.map((h) => (
+            <button
+              key={`${h.kind}-${h.id}`}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => { onNavigate(h.page); setOpen(false); setQ(''); }}
+              className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-appbg"
+            >
+              <span className="rounded bg-brand-tint px-1.5 py-0.5 text-[10px] font-semibold text-brand">{SEARCH_KIND_LABEL[h.kind] ?? h.kind}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-slate-700">{h.label}</span>
+                <span className="block truncate text-xs text-slate-400">{h.code}{h.sub ? ` · ${h.sub}` : ''}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Đồng hồ realtime trên topbar — cập nhật mỗi giây, Intl (Asia/Ho_Chi_Minh), cleanup timer khi unmount.
+ *  Chỉ hiển thị — KHÔNG dùng làm nguồn ngày nghiệp vụ/audit. State cục bộ → không re-render toàn dashboard. */
+function TopbarClock(): JSX.Element {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const time = new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'Asia/Ho_Chi_Minh' }).format(now);
+  const date = new Intl.DateTimeFormat('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Ho_Chi_Minh' }).format(now);
+  return (
+    <div className="flex items-center gap-2 rounded-lg bg-appbg px-3 py-1.5" title={date}>
+      <Clock className="h-4 w-4 text-brand" />
+      <span className="font-mono text-sm font-semibold tabular-nums text-slate-700">{time}</span>
+      <span className="hidden text-xs text-slate-400 sm:inline">{date}</span>
+    </div>
+  );
+}
+import type { DashboardStats, OnlineUserDto, SearchHitDto } from '../../../preload/index.d';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, hasAnyPermission } from '@glb/shared';
 import { MessagesDrawer } from '../components/MessagesDrawer.js';
@@ -163,11 +243,12 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
                 key={m.key}
                 onClick={() => setActive(m.key)}
                 className={
-                  'group relative flex items-center gap-3 rounded-xl py-2 text-sm transition-all ' +
+                  'group relative flex items-center gap-3 rounded-xl py-2 text-sm transition-all duration-150 ' +
                   (m.indent ? 'pl-8 pr-2.5 ' : 'px-2.5 ') +
+                  // Mr.Long 14/7 — nút menu ĐANG CHỌN nổi 3D rõ: gradient sáng + bóng đậm + viền sáng + nhấc nhẹ.
                   (isActive
-                    ? 'bg-brand font-semibold text-white shadow-lg shadow-brand/30'
-                    : 'font-medium text-sidebar-text hover:bg-white/5 hover:text-white')
+                    ? 'bg-gradient-to-br from-brand to-brand-hover font-semibold text-white shadow-lg shadow-brand/50 ring-1 ring-white/20 -translate-y-px'
+                    : 'font-medium text-sidebar-text hover:-translate-y-px hover:bg-white/5 hover:text-white hover:shadow-md hover:shadow-black/20')
                 }
               >
                 {/* Thanh nhấn bên trái khi đang chọn */}
@@ -213,12 +294,16 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Topbar */}
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-line bg-white px-6">
-          <div className="text-sm text-slate-500">
-            <span className="text-slate-400">GLB</span>
-            <span className="mx-2 text-slate-300">/</span>
-            <span className="font-medium text-slate-700">{activeItem?.label}</span>
+          <div className="flex items-center gap-4">
+            <div className="text-sm text-slate-500">
+              <span className="text-slate-400">GLB</span>
+              <span className="mx-2 text-slate-300">/</span>
+              <span className="font-medium text-slate-700">{activeItem?.label}</span>
+            </div>
+            <TopbarSearch onNavigate={(page) => setActive(page)} />
           </div>
           <div className="flex items-center gap-2">
+            <TopbarClock />
             {canInbox && (
               <button
                 onClick={() => setShowInbox(true)}

@@ -286,6 +286,7 @@ const api = {
   // Duyệt hủy bill (P1.2 Approval Engine)
   cancelRequest: (transactionId: number, reason: string) => ipcRenderer.invoke('approval:requestCancel', { transactionId, reason }),
   cancelRequestList: (status?: string) => ipcRenderer.invoke('approval:list', status),
+  globalSearch: (q: string) => ipcRenderer.invoke('search:global', q),
   cancelApprove: (requestId: number, password: string, note?: string) => ipcRenderer.invoke('approval:approve', { requestId, password, note }),
   cancelReject: (requestId: number, note: string) => ipcRenderer.invoke('approval:reject', { requestId, note }),
   cancelApproveBulk: (requestIds: number[], password: string, note?: string) => ipcRenderer.invoke('approval:approveBulk', { requestIds, password, note }),

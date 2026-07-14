@@ -11,6 +11,7 @@ import * as auditSvc from './audit-service.js';
 import * as backupSvc from './backup-service.js';
 import * as settingSvc from './settings-service.js';
 import * as customerSvc from './customer-service.js';
+import { globalSearch } from './global-search-service.js';
 import * as posSvc from './pos-service.js';
 import * as tidSvc from './tid-service.js';
 import * as notifySvc from './notification-service.js';
@@ -158,6 +159,7 @@ export function registerIpc(): void {
   );
 
   // ---- Customers (G-POS.1 §A/§D) ----------------------------------------
+  ipcMain.handle('search:global', async (_e, q: string) => globalSearch(q));
   ipcMain.handle('customer:list', async (_e, filter: customerSvc.CustomerFilter) => customerSvc.listCustomers(filter));
   ipcMain.handle('customer:counts', async () => customerSvc.countCustomers());
   ipcMain.handle('customer:create', async (_e, input: customerSvc.CreateCustomerInput) => customerSvc.createCustomer(input));

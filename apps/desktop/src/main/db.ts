@@ -865,9 +865,33 @@ export async function seedIfEmpty(db: Db): Promise<void> {
   await backfillEmployeeCodes(db);
 }
 
+/**
+ * SELF-HEAL schema (bug DB-tiến-hóa 0.2.34): Prisma 7 KHÔNG có migrate engine trong .exe → nếu deploy bản mới
+ * mà QUÊN chạy `prisma migrate deploy` trên DB dùng chung, các cột ADDITIVE mà CODE ĐANG ĐỌC bị thiếu →
+ * login truy vấn `users.lock_reason` → "column does not exist" → "Lỗi hệ thống khi đăng nhập".
+ * Vá triệt để: mỗi boot chạy `ADD COLUMN IF NOT EXISTS` (PostgreSQL, idempotent, KHÔNG mất dữ liệu) cho các cột
+ * additive sau baseline. Fresh DB (đã migrate) → no-op. Mỗi câu bọc try/catch → non-fatal (không sập app).
+ */
+export async function ensureCriticalSchema(db: Db): Promise<void> {
+  const stmts = [
+    `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "lock_reason" TEXT`,
+    `ALTER TABLE "export_requests" ADD COLUMN IF NOT EXISTS "method" TEXT NOT NULL DEFAULT 'CASH'`
+  ];
+  for (const s of stmts) {
+    try {
+      await db.$executeRawUnsafe(s);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[schema self-heal] bỏ qua:', s, e instanceof Error ? e.message : e);
+    }
+  }
+}
+
 export async function initDb(): Promise<Db> {
   const url = resolveDatabaseUrl();
   prisma = createPrisma(url);
+  // Self-heal cột additive TRƯỚC mọi truy vấn (login đọc lock_reason ngay) — cả server lẫn client, non-fatal.
+  await ensureCriticalSchema(prisma);
   // G10 model A: máy chủ seed FATAL (bắt buộc). Client cũng seed để ĐỒNG BỘ catalog quyền/role mới
   // khi auto-update (fix "quyền mới không vào DB dùng chung → menu bị ẩn"), nhưng bọc advisory lock
   // (serialize nhiều client) + NON-FATAL (lỗi seed không sập app client). Migrate KHÔNG chạy từ .exe

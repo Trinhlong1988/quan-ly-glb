@@ -3,12 +3,54 @@ import {
   onlyDigits,
   groupDigits,
   parseVndInput,
+  parseVndStrict,
+  serializeVnd,
+  MAX_VND,
   parsePartialDate,
   splitIsoDate,
   missingPrereqs,
   prereqMessage,
   type PrereqDef
 } from './forms.js';
+
+describe('G2 money-string codec — parseVndStrict / serializeVnd (bigint)', () => {
+  it('chuỗi chữ số hợp lệ → bigint (không mất chữ số, kể cả > 2^53)', () => {
+    expect(parseVndStrict('0')).toBe(0n);
+    expect(parseVndStrict('100000000000')).toBe(100000000000n); // 100 tỷ
+    expect(parseVndStrict('9007199254740993')).toBe(9007199254740993n); // > Number.MAX_SAFE_INTEGER, giữ chữ số
+    expect(parseVndStrict('  5000000  ')).toBe(5000000n); // trim
+    expect(parseVndStrict(7n)).toBe(7n); // bigint đầu vào
+  });
+  it('biên int8: đúng MAX_VND ok, vượt int8 → null', () => {
+    expect(parseVndStrict('9223372036854775807')).toBe(MAX_VND);
+    expect(parseVndStrict('9223372036854775808')).toBeNull(); // int8 + 1
+    expect(parseVndStrict('99999999999999999999999')).toBeNull(); // overflow lớn
+  });
+  it('CHẶN format sai / scientific / thập phân / âm / rỗng', () => {
+    expect(parseVndStrict('1e5')).toBeNull(); // scientific notation
+    expect(parseVndStrict('1.5')).toBeNull(); // thập phân
+    expect(parseVndStrict('-5')).toBeNull(); // âm
+    expect(parseVndStrict('5.000.000')).toBeNull(); // có dấu phân tách
+    expect(parseVndStrict('abc')).toBeNull();
+    expect(parseVndStrict('')).toBeNull();
+    expect(parseVndStrict('  ')).toBeNull();
+    expect(parseVndStrict(null)).toBeNull();
+    expect(parseVndStrict(-3n)).toBeNull(); // bigint âm
+  });
+  it('round-trip parse→serialize→parse ổn định (không scientific)', () => {
+    for (const s of ['0', '1', '999', '100000000000', '9223372036854775807']) {
+      const b = parseVndStrict(s)!;
+      expect(serializeVnd(b)).toBe(s);
+      expect(parseVndStrict(serializeVnd(b))).toBe(b);
+      expect(serializeVnd(b)).not.toMatch(/[eE]/); // không bao giờ scientific
+    }
+  });
+  it('tổng nhiều khoản chính xác tuyệt đối (bigint)', () => {
+    const parts = ['999999999999', '888888888888', '1'].map((s) => parseVndStrict(s)!);
+    const sum = parts.reduce((a, b) => a + b, 0n);
+    expect(serializeVnd(sum)).toBe('1888888888888');
+  });
+});
 
 describe('groupDigits / parseVndInput (tiền VND)', () => {
   it('nhóm 3 chữ số kiểu VN', () => {

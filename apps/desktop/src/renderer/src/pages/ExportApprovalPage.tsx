@@ -13,8 +13,14 @@ import { useRowSelection, SelectAllCell, SelectCell } from '../components/Select
 import { exportCsv } from '../lib/exportCsv.js';
 import { ExportReqStatusBadge } from '../components/ExportRequestPanel.js';
 
-/** VND, nhóm 3 số bằng dấu chấm (KHÔNG toLocaleString — R_UI QA gate). */
-function money(n: number): string {
+/** VND, nhóm 3 số bằng dấu chấm (KHÔNG toLocaleString — R_UI QA gate).
+ *  G2: nhận CHUỖI thập phân (money DTO ExportRequest) HOẶC number. */
+function money(n: number | string): string {
+  if (typeof n === 'string') {
+    const m = /^(-?)(\d+)$/.exec(n.trim());
+    if (!m) return n + 'đ';
+    return (m[1] ? '−' : '') + m[2].replace(/\B(?=(\d{3})+(?!\d))/g, '.') + 'đ';
+  }
   const neg = n < 0;
   const s = Math.abs(Math.round(n)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   return (neg ? '−' : '') + s + 'đ';

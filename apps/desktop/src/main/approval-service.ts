@@ -6,7 +6,7 @@ import { auditSnapshot } from '@glb/business-rules';
 import { hasPermission, type AuthUser } from '@glb/shared';
 import type { Db } from '@glb/database';
 import { requirePermission, verifyActorPassword } from './guard.js';
-import { writeAudit } from './audit.js';
+import { writeAudit, writeAuditStrict, bumpChangeToken } from './audit.js';
 
 const REQUEST = 'BILL_CANCEL_REQUEST';
 const APPROVE = 'BILL_CANCEL_APPROVE';
@@ -221,13 +221,14 @@ async function approveOne(db: Db, user: AuthUser, requestId: number, decisionNot
       });
       if (billMoved.count === 0)
         throw new TxGuardError('INVALID_STATE', 'Bill không ở trạng thái chờ hủy (có thể đã đổi trạng thái).');
-      // P0-07: ghi audit TRONG cùng transaction (txc) → state-transition + dấu vết commit/rollback ATOMIC.
-      await writeAudit(txc, { actorUserId: user.id, action: 'BILL_CANCEL_APPROVED', targetType: 'Transaction', targetId: String(tx.id), before: auditSnapshot({ status: tx.status, revenueAmount: tx.revenueAmount }), after: auditSnapshot({ status: 'CANCELLED', requestId: req.id, note }) });
+      // G1: audit NGHIÊM trong tx (tier-1 approval/hủy) → audit fail thì rollback cả việc hủy bill.
+      await writeAuditStrict(txc, { actorUserId: user.id, action: 'BILL_CANCEL_APPROVED', targetType: 'Transaction', targetId: String(tx.id), before: auditSnapshot({ status: tx.status, revenueAmount: tx.revenueAmount }), after: auditSnapshot({ status: 'CANCELLED', requestId: req.id, note }) });
     });
   } catch (e) {
     if (e instanceof TxGuardError) return { ok: false, error: e.code, message: e.userMessage };
     throw e;
   }
+  await bumpChangeToken(db, 'Transaction'); // realtime best-effort, sau commit (tách khỏi strict audit)
   // F-NOTIF: báo kết quả cho người tạo yêu cầu (§②b) — chỉ chạy ở nhánh thành công.
   try {
     await pushSystemNotice(
@@ -268,13 +269,14 @@ async function rejectOne(db: Db, user: AuthUser, requestId: number, decisionNote
       });
       if (billMoved.count !== 1)
         throw new TxGuardError('INVALID_STATE', 'Bill không còn ở trạng thái chờ hủy — không thể hoàn về đã ghi.');
-      // P0-07: audit TRONG cùng transaction — REJECTED + hoàn bill + dấu vết commit/rollback ATOMIC.
-      await writeAudit(txc, { actorUserId: user.id, action: 'BILL_CANCEL_REJECTED', targetType: 'Transaction', targetId: String(req.entityId), after: auditSnapshot({ requestId: req.id, note }) });
+      // G1: audit NGHIÊM trong tx (tier-1) — REJECTED + hoàn bill + dấu vết atomic; audit fail → rollback.
+      await writeAuditStrict(txc, { actorUserId: user.id, action: 'BILL_CANCEL_REJECTED', targetType: 'Transaction', targetId: String(req.entityId), after: auditSnapshot({ requestId: req.id, note }) });
     });
   } catch (e) {
     if (e instanceof TxGuardError) return { ok: false, error: e.code, message: e.userMessage };
     throw e;
   }
+  await bumpChangeToken(db, 'Transaction');
   // F-NOTIF: báo kết quả cho người tạo yêu cầu (§②b) — chỉ chạy ở nhánh thành công.
   try {
     const txForNotice = await db.transaction.findUnique({ where: { id: req.entityId }, select: { code: true } });
@@ -363,6 +365,9 @@ export interface CancelRequestDto {
   requestedBy: number;
   requestedByName: string | null;
   requestedAt: string;
+  decidedByName: string | null; // người DUYỆT (cho danh sách "đã duyệt/đã xóa")
+  decidedAt: string | null; // thời điểm duyệt (ISO) — null nếu chưa duyệt
+  decisionNote: string | null; // ghi chú khi duyệt/từ chối
   canApprove: boolean; // approver hiện tại có được duyệt cái này không (phân vai)
   isSelf: boolean; // bạn là người tạo yêu cầu này → hiện để biết đang chờ người khác duyệt (không tự duyệt được).
 }
@@ -376,7 +381,8 @@ export async function listCancelRequests(status = 'PENDING'): Promise<{ ok: bool
   const txIds = [...new Set(rows.map((r) => r.entityId))];
   const txs = new Map((await db.transaction.findMany({ where: { id: { in: txIds } }, select: { id: true, code: true, amount: true } })).map((t) => [t.id, t]));
   const reqUserIds = [...new Set(rows.map((r) => r.requestedBy))];
-  const names = new Map((await db.user.findMany({ where: { id: { in: reqUserIds } }, select: { id: true, fullName: true, username: true } })).map((u) => [u.id, u.fullName || u.username]));
+  const nameIds = [...new Set([...reqUserIds, ...rows.map((r) => r.decidedBy).filter((x): x is number => x != null)])];
+  const names = new Map((await db.user.findMany({ where: { id: { in: nameIds } }, select: { id: true, fullName: true, username: true } })).map((u) => [u.id, u.fullName || u.username]));
   // P2-01: nạp quyền requester 1 LẦN cho mỗi user PHÂN BIỆT (không N+1 theo từng phiếu trong vòng lặp).
   const approverMap = new Map<number, boolean>();
   for (const rid of reqUserIds) approverMap.set(rid, (await userPermSet(db, rid)).has(APPROVE));
@@ -399,6 +405,9 @@ export async function listCancelRequests(status = 'PENDING'): Promise<{ ok: bool
       requestedBy: r.requestedBy,
       requestedByName: names.get(r.requestedBy) ?? null,
       requestedAt: r.requestedAt.toISOString(),
+      decidedByName: r.decidedBy != null ? names.get(r.decidedBy) ?? null : null,
+      decidedAt: r.decidedAt ? r.decidedAt.toISOString() : null,
+      decisionNote: r.decisionNote ?? null,
       canApprove,
       isSelf
     });

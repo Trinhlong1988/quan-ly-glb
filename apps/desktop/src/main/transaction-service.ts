@@ -8,7 +8,7 @@
 import { auditSnapshot, computeRevenue, pickEffectiveRate } from '@glb/business-rules';
 import type { Db } from '@glb/database';
 import { requirePermission, verifyActorPassword } from './guard.js';
-import { writeAudit } from './audit.js';
+import { writeAudit, writeAuditStrict, bumpChangeToken } from './audit.js';
 import { nextCode } from './code-service.js';
 
 const VIEW = 'REVENUE_VIEW';
@@ -291,7 +291,8 @@ export async function createTransaction(input: CreateTransactionInput): Promise<
     });
     const code = 'GD' + String(c.id).padStart(5, '0');
     await tx.transaction.update({ where: { id: c.id }, data: { code } });
-    await writeAudit(tx, {
+    // G1: audit NGHIÊM trong tx (tier-1 tiền) → audit fail thì rollback cả giao dịch.
+    await writeAuditStrict(tx, {
       actorUserId: user.id,
       action: 'TRANSACTION_CREATED',
       targetType: 'Transaction',
@@ -300,6 +301,7 @@ export async function createTransaction(input: CreateTransactionInput): Promise<
     });
     return c;
   });
+  await bumpChangeToken(db, 'Transaction');
   return { ok: true, id: created.id };
 }
 
@@ -872,8 +874,8 @@ export async function writeOffBadDebt(transactionId: number, actorPassword: stri
           note: `Ghi giảm nợ xấu GD #${transactionId} (nợ còn lại net ${net.total}đ)`, status: 'POSTED', createdBy: user.id
         }
       });
-      // R48 Pha 3 — GHI AUDIT TRONG transaction: tiền (write-off + phiếu chi) và log commit/rollback ATOMIC.
-      await writeAudit(tx, {
+      // G1: audit NGHIÊM trong transaction (tier-1 tiền: write-off + phiếu chi) — audit fail → rollback.
+      await writeAuditStrict(tx, {
         actorUserId: user.id,
         action: 'DEBT_WRITTEN_OFF',
         targetType: 'Transaction',
@@ -886,5 +888,6 @@ export async function writeOffBadDebt(transactionId: number, actorPassword: stri
     if (e instanceof TxGuardError) return { ok: false, error: e.code, message: e.userMessage };
     throw e;
   }
+  await bumpChangeToken(db, 'Transaction');
   return { ok: true, id: result.entryId };
 }

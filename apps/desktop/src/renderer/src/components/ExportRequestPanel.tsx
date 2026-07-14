@@ -22,11 +22,22 @@ import { StatBar } from './StatBar.js';
 import { FilterBar } from './FilterBar.js';
 import { usePagination } from './Pagination.js';
 
-/** VND, nhóm 3 số bằng dấu chấm (KHÔNG toLocaleString — R_UI QA gate). */
-function money(n: number): string {
+/** VND, nhóm 3 số bằng dấu chấm (KHÔNG toLocaleString — R_UI QA gate).
+ *  G2: nhận CHUỖI thập phân (money DTO) HOẶC number — format từ chuỗi, không tính float. */
+function money(n: number | string): string {
+  if (typeof n === 'string') {
+    const m = /^(-?)(\d+)$/.exec(n.trim());
+    if (!m) return n + 'đ';
+    return (m[1] ? '−' : '') + m[2].replace(/\B(?=(\d{3})+(?!\d))/g, '.') + 'đ';
+  }
   const neg = n < 0;
   const s = Math.abs(Math.round(n)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   return (neg ? '−' : '') + s + 'đ';
+}
+
+/** G2: chỉ giữ chữ số (chuỗi tiền IPC) — bỏ dấu phân tách/ký tự lạ. */
+function digitsOnly(s: string): string {
+  return (s ?? '').replace(/[^\d]/g, '');
 }
 
 const HANDOVER_LABEL: Record<string, string> = { SALE: 'Bán', RENT: 'Cho thuê' };
@@ -268,12 +279,15 @@ function ExportRequestForm({ kind, onClose, onSaved }: { kind: 'POS' | 'TID'; on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handoverKind]);
 
+  // G2: SỐ LƯỢNG là số đếm (Number OK). MỌI trường TIỀN tính/so sánh bằng BIGINT — KHÔNG qua Number.
   const qty = Number(quantity) || 0;
-  const price = Number(unitPrice) || 0;
-  const amount = qty * price;
-  const deposit = Number(depositAmount) || 0;
-  const paid = Number(paidAmount) || 0;
-  const needsFund = paid > 0 || deposit > 0 || handoverKind === 'RENT';
+  const toBig = (s: string): bigint => { try { return BigInt(digitsOnly(s) || '0'); } catch { return 0n; } };
+  const priceB = toBig(unitPrice);
+  const depositB = toBig(depositAmount);
+  const paidB = toBig(paidAmount);
+  const amountB = priceB * BigInt(qty >= 0 ? qty : 0);
+  const amountStr = amountB.toString();
+  const needsFund = paidB > 0n || depositB > 0n || handoverKind === 'RENT';
 
   const bankOptions = useMemo(() => banks.map((b) => ({ value: String(b.id), label: `${b.code} · ${b.name}` })), [banks]);
   const customerOptions = useMemo(() => customers.map((c) => ({ value: String(c.id), label: c.display })), [customers]);
@@ -282,13 +296,13 @@ function ExportRequestForm({ kind, onClose, onSaved }: { kind: 'POS' | 'TID'; on
     if (kind === 'TID' && tidDelivery === 'pos') return toast.alert('Giao TID KÈM máy POS: hãy tạo phiếu ở tab "Yêu cầu xuất kho" trong Quản Lý Máy POS (chọn Cho thuê kèm TID).', 'Quay về giao ở POS');
     if (!customerId) return toast.alert('Vui lòng chọn khách hàng.', 'Thiếu thông tin');
     if (!Number.isInteger(qty) || qty < 1) return toast.alert('Số lượng phải là số nguyên ≥ 1.', 'Số lượng không hợp lệ');
-    if (!(price > 0)) return toast.alert('Đơn giá phải > 0.', 'Số tiền không hợp lệ');
+    if (!(priceB > 0n)) return toast.alert('Đơn giá phải > 0.', 'Số tiền không hợp lệ');
     if (kind === 'TID') {
       if (!bankId) return toast.alert('Yêu cầu TID phải chọn ngân hàng (khớp TID khi duyệt).', 'Thiếu ngân hàng');
       if (!partnerId) return toast.alert('Yêu cầu TID phải chọn đối tác (khớp TID khi duyệt).', 'Thiếu đối tác');
     }
-    if (handoverKind === 'RENT' && paid > 0) return toast.alert('Cho thuê thu qua đơn giá khi duyệt — không nhập "đã thanh toán".', 'Không hợp lệ');
-    if (paid > amount) return toast.alert('Tiền đã thanh toán không được lớn hơn thành tiền.', 'Số tiền không hợp lệ');
+    if (handoverKind === 'RENT' && paidB > 0n) return toast.alert('Cho thuê thu qua đơn giá khi duyệt — không nhập "đã thanh toán".', 'Không hợp lệ');
+    if (paidB > amountB) return toast.alert('Tiền đã thanh toán không được lớn hơn thành tiền.', 'Số tiền không hợp lệ');
     if (needsFund && !fundId) return toast.alert('Có thu tiền (bán/thuê/cọc) thì phải chọn quỹ nhận.', 'Thiếu quỹ');
     setBusy(true);
     const input: CreateExportRequestInput = {
@@ -300,10 +314,11 @@ function ExportRequestForm({ kind, onClose, onSaved }: { kind: 'POS' | 'TID'; on
       partnerId: kind === 'TID' && partnerId ? Number(partnerId) : null,
       customerId: Number(customerId),
       feeTypeId: kind === 'TID' && feeTypeId ? Number(feeTypeId) : null,
-      unitPrice: price,
+      // G2: gửi money là CHUỖI chữ số (không qua Number ở IPC) — backend parseVndStrict → bigint.
+      unitPrice: digitsOnly(unitPrice),
       quantity: qty,
-      depositAmount: deposit,
-      paidAmount: handoverKind === 'RENT' ? 0 : paid,
+      depositAmount: digitsOnly(depositAmount),
+      paidAmount: handoverKind === 'RENT' ? '0' : digitsOnly(paidAmount),
       fundId: fundId ? Number(fundId) : null,
       note: note.trim() || null
     };
@@ -381,7 +396,7 @@ function ExportRequestForm({ kind, onClose, onSaved }: { kind: 'POS' | 'TID'; on
           <MoneyInput value={unitPrice} onChange={setUnitPrice} />
         </Field>
         <Field label="Thành tiền (VND)" hint="Tự tính = đơn giá × số lượng">
-          <div className="rounded-md border border-line bg-appbg px-3 py-2 text-right text-sm font-semibold tabular-nums text-slate-700">{money(amount)}</div>
+          <div className="rounded-md border border-line bg-appbg px-3 py-2 text-right text-sm font-semibold tabular-nums text-slate-700">{money(amountStr)}</div>
         </Field>
         <Field label="Đã cọc (VND)" hint="Tiền cọc kèm phiếu (nếu có)">
           <MoneyInput value={depositAmount} onChange={setDepositAmount} />

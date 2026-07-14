@@ -20,6 +20,7 @@ import {
 } from './transaction-service.js';
 import { setFeeRate, listFeeRates } from './fee-config-service.js';
 import { setTidSellFees } from './tid-sell-fee-service.js';
+import { globalSearch } from './global-search-service.js';
 import { fmtDate } from '@glb/shared';
 
 let pass = 0,
@@ -83,6 +84,28 @@ export async function runRevenueSelfTest(): Promise<number> {
   if (dLeap.ok && dLeap.id) await db.transaction.update({ where: { id: dLeap.id }, data: { deletedAt: new Date() } }); // dọn để không ảnh hưởng tổng doanh thu bên dưới
   const dLeapBad = await createTransaction({ feeTypeId: ft.id, tidId: tid.id, cardTypeId: card.id, amount: 1_000_000, txnDate: '2026-02-29' });
   ok('P1-05: 2026-02-29 (không nhuận) → VALIDATION', dLeapBad.ok === false && dLeapBad.error === 'VALIDATION', dLeapBad);
+
+  // ═══════════ A3) G1 (PING) FAULT-INJECTION — audit fail → createTransaction ROLLBACK (không mồ côi tiền) ═══════════
+  const cntBefore = await db.transaction.count();
+  const dtBefore = await db.transaction.aggregate({ _sum: { revenueAmount: true }, where: { status: { not: 'CANCELLED' }, deletedAt: null } });
+  let threw = false;
+  process.env['GLB_AUDIT_FAULT'] = '1'; // ép writeAuditStrict ném
+  try {
+    await createTransaction({ feeTypeId: ft.id, tidId: tid.id, cardTypeId: card.id, amount: 7_777_000, txnDate: '2026-07-05T00:00:00.000Z' });
+  } catch {
+    threw = true;
+  }
+  process.env['GLB_AUDIT_FAULT'] = '';
+  ok('G1: audit fail → NÉM lỗi (không nuốt, không commit nửa vời)', threw === true, { threw });
+  ok('G1: audit fail → KHÔNG tạo transaction (rollback nguyên tử)', (await db.transaction.count()) === cntBefore, { before: cntBefore, after: await db.transaction.count() });
+  const dtAfter = await db.transaction.aggregate({ _sum: { revenueAmount: true }, where: { status: { not: 'CANCELLED' }, deletedAt: null } });
+  ok('G1: audit fail → doanh thu KHÔNG đổi (không có tiền mồ côi)', (dtAfter._sum.revenueAmount ?? 0n) === (dtBefore._sum.revenueAmount ?? 0n), { before: String(dtBefore._sum.revenueAmount), after: String(dtAfter._sum.revenueAmount) });
+  // Sau khi bỏ fault, tạo GD lại BÌNH THƯỜNG được (chốt fault chỉ khi env bật).
+  const okAgain = await createTransaction({ feeTypeId: ft.id, tidId: tid.id, cardTypeId: card.id, amount: 1_000_000, txnDate: '2026-07-05T00:00:00.000Z' });
+  ok('G1: bỏ fault → createTransaction bình thường + có audit', okAgain.ok === true, okAgain);
+  const auditOk = await db.auditLog.count({ where: { action: 'TRANSACTION_CREATED', targetId: String(okAgain.id) } });
+  ok('G1: GD tạo lại có ĐÚNG 1 audit TRANSACTION_CREATED', auditOk === 1, { auditOk });
+  if (okAgain.ok && okAgain.id) await db.transaction.update({ where: { id: okAgain.id }, data: { deletedAt: new Date() } }); // dọn, không ảnh hưởng tổng
 
   // ═══════════ B) SNAPSHOT — đổi biểu phí sau KHÔNG làm sai doanh thu đã ghi ═══════════
   await db.feeRate.update({ where: { id: rate.id }, data: { phiMua: 9000, phiCaiMay: 0 } });
@@ -383,6 +406,17 @@ export async function runRevenueSelfTest(): Promise<number> {
 
   await logout();
   // eslint-disable-next-line no-console
+  // ═══════════ M) TÌM KIẾM TOÀN CỤC (Mr.Long 14/7) — khớp khách/TID theo quyền, gom nhóm, chặn chuỗi ngắn ═══════════
+  await login('adminroot', ADMIN_PW); // cần phiên có quyền để search (block trước có logout dọn)
+  const sC = await globalSearch('Doanh Thu');
+  ok('search: "Doanh Thu" → có khách "Khách Doanh Thu"', sC.ok === true && (sC.data ?? []).some((h) => h.kind === 'customer' && h.label.includes('Khách Doanh Thu')), { n: sC.data?.length });
+  const sT = await globalSearch('TIDREV1');
+  ok('search: "TIDREV1" → hit kind=tid, code=TIDREV1', sT.ok === true && (sT.data ?? []).some((h) => h.kind === 'tid' && h.code === 'TIDREV1'), sT.data);
+  const sShort = await globalSearch('a');
+  ok('search: < 2 ký tự → rỗng (không phát query)', sShort.ok === true && (sShort.data ?? []).length === 0);
+  const sNone = await globalSearch('ZZZ_KHONG_TON_TAI_9988');
+  ok('search: không khớp → data rỗng (ok=true)', sNone.ok === true && (sNone.data ?? []).length === 0);
+
   console.log(`REV15 SUMMARY | pass=${pass} fail=${fail}`);
   return fail === 0 ? 0 : 1;
 }

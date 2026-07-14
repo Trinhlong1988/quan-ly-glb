@@ -10,10 +10,10 @@
 //     duyệt); người khác cần verifyActorPassword; $transaction FOR UPDATE guard PENDING (chống double-approve).
 // State POS/TID chiếu qua decidePosTransition/decideTidTransition (nguồn sự thật state machine) — không đoán.
 import { decidePosTransition, decideTidTransition, auditSnapshot, type PosStatus, type TidStatus } from '@glb/business-rules';
-import { hasPermission } from '@glb/shared';
+import { hasPermission, parseVndStrict, serializeVnd, MAX_VND } from '@glb/shared';
 import { Prisma } from '@glb/database';
 import { requirePermission, verifyActorPassword } from './guard.js';
-import { writeAudit } from './audit.js';
+import { writeAudit, writeAuditStrict, bumpChangeToken } from './audit.js';
 import { nextCode } from './code-service.js';
 import { bookSaleCashEntries } from './device-sale-service.js';
 import { applyHandoverTx, openDepositTx } from './deposit-service.js';
@@ -53,27 +53,22 @@ async function withRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<T> {
   throw last;
 }
 
-/** VND nguyên. allowZero=false → bắt buộc > 0. Ném ReqAbort nếu không hợp lệ.
- *  P0-06: nhận chuỗi-chữ-số PARSE THẲNG sang BigInt (không qua Number → không mất chữ số). Nhận number thì
- *  CHẶN > MAX_SAFE_INTEGER (2^53) để không có giá trị bị làm tròn âm thầm trước khi lưu (chuẩn tiền BigInt B39). */
+/** VND nguyên → bigint. allowZero=false → bắt buộc > 0. Ném ReqAbort nếu không hợp lệ.
+ *  G2 (PING): CHUẨN money-string cho tuyến ExportRequest — IPC input là CHUỖI chữ số, parse THẲNG sang bigint
+ *  qua `parseVndStrict` (chặn thập phân/âm/scientific/vượt int8/overflow; KHÔNG qua Number). Vẫn nhận number/bigint
+ *  (call nội bộ cũ) nhưng cùng ràng buộc int8 + không mất chữ số. */
 function toVnd(v: unknown, label: string, opts: { allowZero?: boolean } = {}): bigint {
   const bad = (): never => {
-    throw new ReqAbort({ ok: false, error: 'VALIDATION', message: `${label} phải là số nguyên ${opts.allowZero ? '≥ 0' : '> 0'} (VND).` });
+    throw new ReqAbort({ ok: false, error: 'VALIDATION', message: `${label} phải là số nguyên ${opts.allowZero ? '≥ 0' : '> 0'} (VND ≤ int8), không chấp nhận thập phân/mũ.` });
   };
-  let amount: bigint;
-  if (typeof v === 'bigint') {
-    amount = v;
-  } else if (typeof v === 'string') {
-    const raw = v.trim();
-    if (!/^\d+$/.test(raw)) bad(); // chỉ chữ số (không dấu, không thập phân, không âm)
-    amount = BigInt(raw);
-  } else {
-    const n = typeof v === 'number' ? v : Number(v);
-    if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) bad();
-    if (n > Number.MAX_SAFE_INTEGER) bad(); // chống làm tròn âm thầm trước BigInt
-    amount = BigInt(n);
+  // number: chặn > MAX_SAFE để không làm tròn âm thầm rồi chuyển sang chuỗi cho parseVndStrict.
+  if (typeof v === 'number') {
+    if (!Number.isFinite(v) || !Number.isInteger(v) || v < 0 || v > Number.MAX_SAFE_INTEGER) bad();
   }
-  if (amount < 0n || (!opts.allowZero && amount === 0n)) bad();
+  const parsed = parseVndStrict(typeof v === 'number' ? String(v) : v);
+  if (parsed === null) bad();
+  const amount = parsed as bigint;
+  if (!opts.allowZero && amount === 0n) bad();
   return amount;
 }
 
@@ -95,10 +90,11 @@ export interface CreateExportRequestInput {
   cardTypeId?: number | null;
   feeTypeId?: number | null;
   priceMode?: string; // LISTED | CUSTOM
-  unitPrice: number; // đơn giá 1 đơn vị (VND) > 0
+  // G2: money IPC input = CHUỖI thập phân (đồng VND). Vẫn nhận number cho call nội bộ cũ; toVnd chuẩn hóa.
+  unitPrice: string | number; // đơn giá 1 đơn vị (VND) > 0
   quantity: number; // > 0
-  depositAmount?: number | null; // cọc kèm (≥ 0)
-  paidAmount?: number | null; // SALE thu ngay khi duyệt (0..amount); RENT phải = 0
+  depositAmount?: string | number | null; // cọc kèm (≥ 0)
+  paidAmount?: string | number | null; // SALE thu ngay khi duyệt (0..amount); RENT phải = 0
   fundId?: number | null; // quỹ nhận tiền khi duyệt (bắt buộc khi có tiền)
   method?: string | null; // Mr.Long 14/7 — CASH | CK (mặc định CASH); áp cho mọi bút toán tiền khi duyệt
   note?: string | null;
@@ -124,6 +120,8 @@ export async function createExportRequest(input: CreateExportRequestInput): Prom
     const quantity = input.quantity;
     const unitPrice = toVnd(input.unitPrice, 'Đơn giá');
     const amount = unitPrice * BigInt(quantity);
+    // G2: CHẶN overflow phép nhân bằng lỗi DOMAIN (VALIDATION) — KHÔNG để Prisma/int8 tự ném (mất ngữ cảnh).
+    if (amount > MAX_VND) throw new ReqAbort({ ok: false, error: 'VALIDATION', message: `Thành tiền (đơn giá × số lượng) vượt trần cho phép (≤ ${MAX_VND} đồng).` });
     const depositAmount = toVnd(input.depositAmount ?? 0, 'Tiền cọc', { allowZero: true });
     const paidAmount = toVnd(input.paidAmount ?? 0, 'Tiền thu khi duyệt', { allowZero: true });
 
@@ -203,11 +201,11 @@ export interface ExportRequestDto {
   method: string; // CASH | CK
   status: string;
   priceMode: string;
-  unitPrice: number;
+  unitPrice: string; // G2: money ĐẦU RA = chuỗi thập phân đồng VND (không mất chữ số)
   quantity: number;
-  amount: number;
-  depositAmount: number;
-  paidAmount: number;
+  amount: string;
+  depositAmount: string;
+  paidAmount: string;
   customerId: number;
   customerName: string | null;
   requesterUserId: number;
@@ -275,8 +273,9 @@ export async function listExportRequests(filter: ExportRequestFilter = {}): Prom
 
   const data: ExportRequestDto[] = rows.map((r) => ({
     id: r.id, code: r.code, kind: r.kind, handoverKind: r.handoverKind, withTid: r.withTid, method: r.method, status: r.status,
-    priceMode: r.priceMode, unitPrice: Number(r.unitPrice), quantity: r.quantity, amount: Number(r.amount),
-    depositAmount: Number(r.depositAmount), paidAmount: Number(r.paidAmount),
+    // G2: money ĐẦU RA = CHUỖI thập phân (serializeVnd) — KHÔNG Number(bigint) (không mất chữ số, không scientific).
+    priceMode: r.priceMode, unitPrice: serializeVnd(r.unitPrice), quantity: r.quantity, amount: serializeVnd(r.amount),
+    depositAmount: serializeVnd(r.depositAmount), paidAmount: serializeVnd(r.paidAmount),
     customerId: r.customerId, customerName: custMap.get(r.customerId) ?? null,
     requesterUserId: r.requesterUserId, requesterName: userMap.get(r.requesterUserId) ?? null,
     bankId: r.bankId, bankName: r.bankId != null ? bankMap.get(r.bankId) ?? null : null,
@@ -536,8 +535,8 @@ export async function approveExportRequest(requestId: number, lines: ApproveLine
         }
         const moved = await tx.exportRequest.updateMany({ where: { id: req.id, status: 'PENDING' }, data: { status: 'APPROVED', decidedBy: user.id, decidedAt: occurredAt, decisionNote: decidedNote } });
         if (moved.count === 0) throw new ReqAbort({ ok: false, error: 'ALREADY_DECIDED', message: 'Yêu cầu đã được xử lý.' });
-        // P0-07: audit tổng-hợp duyệt phiếu GHI TRONG cùng $transaction với trừ tiền/tồn kho → atomic.
-        await writeAudit(tx, {
+        // G1: audit NGHIÊM trong $transaction với trừ tiền/tồn kho → audit fail thì rollback cả phiếu.
+        await writeAuditStrict(tx, {
           actorUserId: user.id, action: 'EXPORT_REQUEST_APPROVED', targetType: 'ExportRequest', targetId: String(req.id),
           after: auditSnapshot({ code: req.code, kind: req.kind, handoverKind: req.handoverKind, quantity: req.quantity, lines: sorted.map((l) => ({ seq: l.seq, posSerial: l.posSerial ?? null, tid: l.tid ?? null })), note: decidedNote })
         });
@@ -547,6 +546,7 @@ export async function approveExportRequest(requestId: number, lines: ApproveLine
     if (e instanceof ReqAbort) return e.result;
     throw e;
   }
+  await bumpChangeToken(db, 'ExportRequest');
   return { ok: true, id: req.id };
 }
 
