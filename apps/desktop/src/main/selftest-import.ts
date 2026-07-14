@@ -156,6 +156,25 @@ export async function runImportSelfTest(): Promise<number> {
     { 'Nguồn': 'NG01', 'Tên HKD': 'Hộ P3', 'Chủ hộ': 'Chủ P3' }
   ]);
   ok('dossier (e) partial 2 ok + 1 thiếu chủ hộ', r.summary?.created === 2 && r.summary?.skipped === 1, r.summary);
+  // (f) Mr.Long 14/7 — import ĐỦ TRƯỜNG như form app: chủ hộ + CCCD (số/ngày cấp/hết hạn/nơi cấp) + địa chỉ
+  //     TT + hiện tại + giới tính + dân tộc + email + ĐKKD (ngày/nơi cấp) → LƯU đủ (tự động điền).
+  r = await runImport('dossier', [{
+    'Nguồn': 'NG01', 'Tên HKD': 'HKD Full', 'Địa chỉ HKD': '12 Lê Lợi', 'MST': '8123456789',
+    'Ngày cấp ĐKKD': '15/01/2024', 'Nơi cấp ĐKKD': 'Q1 HCM', 'Chủ hộ': 'Nguyễn Văn A',
+    'Giới tính': 'Nam', 'Dân tộc': 'Kinh', 'Số CCCD': '079123456789', 'Ngày cấp CCCD': '20/03/2021',
+    'Nơi cấp CCCD': 'CT QLHC', 'Ngày hết hạn CCCD': '20/03/2041', 'Địa chỉ thường trú': '5 Trần Hưng Đạo',
+    'Nơi ở hiện tại': '8 Nguyễn Huệ', 'Email': 'a@hkd.vn', 'Ghi chú': 'test full'
+  }]);
+  ok('dossier (f) import full-field → created=1', r.summary?.created === 1, r.summary);
+  const dFull = await getDb().dossier.findFirst({ where: { hkdName: 'HKD Full' } });
+  ok('dossier (f) LƯU đủ text: chủ hộ/CCCD/địa chỉ TT+hiện tại/email/giới tính/dân tộc/nơi cấp',
+    dFull?.ownerName === 'Nguyễn Văn A' && dFull?.cccdNumber === '079123456789' && dFull?.permanentAddress === '5 Trần Hưng Đạo' &&
+    dFull?.currentAddress === '8 Nguyễn Huệ' && dFull?.email === 'a@hkd.vn' && dFull?.gender === 'Nam' && dFull?.ethnicity === 'Kinh' &&
+    dFull?.cccdIssuePlace === 'CT QLHC' && dFull?.hkdAddress === '12 Lê Lợi' && dFull?.dkkdIssuePlace === 'Q1 HCM',
+    { owner: dFull?.ownerName, cccd: dFull?.cccdNumber, permAddr: dFull?.permanentAddress });
+  ok('dossier (f) LƯU đủ NGÀY: cấp ĐKKD + cấp CCCD + hết hạn CCCD (parse dd/mm/yyyy)',
+    dFull?.dkkdIssueDate != null && dFull?.cccdIssueDate != null && dFull?.cccdExpiry != null,
+    { dkkd: dFull?.dkkdIssueDate, issue: dFull?.cccdIssueDate, exp: dFull?.cccdExpiry });
 
   // ═══════════ (5) THU ═══════════
   r = await runImport('cashThu', [

@@ -7,16 +7,22 @@ const fs = require('fs');
 const OUT = 'D:/TT HKD AI/tools/quan-ly-glb/apps/desktop/build';
 const BRAND = '#1657d0', BRAND2 = '#1247ae';
 
-// Chữ "G" kiểu Google (Mr.Long 14/7): vòng cung dày MỞ bên phải + thanh ngang (crossbar) — 1 màu.
-// Toạ độ chuẩn viewBox 24 (tâm 12,12, bán kính 7) để dùng chung transform như trước.
+// Chữ "G" kiểu Google (Mr.Long 14/7): vòng cung dày MỞ bên phải + crossbar, NGHIÊNG TRÁI 15°, nét béo.
+// Toạ độ viewBox 24 (tâm 12,12, r=7). Bọc rotate(-15) để cả logo nghiêng đồng nhất.
 const shieldPaths = (stroke, sw) =>
+  `<g transform="rotate(-15 12 12)">` +
   `<path d="M18.58 14.39 A7 7 0 1 1 18.58 9.61" fill="none" stroke="${stroke}" stroke-width="${sw}" stroke-linecap="butt"/>` +
-  `<path d="M12 12 H18.7" fill="none" stroke="${stroke}" stroke-width="${sw}" stroke-linecap="butt"/>`;
+  `<path d="M12 12 H18.7" fill="none" stroke="${stroke}" stroke-width="${sw}" stroke-linecap="butt"/></g>`;
 
-// ---- ICON 256 (ô bo góc xanh + shield trắng) ----
+// ---- ICON 256: nền TRẮNG bo góc + bo viền + NỔI 3D (gradient depth), chữ G XANH gradient béo to nghiêng ----
 const iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
-  <rect width="256" height="256" rx="52" fill="${BRAND}"/>
-  <g transform="translate(52,50) scale(6.33)">${shieldPaths('#ffffff', 3.2)}</g>
+  <defs>
+    <linearGradient id="bev" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e7edf6"/></linearGradient>
+    <linearGradient id="gG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a72ef"/><stop offset="1" stop-color="${BRAND2}"/></linearGradient>
+  </defs>
+  <rect x="12" y="10" width="232" height="236" rx="56" fill="url(#bev)" stroke="#cbd5e8" stroke-width="4"/>
+  <rect x="14" y="12" width="228" height="10" rx="5" fill="#ffffff" opacity="0.9"/>
+  <g transform="translate(42,40) scale(7.15)">${shieldPaths('url(#gG)', 3.8)}</g>
 </svg>`;
 
 function buildIco(images) {

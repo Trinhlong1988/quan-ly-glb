@@ -33,7 +33,7 @@ export async function globalSearch(rawQuery: string): Promise<GlobalSearchResult
   if (q.length < 2) return { ok: true, data: [] }; // < 2 ký tự: không phát truy vấn
   const db = getDb();
   const hits: SearchHit[] = [];
-  const contains = { contains: q } as const;
+  const contains = { contains: q, mode: 'insensitive' } as const;
 
   if (hasPermission(actor, 'CUSTOMER_VIEW')) {
     const rows = await db.customer.findMany({

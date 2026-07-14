@@ -94,16 +94,21 @@ function TopbarClock(): JSX.Element {
     return () => clearInterval(t);
   }, []);
   const time = new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'Asia/Ho_Chi_Minh' }).format(now);
-  const date = new Intl.DateTimeFormat('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Ho_Chi_Minh' }).format(now);
+  const date = new Intl.DateTimeFormat('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Ho_Chi_Minh' }).format(now);
   return (
-    <div className="flex items-center gap-2 rounded-lg bg-appbg px-3 py-1.5" title={date}>
-      <Clock className="h-4 w-4 text-brand" />
-      <span className="font-mono text-sm font-semibold tabular-nums text-slate-700">{time}</span>
-      <span className="hidden text-xs text-slate-400 sm:inline">{date}</span>
+    <div className="flex items-center gap-2.5 rounded-xl border border-line bg-white px-3 py-1.5 shadow-sm">
+      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-tint">
+        <Clock className="h-[15px] w-[15px] text-brand" />
+      </div>
+      <div className="leading-tight">
+        <div className="font-mono text-[15px] font-bold tabular-nums tracking-tight text-slate-800">{time}</div>
+        <div className="text-[10px] font-medium capitalize text-slate-400">{date}</div>
+      </div>
     </div>
   );
 }
 import type { DashboardStats, OnlineUserDto, SearchHitDto } from '../../../preload/index.d';
+import { GLogo } from '../components/GLogo.js';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, hasAnyPermission } from '@glb/shared';
 import { MessagesDrawer } from '../components/MessagesDrawer.js';
@@ -230,8 +235,8 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
       {/* Sidebar */}
       <aside className="flex w-64 shrink-0 flex-col bg-sidebar text-sidebar-text">
         <div className="flex h-14 items-center gap-2 px-5 text-white">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand">
-            <ShieldCheck className="h-5 w-5" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/20 bg-white shadow-md">
+            <GLogo className="h-6 w-6" />
           </div>
           <span className="text-[15px] font-semibold tracking-wide">Quản Lý GLB</span>
         </div>

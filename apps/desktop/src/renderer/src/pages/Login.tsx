@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { LogIn, ShieldCheck, Loader2 } from 'lucide-react';
+import { LogIn, Loader2 } from 'lucide-react';
+import { GLogo } from '../components/GLogo.js';
 import type { AuthUser } from '@glb/shared';
 import { PasswordInput } from '../components/PasswordInput.js';
 import { useToast } from '../lib/toast.js';
@@ -105,8 +106,8 @@ export function Login({ onLoggedIn }: { onLoggedIn: (u: AuthUser, mustChange: bo
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#eaf1fc] via-appbg to-[#dfe7f6] p-4">
       <div className="w-full max-w-[420px] rounded-2xl border border-line bg-white p-8 shadow-xl">
         <div className="mb-7 flex flex-col items-center text-center">
-          <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand text-white shadow-md">
-            <ShieldCheck className="h-7 w-7" />
+          <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-2xl border border-line bg-white shadow-md">
+            <GLogo className="h-10 w-10" />
           </div>
           <h1 className="text-2xl font-bold text-slate-800">Quản Lý GLB</h1>
           <p className="mt-1 text-sm text-slate-500">Hệ thống quản lý nội bộ GLOBEWAY</p>

@@ -340,23 +340,47 @@ export const IMPORT_REGISTRY: Record<string, ImportEntity> = {
     label: 'Hộ kinh doanh',
     permission: 'CONFIG_DOSSIER_MANAGE',
     resolverKeys: ['dossierSource'],
+    // FULL trường như FORM app (Mr.Long 14/7): đủ HKD + ĐKKD + chủ hộ + CCCD + địa chỉ + liên hệ → import tự điền.
     templateColumns: [
       { header: 'Nguồn', field: 'sourceId', required: true, kind: 'ref', ref: 'dossierSource', hint: 'Mã nguồn hồ sơ' },
       { header: 'Tên HKD', field: 'hkdName', required: true, kind: 'text' },
-      { header: 'Chủ hộ', field: 'ownerName', required: true, kind: 'text' },
+      { header: 'Địa chỉ HKD', field: 'hkdAddress', required: false, kind: 'text' },
       { header: 'MST', field: 'taxCode', required: false, kind: 'text' },
       { header: 'Trạng thái MST', field: 'mstStatus', required: false, kind: 'enum', enumMap: MST_MAP, hint: 'Hoạt động / Đóng (mặc định Hoạt động)' },
-      { header: 'CCCD', field: 'cccdNumber', required: false, kind: 'text' },
-      { header: 'Địa chỉ HKD', field: 'hkdAddress', required: false, kind: 'text' }
+      { header: 'Ngày cấp ĐKKD', field: 'dkkdIssueDate', required: false, kind: 'date', hint: 'dd/mm/yyyy' },
+      { header: 'Nơi cấp ĐKKD', field: 'dkkdIssuePlace', required: false, kind: 'text' },
+      { header: 'Chủ hộ', field: 'ownerName', required: true, kind: 'text' },
+      { header: 'Giới tính', field: 'gender', required: false, kind: 'text' },
+      { header: 'Dân tộc', field: 'ethnicity', required: false, kind: 'text' },
+      { header: 'Số CCCD', field: 'cccdNumber', required: false, kind: 'text' },
+      { header: 'Ngày cấp CCCD', field: 'cccdIssueDate', required: false, kind: 'date', hint: 'dd/mm/yyyy' },
+      { header: 'Nơi cấp CCCD', field: 'cccdIssuePlace', required: false, kind: 'text' },
+      { header: 'Ngày hết hạn CCCD', field: 'cccdExpiry', required: false, kind: 'date', hint: 'dd/mm/yyyy' },
+      { header: 'Địa chỉ thường trú', field: 'permanentAddress', required: false, kind: 'text' },
+      { header: 'Nơi ở hiện tại', field: 'currentAddress', required: false, kind: 'text' },
+      { header: 'Email', field: 'email', required: false, kind: 'text' },
+      { header: 'Ghi chú', field: 'note', required: false, kind: 'text' }
     ],
     toCreateInput: (r) => {
+      const t = (k: string): string | null => (r[k] as string | undefined) ?? null;
       const input: DossierInput = {
         sourceId: r.sourceId as number,
         hkdName: r.hkdName as string,
         ownerName: r.ownerName as string,
-        taxCode: (r.taxCode as string | undefined) ?? null,
-        cccdNumber: (r.cccdNumber as string | undefined) ?? null,
-        hkdAddress: (r.hkdAddress as string | undefined) ?? null
+        hkdAddress: t('hkdAddress'),
+        taxCode: t('taxCode'),
+        dkkdIssueDate: t('dkkdIssueDate'),
+        dkkdIssuePlace: t('dkkdIssuePlace'),
+        gender: t('gender'),
+        ethnicity: t('ethnicity'),
+        cccdNumber: t('cccdNumber'),
+        cccdIssueDate: t('cccdIssueDate'),
+        cccdIssuePlace: t('cccdIssuePlace'),
+        cccdExpiry: t('cccdExpiry'),
+        permanentAddress: t('permanentAddress'),
+        currentAddress: t('currentAddress'),
+        email: t('email'),
+        note: t('note')
       };
       if (r.mstStatus !== undefined) input.mstStatus = r.mstStatus as string; // rỗng → createDossier mặc định ACTIVE
       return { input };
