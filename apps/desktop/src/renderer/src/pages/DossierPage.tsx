@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2, Loader2, FolderKanban, Tag, Download, RefreshCw } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, FolderKanban, Tag, Download, RefreshCw, IdCard } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate, fmtTime } from '@glb/shared';
 import type { DossierSourceDto, DossierDto, DossierInput } from '../../../preload/index.d';
@@ -20,7 +20,7 @@ import { Thumb, AttachField } from '../components/Attach.js';
 import { AuditTrailHeadCells, AuditTrailCells } from '../components/AuditCells.js';
 import { exportCsv } from '../lib/exportCsv.js';
 
-type Tab = 'dossier' | 'source';
+type Tab = 'dossier' | 'cccd' | 'source';
 
 function IconBtn({ children, title, variant, onClick }: { children: JSX.Element; title: string; variant?: 'edit' | 'danger'; onClick: () => void }): JSX.Element {
   const tone = variant === 'danger' ? 'text-danger hover:bg-danger/10' : variant === 'edit' ? 'text-warning hover:bg-warning/10' : 'text-slate-400 hover:bg-brand-tint hover:text-brand';
@@ -43,9 +43,11 @@ export function DossierPage({ user }: { user: AuthUser }): JSX.Element {
       </div>
       <TabBar>
         <TabButton active={tab === 'dossier'} onClick={() => setTab('dossier')} icon={<FolderKanban className="h-4 w-4" />}>Hồ sơ HKD</TabButton>
+        <TabButton active={tab === 'cccd'} onClick={() => setTab('cccd')} icon={<IdCard className="h-4 w-4" />}>Danh sách CCCD</TabButton>
         <TabButton active={tab === 'source'} onClick={() => setTab('source')} icon={<Tag className="h-4 w-4" />}>Nguồn hồ sơ</TabButton>
       </TabBar>
-      {tab === 'dossier' && <DossierTab canManage={canManage} />}
+      {tab === 'dossier' && <DossierTab canManage={canManage} view="hkd" />}
+      {tab === 'cccd' && <DossierTab canManage={canManage} view="cccd" />}
       {tab === 'source' && <SourceTab canManage={canManage} />}
     </div>
   );
@@ -167,7 +169,8 @@ function SourceForm({ mode, row, onClose, onSaved }: { mode: 'create' | 'edit'; 
 }
 
 // ── §10c/d HỒ SƠ HKD ─────────────────────────────────────────────────────────
-function DossierTab({ canManage }: { canManage: boolean }): JSX.Element {
+function DossierTab({ canManage, view = 'hkd' }: { canManage: boolean; view?: 'hkd' | 'cccd' }): JSX.Element {
+  const isCccd = view === 'cccd';
   const toast = useToast();
   const [rows, setRows] = useState<DossierDto[]>([]);
   const [sources, setSources] = useState<DossierSourceDto[]>([]);
@@ -245,37 +248,68 @@ function DossierTab({ canManage }: { canManage: boolean }): JSX.Element {
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>
               {canManage && <SelectAllCell ids={rows.map((r) => r.id)} sel={sel} />}
-              <th className="px-4 py-3">Nguồn</th>
               <th className="px-4 py-3">Tên HKD</th>
-              <th className="px-4 py-3">MST / ĐKKD</th>
-              <th className="px-4 py-3">Trạng thái MST</th>
               <th className="px-4 py-3">Chủ hộ</th>
               <th className="px-4 py-3">CCCD</th>
-              <th className="px-4 py-3">Ảnh ĐKKD</th>
-              <th className="px-4 py-3">Ảnh CCCD</th>
+              {isCccd ? (
+                <>
+                  <th className="px-4 py-3">Giới tính</th>
+                  <th className="px-4 py-3">Dân tộc</th>
+                  <th className="px-4 py-3">Ngày cấp</th>
+                  <th className="px-4 py-3">Nơi cấp</th>
+                  <th className="px-4 py-3">Hết hạn</th>
+                  <th className="px-4 py-3">ĐC thường trú</th>
+                  <th className="px-4 py-3">Ảnh CCCD</th>
+                </>
+              ) : (
+                <>
+                  <th className="px-4 py-3">Nguồn</th>
+                  <th className="px-4 py-3">MST / ĐKKD</th>
+                  <th className="px-4 py-3">Trạng thái MST</th>
+                  <th className="px-4 py-3">Ảnh ĐKKD</th>
+                  <th className="px-4 py-3">Ảnh CCCD</th>
+                </>
+              )}
               {canManage && <th className="px-4 py-3 text-right">Thao tác</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {loading && <tr><td colSpan={canManage ? 10 : 8} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
-            {!loading && rows.length === 0 && <tr><td colSpan={canManage ? 10 : 8} className="px-4 py-10 text-center text-slate-400"><FolderKanban className="mx-auto mb-2 h-6 w-6" /> Chưa có hồ sơ HKD.</td></tr>}
+            {loading && <tr><td colSpan={isCccd ? (canManage ? 12 : 10) : (canManage ? 10 : 8)} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+            {!loading && rows.length === 0 && <tr><td colSpan={isCccd ? (canManage ? 12 : 10) : (canManage ? 10 : 8)} className="px-4 py-10 text-center text-slate-400"><FolderKanban className="mx-auto mb-2 h-6 w-6" /> Chưa có hồ sơ HKD.</td></tr>}
             {!loading && rows.map((d) => (
               <tr key={d.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(d.id) ? 'bg-brand-tint/40' : '')}>
                 {canManage && <SelectCell id={d.id} sel={sel} />}
-                <td className="px-4 py-3"><span className="rounded bg-brand-tint px-1.5 py-0.5 text-xs font-medium text-brand whitespace-nowrap">{d.sourceCode ?? '—'}</span></td>
                 <td className="px-4 py-3 font-medium text-slate-800">{d.hkdName}</td>
-                <td className="px-4 py-3 font-mono text-xs text-slate-600 whitespace-nowrap">{d.taxCode ?? '—'}</td>
-                <td className="px-4 py-3"><StatusBadge entity="HKD_MST" code={d.mstStatus} /></td>
                 <td className="px-4 py-3 text-slate-600">{d.ownerName}</td>
                 <td className="px-4 py-3 font-mono text-xs text-slate-500 whitespace-nowrap">{d.cccdNumber ?? '—'}</td>
-                <td className="px-4 py-3"><div className="flex gap-1">
-                  {d.dkkdFrontPath ? <Thumb relPath={d.dkkdFrontPath} label="ĐKKD mặt trước" /> : <span className="text-xs text-slate-400">—</span>}
-                  {d.dkkdBackPath && <Thumb relPath={d.dkkdBackPath} label="ĐKKD mặt sau" />}
-                </div></td>
-                <td className="px-4 py-3"><div className="flex gap-1">
-                  {d.cccdFrontPath ? <Thumb relPath={d.cccdFrontPath} label="CCCD mặt trước" /> : <span className="text-xs text-slate-400">—</span>}
-                  {d.cccdBackPath && <Thumb relPath={d.cccdBackPath} label="CCCD mặt sau" />}
-                </div></td>
+                {isCccd ? (
+                  <>
+                    <td className="px-4 py-3 text-slate-600">{d.gender ?? '—'}</td>
+                    <td className="px-4 py-3 text-slate-600">{d.ethnicity ?? '—'}</td>
+                    <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{d.cccdIssueDate ? fmtDate(d.cccdIssueDate) : '—'}</td>
+                    <td className="px-4 py-3 text-slate-500">{d.cccdIssuePlace ?? '—'}</td>
+                    <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{d.cccdExpiry ? fmtDate(d.cccdExpiry) : '—'}</td>
+                    <td className="px-4 py-3 text-slate-500">{d.permanentAddress ?? '—'}</td>
+                    <td className="px-4 py-3"><div className="flex gap-1">
+                      {d.cccdFrontPath ? <Thumb relPath={d.cccdFrontPath} label="CCCD mặt trước" /> : <span className="text-xs text-slate-400">—</span>}
+                      {d.cccdBackPath && <Thumb relPath={d.cccdBackPath} label="CCCD mặt sau" />}
+                    </div></td>
+                  </>
+                ) : (
+                  <>
+                    <td className="px-4 py-3"><span className="rounded bg-brand-tint px-1.5 py-0.5 text-xs font-medium text-brand whitespace-nowrap">{d.sourceCode ?? '—'}</span></td>
+                    <td className="px-4 py-3 font-mono text-xs text-slate-600 whitespace-nowrap">{d.taxCode ?? '—'}</td>
+                    <td className="px-4 py-3"><StatusBadge entity="HKD_MST" code={d.mstStatus} /></td>
+                    <td className="px-4 py-3"><div className="flex gap-1">
+                      {d.dkkdFrontPath ? <Thumb relPath={d.dkkdFrontPath} label="ĐKKD mặt trước" /> : <span className="text-xs text-slate-400">—</span>}
+                      {d.dkkdBackPath && <Thumb relPath={d.dkkdBackPath} label="ĐKKD mặt sau" />}
+                    </div></td>
+                    <td className="px-4 py-3"><div className="flex gap-1">
+                      {d.cccdFrontPath ? <Thumb relPath={d.cccdFrontPath} label="CCCD mặt trước" /> : <span className="text-xs text-slate-400">—</span>}
+                      {d.cccdBackPath && <Thumb relPath={d.cccdBackPath} label="CCCD mặt sau" />}
+                    </div></td>
+                  </>
+                )}
                 {canManage && (
                   <td className="px-4 py-3"><div className="flex justify-end gap-1">
                     <IconBtn title="Sửa" variant="edit" onClick={() => setForm({ mode: 'edit', row: d })}><Pencil className="h-4 w-4" /></IconBtn>
