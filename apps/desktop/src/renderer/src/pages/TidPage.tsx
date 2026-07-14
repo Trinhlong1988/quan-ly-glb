@@ -16,6 +16,7 @@ import { StaleBanner } from '../lib/realtime.js';
 import { ImportButton } from '../components/ImportModal.js';
 import { RequestCancelModal, BulkRequestCancelModal, type RequestCancelTarget } from '../components/RequestCancelModal.js';
 import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../components/Selection.js';
+import { usePagination } from '../components/Pagination.js';
 import { exportCsv } from '../lib/exportCsv.js';
 import { StatusTab, FeePreview } from './TidConfigPage.js';
 import { TabBar, TabButton } from '../components/Tabs.js';
@@ -67,6 +68,16 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
   const [bulkCancel, setBulkCancel] = useState(false); // Nhóm 1: yêu cầu hủy hàng loạt (qua Duyệt Hủy)
   const [sellTidTarget, setSellTidTarget] = useState<TidDto | null>(null); // Bán TID rời (chưa gắn máy, chưa giao)
   const sel = useRowSelection();
+  // Mr.Long 14/7 — lọc TID theo CÀI APP (ngân hàng của TID), client-side, đồng bộ như danh sách máy POS.
+  const [bankFilter, setBankFilter] = useState('');
+  const tidBankOptions = (() => {
+    const m = new Map<number, string>();
+    for (const t of rows) if (t.bankId != null && !m.has(t.bankId)) m.set(t.bankId, t.bankCode ?? t.bankName ?? `NH #${t.bankId}`);
+    return [...m.entries()].map(([id, label]) => ({ value: String(id), label }));
+  })();
+  // Mr.Long 14/7 — phân trang 50 dòng/trang cho danh sách TID (tab "all"/"chưa giao"), >50 sang trang 2.
+  const tidDisplay = (tab === 'all' ? rows : undelivered).filter((t) => !bankFilter || String((t as TidDto).bankId ?? '') === bankFilter);
+  const { pageRows: tidPageRows, bar: tidBar } = usePagination(tidDisplay, 50);
 
   async function reload(): Promise<void> {
     setLoading(true);
@@ -216,6 +227,19 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
               { label: 'Chưa giao', value: rows.length - deliveredCount, tone: statusTone('UNASSIGNED') }
             ]}
           />
+          {/* Mr.Long 14/7 — bộ đếm TID theo CÀI APP (ngân hàng). Đếm CLIENT từ rows (trả full). */}
+          {tidBankOptions.length > 0 && (
+            <>
+              <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Cài APP (ngân hàng)</div>
+              <div className="mb-3 flex flex-wrap gap-2">
+                {tidBankOptions.map((b) => (
+                  <span key={b.value} className="rounded-full border border-line bg-white px-3 py-1 text-xs text-slate-600">
+                    {b.label}: <b className="text-brand">{rows.filter((t) => String(t.bankId ?? '') === b.value).length}</b>
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
         </>
       )}
 
@@ -229,6 +253,7 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
           onFromDate={setFromDate}
           onToDate={setToDate}
           selects={[
+            { key: 'bankapp', placeholder: 'Cài APP (tất cả ngân hàng)', value: bankFilter, options: tidBankOptions, onChange: setBankFilter },
             { key: 'assign', placeholder: 'Gán máy POS (tất cả)', value: assignFilter, options: [{ value: 'yes', label: 'Đã gán máy' }, { value: 'no', label: 'Chưa gán máy' }], onChange: setAssignFilter },
             { key: 'deliver', placeholder: 'Giao cho khách (tất cả)', value: deliverFilter, options: [{ value: 'yes', label: 'Đã giao' }, { value: 'no', label: 'Chưa giao' }], onChange: setDeliverFilter },
             { key: 'industry', placeholder: 'Ngành nghề (tất cả)', value: industryFilter, options: industries.map((i) => ({ value: String(i.id), label: `${i.code} · ${i.name}` })), onChange: setIndustryFilter },
@@ -282,7 +307,7 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs uppercase tracking-wide text-slate-500">
               <tr>
-                {tab === 'all' && canCancelReq && <SelectAllCell ids={rows.map((r) => r.id)} sel={sel} />}
+                {tab === 'all' && canCancelReq && <SelectAllCell ids={(tidPageRows as TidDto[]).map((r) => r.id)} sel={sel} />}
                 <th className="px-4 py-3 whitespace-nowrap">TID</th>
                 <th className="px-4 py-3 whitespace-nowrap">HKD</th>
                 <th className="px-4 py-3 whitespace-nowrap">Ngân hàng</th>
@@ -319,7 +344,7 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
                   </td>
                 </tr>
               )}
-              {!loading && (tab === 'all' ? rows : undelivered).map((t) => (
+              {!loading && (tidPageRows as (TidDto | UndeliveredTidDto)[]).map((t) => (
                 <tr key={t.id} className={(tab === 'undelivered' && (t as UndeliveredTidDto).agingDays >= 30 ? 'bg-danger/5 ' : 'hover:bg-appbg/60 ') + (tab === 'all' && sel.isSelected(t.id) ? 'bg-brand-tint/40' : '')}>
                   {tab === 'all' && canCancelReq && <SelectCell id={t.id} sel={sel} />}
                   <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700 whitespace-nowrap">{t.tid}</td>
@@ -402,6 +427,7 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
               ))}
             </tbody>
           </table>
+          {tidBar}
         </div>
       )}
 

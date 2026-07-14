@@ -392,7 +392,7 @@ async function processPosLineTx(tx: PrismaTx, req: ReqRow, serial: string, tid: 
 }
 
 /** Xử lý 1 dòng TID (kind TID, withTid=false): validate TID chưa giao + bank khớp + đối tác khớp → markTidDelivered. */
-async function processTidLineTx(tx: PrismaTx, req: ReqRow, tid: string, occurredAt: Date, actorId: number): Promise<void> {
+async function processTidLineTx(tx: PrismaTx, req: ReqRow, tid: string, allocPaid: bigint, occurredAt: Date, actorId: number): Promise<void> {
   await tx.$queryRaw`SELECT id FROM tids WHERE tid = ${tid} FOR UPDATE`;
   const row = await tx.tid.findUnique({ where: { tid } });
   if (!row || row.deletedAt) throw new ReqAbort({ ok: false, error: 'NOT_FOUND', message: `Không tìm thấy TID "${tid}".` });
@@ -408,6 +408,20 @@ async function processTidLineTx(tx: PrismaTx, req: ReqRow, tid: string, occurred
       customerId, toAgentId, actorUserId: actorId, occurredAt, note: 'Giao TID (duyệt yêu cầu xuất kho)'
     }
   });
+  // #2 (Mr.Long "Bán TID có doanh thu") — money-model TÁI DÙNG: SALE → chứng từ bán TID (SALE_TID) + doanh thu
+  // accrual + thu ngay (mirror sellTid); RENT → doanh thu cho thuê 1 lần = đơn giá (applyHandover RENT).
+  if (req.handoverKind === 'SALE') {
+    const code = await nextCode('BS', tx);
+    const sale = await tx.deviceSale.create({
+      data: {
+        code, saleKind: 'TID', deviceSerial: row.posSerial, tid, customerId, salePrice: req.unitPrice,
+        warehouseId: null, soldByUserId: actorId, occurredAt, note: 'Bán TID (duyệt yêu cầu xuất kho)', status: 'POSTED', createdBy: actorId
+      }
+    });
+    await bookSaleCashEntries(tx, { saleId: sale.id, saleKind: 'TID', salePrice: req.unitPrice, paid: allocPaid, fundId: req.fundId ?? null, method: DEFAULT_METHOD, entryDate: occurredAt, customerId, userId: actorId });
+  } else {
+    await applyHandoverTx(tx, { moneyKind: 'RENT', handoverTypeId: null, amount: req.unitPrice, fundId: req.fundId ?? null, method: DEFAULT_METHOD, deviceSerial: row.posSerial, tid, customerId, occurredAt, actorId });
+  }
 }
 
 /** EXPORT_REQUEST_APPROVE — duyệt phiếu: chọn N seri/TID + trừ tiền/tồn kho trong 1 $transaction guard PENDING.
@@ -462,9 +476,9 @@ export async function approveExportRequest(requestId: number, lines: ApproveLine
     partnerId: req.partnerId, customerId: req.customerId, unitPrice: req.unitPrice, quantity: req.quantity,
     depositAmount: req.depositAmount, fundId: req.fundId
   };
-  // Phân bổ paidAmount xuống các dòng SALE POS (MÔ TẢ, giữ Σ = paidAmount; mỗi dòng ≤ đơn giá).
+  // Phân bổ paidAmount xuống các dòng SALE (POS hoặc TID) — giữ Σ = paidAmount; mỗi dòng ≤ đơn giá.
   const allocPaid = new Map<number, bigint>();
-  if (req.kind === 'POS' && req.handoverKind === 'SALE') {
+  if (req.handoverKind === 'SALE') {
     let remaining = req.paidAmount;
     for (const l of sorted) {
       const a = remaining > req.unitPrice ? req.unitPrice : remaining;
@@ -485,7 +499,7 @@ export async function approveExportRequest(requestId: number, lines: ApproveLine
 
         for (const l of sorted) {
           if (reqRow.kind === 'POS') await processPosLineTx(tx, reqRow, l.posSerial!.trim(), l.tid?.trim() ?? null, allocPaid.get(l.seq) ?? 0n, occurredAt, user.id);
-          else await processTidLineTx(tx, reqRow, l.tid!.trim(), occurredAt, user.id);
+          else await processTidLineTx(tx, reqRow, l.tid!.trim(), allocPaid.get(l.seq) ?? 0n, occurredAt, user.id);
         }
 
         // Cọc kèm phiếu (1 lần/phiếu) → DeviceDeposit(OPEN) + CashEntry DEPOSIT (KHÔNG doanh thu).

@@ -123,7 +123,7 @@ export async function runExportRequestSelfTest(): Promise<number> {
   assert('quỹ +1tr (thu thuê 1 lần)', (await fundBalance(db, fund.id)) - fb1 === 1_000_000n);
   assert('tồn kho −2 (2 máy rời kho khi giao thuê)', (await stockCount(db, whMain.id!)) === tồn1 - 2);
 
-  // ══ Ca 5: Cọc → DeviceDeposit KHÔNG doanh thu (dùng phiếu TID để cô lập: TID giao không ghi doanh thu) ══
+  // ══ Ca 5: Cọc → DeviceDeposit KHÔNG doanh thu (Bán TID q1 100k CÓ doanh thu 100k; cọc 500k KHÔNG cộng DT) ══
   await mkTid('YCXK-TID-DEP', appBank.id!, partner.id!);
   const dt2 = await doanhThu(db); const fb2 = await fundBalance(db, fund.id);
   const reqDep = await exportReqSvc.createExportRequest({ kind: 'TID', handoverKind: 'SALE', bankId: appBank.id!, partnerId: partner.id!, customerId: cust.id!, unitPrice: 100_000, quantity: 1, depositAmount: 500_000, fundId: fund.id });
@@ -134,12 +134,14 @@ export async function runExportRequestSelfTest(): Promise<number> {
   assert('TID được giao (deliveredAt set, khách = người nhận)', tidDep?.deliveredAt != null && tidDep?.customerId === cust.id, { del: tidDep?.deliveredAt });
   const depDoc = await db.deviceDeposit.findFirst({ where: { customerId: cust.id!, status: 'OPEN', amount: 500_000n }, orderBy: { id: 'desc' } });
   assert('cọc → DeviceDeposit(OPEN) 500k', depDoc != null && depDoc?.amount === 500_000n, { dep: depDoc?.amount });
-  assert('cọc KHÔNG cộng doanh thu (nợ phải trả)', (await doanhThu(db)) - dt2 === 0n, { delta: Number((await doanhThu(db)) - dt2) });
-  assert('quỹ +500k (thu cọc vào quỹ)', (await fundBalance(db, fund.id)) - fb2 === 500_000n);
+  // #2 (Mr.Long "Bán TID có doanh thu"): DT +100k (bán TID) — cọc 500k KHÔNG cộng (nếu cộng thì delta=600k).
+  assert('Bán TID +100k DT, cọc KHÔNG cộng doanh thu', (await doanhThu(db)) - dt2 === 100_000n, { delta: Number((await doanhThu(db)) - dt2) });
+  assert('quỹ +500k (thu cọc vào quỹ; bán TID paid=0 không vào quỹ)', (await fundBalance(db, fund.id)) - fb2 === 500_000n);
 
-  // ══ Ca 6: TID riêng q=2 → delivered (khớp bank + đối tác); sai đối tác → PARTNER_MISMATCH ══
+  // ══ Ca 6: BÁN TID riêng q=2 → delivered + doanh thu +200k (#2); sai đối tác → PARTNER_MISMATCH ══
   await mkTid('YCXK-TID-1', appBank.id!, partner.id!);
   await mkTid('YCXK-TID-2', appBank.id!, partner.id!);
+  const dt3 = await doanhThu(db);
   const reqTid = await exportReqSvc.createExportRequest({ kind: 'TID', handoverKind: 'SALE', bankId: appBank.id!, partnerId: partner.id!, customerId: cust.id!, unitPrice: 100_000, quantity: 2 });
   assert('tạo YCXK TID q=2 ok', reqTid.ok === true, reqTid.error);
   const apTid = await exportReqSvc.approveExportRequest(reqTid.id!, [{ seq: 1, tid: 'YCXK-TID-1' }, { seq: 2, tid: 'YCXK-TID-2' }], PW);
@@ -147,6 +149,7 @@ export async function runExportRequestSelfTest(): Promise<number> {
   const t1 = await db.tid.findUnique({ where: { tid: 'YCXK-TID-1' } });
   const t2 = await db.tid.findUnique({ where: { tid: 'YCXK-TID-2' } });
   assert('2 TID đã giao (deliveredAt set)', t1?.deliveredAt != null && t2?.deliveredAt != null);
+  assert('BÁN TID q=2 → doanh thu +200k (#2)', (await doanhThu(db)) - dt3 === 200_000n, { delta: Number((await doanhThu(db)) - dt3) });
   // sai đối tác
   await mkTid('YCXK-TID-WP', appBank.id!, partner.id!);
   const partner2 = await bankSvc.createPartner({ name: 'Đối tác YCXK 2', code: 'DTYCXK2B' });

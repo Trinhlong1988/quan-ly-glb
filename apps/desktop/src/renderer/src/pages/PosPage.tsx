@@ -17,6 +17,7 @@ import { Field, inputCls } from '../components/Field.js';
 import { FilterBar } from '../components/FilterBar.js';
 import { TabBar, TabButton } from '../components/Tabs.js';
 import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../components/Selection.js';
+import { usePagination } from '../components/Pagination.js';
 import { exportCsv } from '../lib/exportCsv.js';
 // PHASE K1 — hợp nhất: các tab cấu hình cung ứng POS dùng lại nguyên các panel của PosSupplyPage.
 import { SupplierTab, ModelTab, StatusTab, IntakeTab } from './PosSupplyPage.js';
@@ -166,6 +167,8 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
     : rows
   ).filter((d) => (onlyRecall ? d.recallPending : true));
   const recallCount = rows.filter((d) => d.recallPending).length;
+  // Mr.Long 14/7 — phân trang 50 dòng/trang (client), >50 sang trang 2. Tích chọn/bulk hoạt động trên trang hiện tại.
+  const { pageRows, bar: pageBar } = usePagination(filteredRows, 50);
 
   function resetFilters(): void {
     setSearch('');
@@ -239,6 +242,16 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
           }))
         ]}
       />
+      {/* Mr.Long 14/7 — bộ đếm theo CÀI APP (ngân hàng) — đếm CLIENT từ tập đã lọc (gồm Máy trắng). */}
+      <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Cài APP (ngân hàng)</div>
+      <div className="mb-3 flex flex-wrap gap-2">
+        <span className="rounded-full border border-line bg-white px-3 py-1 text-xs text-slate-600">Máy trắng: <b className="text-slate-500">{filteredRows.filter((d) => !d.bankCode).length}</b></span>
+        {banks.map((b) => (
+          <span key={b.id} className="rounded-full border border-line bg-white px-3 py-1 text-xs text-slate-600">
+            {b.code}: <b className="text-brand">{filteredRows.filter((d) => d.bankCode === b.code).length}</b>
+          </span>
+        ))}
+      </div>
 
       {canCancelReq && <SelectionBar count={sel.count} entityLabel="máy POS" onClear={sel.clear} onDelete={() => setBulkCancel(true)} actionLabel={`Yêu cầu hủy (${sel.count})`} />}
       <StaleBanner domain="Pos" onReload={reload} className="mb-2" />
@@ -246,7 +259,7 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
         <table className="w-full text-[13px]">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
-              {canCancelReq && <SelectAllCell ids={filteredRows.map((r) => r.id)} sel={sel} />}
+              {canCancelReq && <SelectAllCell ids={pageRows.map((r) => r.id)} sel={sel} />}
               <th className="px-4 py-3">Serial</th>
               <th className="px-4 py-3">Chủng loại</th>
               <th className="px-4 py-3">Cài APP</th>
@@ -277,7 +290,7 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
               </tr>
             )}
             {!loading &&
-              filteredRows.map((d) => (
+              pageRows.map((d) => (
                 <tr key={d.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(d.id) ? 'bg-brand-tint/40' : '')}>
                   {canCancelReq && <SelectCell id={d.id} sel={sel} />}
                   <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700 whitespace-nowrap">{d.serial}</td>
@@ -332,6 +345,7 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
           </tbody>
         </table>
       </div>
+      {pageBar}
 
       {timelineOf && <TimelineModal device={timelineOf} onClose={() => setTimelineOf(null)} />}
       {actionOf && (
