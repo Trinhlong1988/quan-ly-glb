@@ -158,6 +158,28 @@ export async function runExportRequestSelfTest(): Promise<number> {
   assert('duyệt TID sai đối tác → PARTNER_MISMATCH', apTidWP.ok === false && apTidWP.error === 'PARTNER_MISMATCH', { err: apTidWP.error });
   await exportReqSvc.cancelExportRequest(reqTidWP.id!, 'dọn test');
 
+  // ══ Ca 6b (Mr.Long 14/7): POS BÁN KÈM TID (withTid) + thanh toán CHUYỂN KHOẢN (method=CK) ══
+  //   Bán rời/bán kèm mở cho SALE; method CK phải round-trip DTO + ghi vào bút toán tiền.
+  const sKem = await stock(appBank.id!);
+  await mkTid('YCXK-TID-KEM', appBank.id!, partner.id!);
+  const dtK = await doanhThu(db); const fbK = await fundBalance(db, fund.id);
+  const reqKem = await exportReqSvc.createExportRequest({ kind: 'POS', handoverKind: 'SALE', withTid: true, method: 'CK', bankId: appBank.id!, customerId: cust.id!, unitPrice: 3_000_000, quantity: 1, paidAmount: 3_000_000, fundId: fund.id });
+  assert('tạo YCXK POS SALE kèm TID + CK ok', reqKem.ok === true, reqKem.error);
+  const reqKemRow = await db.exportRequest.findUnique({ where: { id: reqKem.id! } });
+  assert('phiếu lưu method=CK + withTid=true', reqKemRow?.method === 'CK' && reqKemRow?.withTid === true, { method: reqKemRow?.method, withTid: reqKemRow?.withTid });
+  const kemDto = (await exportReqSvc.listExportRequests({ kind: 'POS' })).data?.find((d) => d.id === reqKem.id!);
+  assert('DTO round-trip method=CK', kemDto?.method === 'CK', { method: kemDto?.method });
+  const apKem = await exportReqSvc.approveExportRequest(reqKem.id!, [{ seq: 1, posSerial: sKem, tid: 'YCXK-TID-KEM' }], PW);
+  assert('duyệt POS SALE kèm TID ok', apKem.ok === true, apKem.error);
+  const devKem = await db.posDevice.findUnique({ where: { serial: sKem } });
+  assert('máy bán kèm → SOLD, khách = người mua', devKem?.status === 'SOLD' && devKem?.currentCustomerId === cust.id, { st: devKem?.status });
+  const tidKem = await db.tid.findUnique({ where: { tid: 'YCXK-TID-KEM' } });
+  assert('TID kèm được giao (deliveredAt set)', tidKem?.deliveredAt != null, { del: tidKem?.deliveredAt });
+  assert('doanh thu +3tr (bán máy kèm TID)', (await doanhThu(db)) - dtK === 3_000_000n, { delta: Number((await doanhThu(db)) - dtK) });
+  assert('quỹ +3tr (thu CK đủ)', (await fundBalance(db, fund.id)) - fbK === 3_000_000n);
+  const ckEntry = await db.cashEntry.findFirst({ where: { method: 'CK' }, orderBy: { id: 'desc' } });
+  assert('bút toán tiền ghi method=CK', ckEntry != null && ckEntry?.method === 'CK', { entry: ckEntry?.method });
+
   // ══ Ca 7: SELF-duyệt bởi người TẠO (không phải Admin) → FORBIDDEN ══
   await userSvc.createUser({ fullName: 'YCXK Kho', phone: '0900000431', email: null, username: 'ycxkwh01', password: 'Pass@1234', roleCodes: ['WAREHOUSE'] });
   await logout();

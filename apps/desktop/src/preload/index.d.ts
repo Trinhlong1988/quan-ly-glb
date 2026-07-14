@@ -492,6 +492,7 @@ export interface CreateExportRequestInput {
   depositAmount?: number | null; // cọc kèm (≥ 0)
   paidAmount?: number | null; // SALE thu ngay khi duyệt (0..amount); RENT phải = 0
   fundId?: number | null; // quỹ nhận tiền khi duyệt (bắt buộc khi có tiền)
+  method?: string | null; // CASH | CK
   note?: string | null;
 }
 export interface ExportRequestDto {
@@ -500,6 +501,7 @@ export interface ExportRequestDto {
   kind: string;
   handoverKind: string;
   withTid: boolean;
+  method: string;
   status: string;
   priceMode: string;
   unitPrice: number;

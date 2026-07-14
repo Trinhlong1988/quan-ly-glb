@@ -19,7 +19,6 @@ import { bookSaleCashEntries } from './device-sale-service.js';
 import { applyHandoverTx, openDepositTx } from './deposit-service.js';
 
 const ADMIN_ROLE_CODE = 'ADMIN';
-const DEFAULT_METHOD = 'CASH'; // ExportRequest KHÔNG có cột method → mọi bút toán mặc định CASH (báo cáo).
 
 type PrismaTx = Prisma.TransactionClient;
 
@@ -85,6 +84,7 @@ export interface CreateExportRequestInput {
   depositAmount?: number | null; // cọc kèm (≥ 0)
   paidAmount?: number | null; // SALE thu ngay khi duyệt (0..amount); RENT phải = 0
   fundId?: number | null; // quỹ nhận tiền khi duyệt (bắt buộc khi có tiền)
+  method?: string | null; // Mr.Long 14/7 — CASH | CK (mặc định CASH); áp cho mọi bút toán tiền khi duyệt
   note?: string | null;
 }
 
@@ -149,13 +149,15 @@ export async function createExportRequest(input: CreateExportRequestInput): Prom
       if (!fund) throw new ReqAbort({ ok: false, error: 'NOT_FOUND', message: 'Quỹ nhận tiền không tồn tại.' });
     }
 
+    // Hình thức thanh toán (Mr.Long 14/7): CASH | CK. Áp cho mọi bút toán tiền khi duyệt.
+    const method = String(input.method ?? 'CASH').toUpperCase() === 'CK' ? 'CK' : 'CASH';
     const code = await nextCode('YCXK', db);
     const created = await db.exportRequest.create({
       data: {
         code, kind, handoverKind, withTid, requesterUserId: user.id,
         bankId: input.bankId ?? null, partnerId: input.partnerId ?? null, customerId: input.customerId,
         cardTypeId: input.cardTypeId ?? null, feeTypeId: input.feeTypeId ?? null, priceMode,
-        unitPrice, quantity, amount, depositAmount, paidAmount, fundId: input.fundId ?? null,
+        unitPrice, quantity, amount, depositAmount, paidAmount, fundId: input.fundId ?? null, method,
         status: 'PENDING', note: input.note?.trim() || null
       }
     });
@@ -179,6 +181,7 @@ export interface ExportRequestDto {
   kind: string;
   handoverKind: string;
   withTid: boolean;
+  method: string; // CASH | CK
   status: string;
   priceMode: string;
   unitPrice: number;
@@ -252,7 +255,7 @@ export async function listExportRequests(filter: ExportRequestFilter = {}): Prom
   const feeMap = new Map((await db.feeType.findMany({ where: { id: { in: feeIds } }, select: { id: true, name: true } })).map((f) => [f.id, f.name]));
 
   const data: ExportRequestDto[] = rows.map((r) => ({
-    id: r.id, code: r.code, kind: r.kind, handoverKind: r.handoverKind, withTid: r.withTid, status: r.status,
+    id: r.id, code: r.code, kind: r.kind, handoverKind: r.handoverKind, withTid: r.withTid, method: r.method, status: r.status,
     priceMode: r.priceMode, unitPrice: Number(r.unitPrice), quantity: r.quantity, amount: Number(r.amount),
     depositAmount: Number(r.depositAmount), paidAmount: Number(r.paidAmount),
     customerId: r.customerId, customerName: custMap.get(r.customerId) ?? null,
@@ -291,7 +294,7 @@ async function warehouseEffAddressTx(tx: PrismaTx, warehouseId: number): Promise
 interface ReqRow {
   id: number; kind: string; handoverKind: string; withTid: boolean; bankId: number | null;
   partnerId: number | null; customerId: number; unitPrice: bigint; quantity: number;
-  depositAmount: bigint; fundId: number | null;
+  depositAmount: bigint; fundId: number | null; method: string;
 }
 
 /** Gán TID KÈM MÁY (mirror tid-service.assignTid, KHÔNG money — tiền áp riêng ở caller). dev đã khóa FOR UPDATE. */
@@ -375,7 +378,7 @@ async function processPosLineTx(tx: PrismaTx, req: ReqRow, serial: string, tid: 
     await tx.posDevice.update({ where: { id: dev.id }, data: { status: 'SOLD', currentTid: null, currentCustomerId: req.customerId, currentAgentId: null, recallPending: false, warehouseId: null, updatedBy: actorId } });
     await tx.assetEvent.create({ data: { deviceSerial: serial, tid: null, eventType: decision.eventType!, fromState, toState: 'SOLD', customerId: req.customerId, actorUserId: actorId, occurredAt, fromWarehouseId: srcWhId, deliveryAddress: effAddr, note: 'Xuất kho bán (duyệt yêu cầu)', afterJson: JSON.stringify(auditSnapshot({ sale: code, salePrice: req.unitPrice.toString(), customerId: req.customerId })) } });
     // MONEY-MODEL TÁI DÙNG: doanh thu đủ (accrual) + tiền thu ngay (allocPaid) + settlement.
-    await bookSaleCashEntries(tx, { saleId: sale.id, saleKind: 'POS', salePrice: req.unitPrice, paid: allocPaid, fundId: req.fundId ?? null, method: DEFAULT_METHOD, entryDate: occurredAt, customerId: req.customerId, userId: actorId });
+    await bookSaleCashEntries(tx, { saleId: sale.id, saleKind: 'POS', salePrice: req.unitPrice, paid: allocPaid, fundId: req.fundId ?? null, method: req.method, entryDate: occurredAt, customerId: req.customerId, userId: actorId });
     return;
   }
 
@@ -388,7 +391,7 @@ async function processPosLineTx(tx: PrismaTx, req: ReqRow, serial: string, tid: 
     await tx.assetEvent.create({ data: { deviceSerial: serial, tid: null, eventType: decision.eventType!, fromState, toState: 'DEPLOYED', customerId: req.customerId, actorUserId: actorId, occurredAt, fromWarehouseId: srcWhId, deliveryAddress: effAddr, note: 'Xuất kho cho thuê (duyệt yêu cầu)', afterJson: JSON.stringify(auditSnapshot({ status: 'DEPLOYED', customerId: req.customerId })) } });
   }
   // MONEY-MODEL TÁI DÙNG: doanh thu cho thuê 1 lần = đơn giá vào quỹ (RENT).
-  await applyHandoverTx(tx, { moneyKind: 'RENT', handoverTypeId: null, amount: req.unitPrice, fundId: req.fundId ?? null, method: DEFAULT_METHOD, deviceSerial: serial, tid: dev.currentTid, customerId: req.customerId, occurredAt, actorId });
+  await applyHandoverTx(tx, { moneyKind: 'RENT', handoverTypeId: null, amount: req.unitPrice, fundId: req.fundId ?? null, method: req.method, deviceSerial: serial, tid: dev.currentTid, customerId: req.customerId, occurredAt, actorId });
 }
 
 /** Xử lý 1 dòng TID (kind TID, withTid=false): validate TID chưa giao + bank khớp + đối tác khớp → markTidDelivered. */
@@ -418,9 +421,9 @@ async function processTidLineTx(tx: PrismaTx, req: ReqRow, tid: string, allocPai
         warehouseId: null, soldByUserId: actorId, occurredAt, note: 'Bán TID (duyệt yêu cầu xuất kho)', status: 'POSTED', createdBy: actorId
       }
     });
-    await bookSaleCashEntries(tx, { saleId: sale.id, saleKind: 'TID', salePrice: req.unitPrice, paid: allocPaid, fundId: req.fundId ?? null, method: DEFAULT_METHOD, entryDate: occurredAt, customerId, userId: actorId });
+    await bookSaleCashEntries(tx, { saleId: sale.id, saleKind: 'TID', salePrice: req.unitPrice, paid: allocPaid, fundId: req.fundId ?? null, method: req.method, entryDate: occurredAt, customerId, userId: actorId });
   } else {
-    await applyHandoverTx(tx, { moneyKind: 'RENT', handoverTypeId: null, amount: req.unitPrice, fundId: req.fundId ?? null, method: DEFAULT_METHOD, deviceSerial: row.posSerial, tid, customerId, occurredAt, actorId });
+    await applyHandoverTx(tx, { moneyKind: 'RENT', handoverTypeId: null, amount: req.unitPrice, fundId: req.fundId ?? null, method: req.method, deviceSerial: row.posSerial, tid, customerId, occurredAt, actorId });
   }
 }
 
@@ -474,7 +477,7 @@ export async function approveExportRequest(requestId: number, lines: ApproveLine
   const reqRow: ReqRow = {
     id: req.id, kind: req.kind, handoverKind: req.handoverKind, withTid: req.withTid, bankId: req.bankId,
     partnerId: req.partnerId, customerId: req.customerId, unitPrice: req.unitPrice, quantity: req.quantity,
-    depositAmount: req.depositAmount, fundId: req.fundId
+    depositAmount: req.depositAmount, fundId: req.fundId, method: req.method
   };
   // Phân bổ paidAmount xuống các dòng SALE (POS hoặc TID) — giữ Σ = paidAmount; mỗi dòng ≤ đơn giá.
   const allocPaid = new Map<number, bigint>();
@@ -505,7 +508,7 @@ export async function approveExportRequest(requestId: number, lines: ApproveLine
         // Cọc kèm phiếu (1 lần/phiếu) → DeviceDeposit(OPEN) + CashEntry DEPOSIT (KHÔNG doanh thu).
         if (reqRow.depositAmount > 0n) {
           if (reqRow.fundId == null) throw new ReqAbort({ ok: false, error: 'VALIDATION', message: 'Có tiền cọc thì phải có quỹ nhận.' });
-          await openDepositTx(tx, { customerId: reqRow.customerId, deviceSerial: null, tid: null, handoverTypeId: null, amount: reqRow.depositAmount, fundId: reqRow.fundId, method: DEFAULT_METHOD, occurredAt, actorId: user.id, note: `Cọc kèm yêu cầu xuất kho ${req.code ?? req.id}` });
+          await openDepositTx(tx, { customerId: reqRow.customerId, deviceSerial: null, tid: null, handoverTypeId: null, amount: reqRow.depositAmount, fundId: reqRow.fundId, method: req.method, occurredAt, actorId: user.id, note: `Cọc kèm yêu cầu xuất kho ${req.code ?? req.id}` });
         }
 
         // Ghi N dòng ExportRequestLine (seri/TID đã gán) + chuyển phiếu APPROVED (guard PENDING backstop).

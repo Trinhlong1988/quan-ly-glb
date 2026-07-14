@@ -1182,6 +1182,7 @@ model ExportRequest {
   depositAmount  BigInt    @default(0) @map("deposit_amount") // cọc kèm (nếu có)
   paidAmount     BigInt    @default(0) @map("paid_amount") // tiền thu khi duyệt (SALE)
   fundId         Int?      @map("fund_id") // quỹ nhận tiền khi duyệt
+  method         String    @default("CASH") // Mr.Long 14/7 — hình thức thanh toán: CASH | CK (áp cho mọi bút toán tiền khi duyệt)
   status         String    @default("PENDING") // PENDING | APPROVED | REJECTED | CANCELLED
   note           String?
   requestedAt    DateTime  @default(now()) @map("requested_at") @db.Timestamptz(3)

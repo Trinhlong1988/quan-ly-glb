@@ -161,6 +161,7 @@ export function ExportRequestPanel({ user, kind }: { user: AuthUser; kind: 'POS'
                 <td className="px-4 py-3 whitespace-nowrap">
                   <span className="rounded-full bg-brand-tint/60 px-2 py-0.5 text-xs font-semibold text-brand">{HANDOVER_LABEL[r.handoverKind] ?? r.handoverKind}</span>
                   {r.withTid && <span className="ml-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">kèm TID</span>}
+                  {r.method === 'CK' && <span className="ml-1 rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-600">CK</span>}
                 </td>
                 <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{r.customerName ?? '—'}</td>
                 {kind === 'TID' && <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{r.bankName ?? '—'}</td>}
@@ -235,7 +236,8 @@ function ExportRequestForm({ kind, onClose, onSaved }: { kind: 'POS' | 'TID'; on
   const [feeTypeId, setFeeTypeId] = useState('');
   const [customerId, setCustomerId] = useState('');
   const [handoverKind, setHandoverKind] = useState<'SALE' | 'RENT'>('SALE');
-  const [withTid, setWithTid] = useState(false); // POS RENT có thể kèm TID
+  const [withTid, setWithTid] = useState(false); // POS Bán/Cho thuê có thể kèm TID hoặc bán rời
+  const [method, setMethod] = useState<'CASH' | 'CK'>('CASH'); // Mr.Long 14/7 — hình thức thanh toán
   // PHASE 3 — hình thức giao TID: 'tid' giao riêng TID (ở đây) | 'pos' kèm máy POS (nhắc quay về tab POS).
   const [tidDelivery, setTidDelivery] = useState<'tid' | 'pos'>('tid');
   const [quantity, setQuantity] = useState('1');
@@ -260,9 +262,9 @@ function ExportRequestForm({ kind, onClose, onSaved }: { kind: 'POS' | 'TID'; on
   }, [kind]);
 
   // RENT thu qua đơn giá thuê khi duyệt → không nhập "đã thanh toán". Chọn RENT thì xóa paid.
+  // Mr.Long 14/7 — BÁN máy POS cũng chọn kèm TID / bán rời (KHÔNG khóa withTid cho SALE nữa).
   useEffect(() => {
     if (handoverKind === 'RENT') setPaidAmount('');
-    if (handoverKind === 'SALE') setWithTid(false); // withTid chỉ áp cho RENT (PHASE 2 spec)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handoverKind]);
 
@@ -292,7 +294,8 @@ function ExportRequestForm({ kind, onClose, onSaved }: { kind: 'POS' | 'TID'; on
     const input: CreateExportRequestInput = {
       kind,
       handoverKind,
-      withTid: kind === 'POS' && handoverKind === 'RENT' ? withTid : false,
+      withTid: kind === 'POS' ? withTid : false,
+      method,
       bankId: bankId ? Number(bankId) : null,
       partnerId: kind === 'TID' && partnerId ? Number(partnerId) : null,
       customerId: Number(customerId),
@@ -346,14 +349,23 @@ function ExportRequestForm({ kind, onClose, onSaved }: { kind: 'POS' | 'TID'; on
             <option value="RENT">Cho thuê</option>
           </select>
         </Field>
-        {kind === 'POS' && handoverKind === 'RENT' && (
-          <Field label="Kiểu cho thuê" hint="Kèm TID → gán TID khi duyệt">
+        {kind === 'POS' && (
+          <Field
+            label={handoverKind === 'SALE' ? 'Bán máy' : 'Kiểu cho thuê'}
+            hint="Kèm TID → gán TID khi duyệt; bán/giao rời → chỉ máy POS"
+          >
             <select className={inputCls} value={withTid ? 'withtid' : 'plain'} onChange={(e) => setWithTid(e.target.value === 'withtid')}>
-              <option value="plain">Không kèm TID</option>
+              <option value="plain">{handoverKind === 'SALE' ? 'Bán rời (chỉ máy POS)' : 'Không kèm TID'}</option>
               <option value="withtid">Kèm TID (gán khi duyệt)</option>
             </select>
           </Field>
         )}
+        <Field label="Hình thức thanh toán" hint="Tiền mặt hoặc chuyển khoản">
+          <select className={inputCls} value={method} onChange={(e) => setMethod(e.target.value as 'CASH' | 'CK')}>
+            <option value="CASH">Tiền mặt</option>
+            <option value="CK">Chuyển khoản</option>
+          </select>
+        </Field>
         {kind === 'TID' && (
           <Field label="Hình thức giao" hint="Giao riêng TID ở đây; kèm máy POS thì tạo ở tab POS">
             <select className={inputCls} value={tidDelivery} onChange={(e) => setTidDelivery(e.target.value as 'tid' | 'pos')}>
