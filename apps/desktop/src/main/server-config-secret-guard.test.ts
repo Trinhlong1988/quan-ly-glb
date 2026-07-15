@@ -20,6 +20,15 @@ function getServerConfigBody(src: string): string {
   return rest.slice(0, end === -1 ? rest.length : end);
 }
 
+/** Cắt thân hàm fillPasswordFromStored (guard AUTH-04). */
+function fillPasswordBody(src: string): string {
+  const start = src.indexOf('function fillPasswordFromStored');
+  expect(start, 'không tìm thấy fillPasswordFromStored trong db.ts').toBeGreaterThan(-1);
+  const rest = src.slice(start);
+  const end = rest.search(/\n}\n/);
+  return rest.slice(0, end === -1 ? rest.length : end);
+}
+
 describe('P1-02 contract — server config secret không rời main', () => {
   it('db.ts getServerConfig() che mật khẩu (password: "")', () => {
     const body = getServerConfigBody(dbSrc);
@@ -39,5 +48,18 @@ describe('P1-02 contract — server config secret không rời main', () => {
     const st = dtsSrc.slice(dtsSrc.indexOf('interface ServerConfigStatus'));
     const block = st.slice(0, st.indexOf('}'));
     expect(block).toMatch(/passwordSet:\s*boolean/);
+  });
+
+  // AUTH-04 (Codex 15/7): fillPasswordFromStored CHỈ bổ khuyết mật khẩu khi đích TRÙNG máy chủ đã lưu →
+  // không rò credential DB ra host lạ qua serverConfig:test/save. Guard = so khớp host+user+database.
+  it('AUTH-04: fillPasswordFromStored chỉ back-fill khi đích trùng máy chủ đã lưu', () => {
+    const body = fillPasswordBody(dbSrc);
+    expect(body, 'phải có guard đích-trùng trước khi bổ khuyết mật khẩu').toMatch(/sameTarget/);
+    // các trường so khớp phải hiện diện
+    expect(body).toMatch(/stored\.host/);
+    expect(body).toMatch(/stored\.user/);
+    expect(body).toMatch(/stored\.database/);
+    // KHÔNG được trả thẳng mật khẩu đã lưu mà không qua kiểm tra sameTarget
+    expect(body, 'không được back-fill vô điều kiện').toMatch(/if\s*\(!sameTarget\)\s*return input/);
   });
 });

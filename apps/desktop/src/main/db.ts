@@ -973,12 +973,21 @@ export async function getServerConfig(): Promise<{
   return { ...status, configured: readServerConfig() != null, passwordSet: cfg.password !== '', config: { ...cfg, password: '' } };
 }
 
-/** P1-02: bổ khuyết mật khẩu từ cấu hình đã lưu khi input để trống (sửa host/cổng không phải gõ lại mật khẩu). */
+/** P1-02: bổ khuyết mật khẩu từ cấu hình đã lưu khi input để trống (sửa host/cổng không phải gõ lại mật khẩu).
+ *  AUTH-04 (audit 15/7, Codex): CHỈ bổ khuyết khi ĐÍCH test/save TRÙNG máy chủ đã lưu (host+port+user+database).
+ *  Nếu đích khác (host lạ do renderer bị chiếm/gọi trực tiếp) → KHÔNG gửi mật khẩu đã lưu, tránh rò credential
+ *  DB ra máy chủ của kẻ tấn công qua serverConfig:test. Đổi máy chủ thật thì người dùng phải gõ lại mật khẩu. */
 function fillPasswordFromStored(input: ServerConfigInput): ServerConfigInput {
   if ((input.password ?? '').trim() !== '') return input;
   const stored = readServerConfig();
-  if (stored?.password) return { ...input, password: stored.password };
-  return input;
+  if (!stored?.password) return input;
+  const sameTarget =
+    (input.host ?? '').trim() === stored.host &&
+    Number(input.port ?? 5432) === (stored.port ?? 5432) &&
+    (input.user ?? '').trim() === stored.user &&
+    (input.database ?? '').trim() === stored.database;
+  if (!sameTarget) return input;
+  return { ...input, password: stored.password };
 }
 
 /** Gói lỗi pg thành thông điệp tiếng Việt dễ hiểu (giữ nguyên chi tiết gốc phía sau). */

@@ -264,6 +264,25 @@ export async function updateUser(id: number, input: UpdateUserInput): Promise<Mu
   const stale = staleGuard(row.updatedAt, input.expectedUpdatedAt);
   if (stale) return stale;
 
+  // AUTH-02 (audit 15/7, Codex) — đổi TRẠNG THÁI qua form update phải chịu ĐÚNG guard như khóa/mở chuyên:
+  // cần quyền USER_LOCK (→ không-hoạt-động) / USER_UNLOCK (→ ACTIVE) + chặn Admin cuối. Không có guard này
+  // thì actor chỉ có USER_UPDATE có thể khóa/vô-hiệu Admin cuối, bỏ qua setUserLock.
+  if (input.status !== undefined && input.status !== row.status) {
+    const toInactive = input.status !== 'ACTIVE';
+    const needPerm = toInactive ? 'USER_LOCK' : 'USER_UNLOCK';
+    if (!hasPermission(user, needPerm)) {
+      await auditDenied(db, user, 'USER_UPDATED', 'STATUS_PERM_DENIED', String(id));
+      return { ok: false, error: 'FORBIDDEN', message: `Đổi trạng thái nhân sự cần quyền ${needPerm}.` };
+    }
+    if (toInactive) {
+      const isAdmin = await targetIsAdmin(db, id);
+      const remaining = await countActiveAdmins(db, id);
+      if (!canRemoveOrLockAdmin(isAdmin, remaining + (isAdmin && row.status === 'ACTIVE' ? 1 : 0))) {
+        return { ok: false, error: 'LAST_ADMIN', message: 'Không thể khóa/vô hiệu Admin cuối cùng.' };
+      }
+    }
+  }
+
   const changingRoles = Array.isArray(input.roleCodes);
   const currentRoleCodes = row.roles.map((r) => r.role.code);
   const nextRoleCodes = changingRoles ? [...new Set(input.roleCodes!)] : currentRoleCodes;

@@ -3,7 +3,7 @@
 //   403 + audit on missing permission (R_AUDIT_003), manager cannot create admin (R_MANAGER_002),
 //   delete role-with-users blocked (R_ROLE_005), delete protected ADMIN role blocked (R_ROLE_006),
 //   last-admin delete blocked (R004), backup produces file + checksum + audit (R_BACKUP).
-import { login, logout } from './auth-service.js';
+import { login, logout, validateCurrentSession } from './auth-service.js';
 import { getDb } from './db.js';
 import * as roleSvc from './role-service.js';
 import * as userSvc from './user-service.js';
@@ -175,6 +175,51 @@ export async function runServiceSelfTest(): Promise<number> {
   const auditAfter = await auditSvc.listAudit({ action: 'PERMISSION_DENIED', limit: 1000 });
   const deniedAfter = auditAfter.ok ? (auditAfter.data ?? []).length : -1;
   assert('permission denials were audited (R_AUDIT_003)', deniedAfter > deniedBefore, { deniedBefore, deniedAfter });
+  await logout();
+
+  // ═══ REGRESSION Codex 15/7 — AUTH-02/06/03/01 (bypass status qua *:update + snapshot phiên cũ) ═══
+  await login(ADMIN.u, ADMIN.p);
+  // AUTH-02: actor CHỈ có USER_UPDATE (thiếu USER_LOCK) không được khóa/vô-hiệu qua updateUser.
+  await roleSvc.createRole({ name: 'Chỉ sửa user', code: 'ONLYUSRUPD', permissionCodes: ['USER_READ', 'USER_UPDATE'] });
+  await userSvc.createUser({ fullName: 'NV Sua User', username: 'usrupd01xx', password: 'Passw0rd@1', roleCodes: ['ONLYUSRUPD'] });
+  const victim = await userSvc.createUser({ fullName: 'Nan Nhan', username: 'victim01xx', password: 'Passw0rd@1', roleCodes: ['SALES'] });
+  // AUTH-06: actor CHỈ có ROLE_UPDATE (thiếu ROLE_LOCK) không được khóa role qua updateRole.
+  await roleSvc.createRole({ name: 'Chỉ sửa role', code: 'ONLYROLEUPD', permissionCodes: ['ROLE_READ', 'ROLE_UPDATE'] });
+  await userSvc.createUser({ fullName: 'NV Sua Role', username: 'rlupd001xx', password: 'Passw0rd@1', roleCodes: ['ONLYROLEUPD'] });
+  const tgtRole = await roleSvc.createRole({ name: 'Muc tieu', code: 'TARGETROLE', permissionCodes: ['DASHBOARD_VIEW'] });
+  // AUTH-03/01: user phiên-sống bị DISABLE / bị khóa role → mất phiên/quyền NGAY.
+  const sessU = await userSvc.createUser({ fullName: 'Phien Test', username: 'sess0001xx', password: 'Passw0rd@1', roleCodes: ['SALES'] });
+  await roleSvc.createRole({ name: 'Role Live', code: 'LIVEROLE', permissionCodes: ['DASHBOARD_VIEW', 'USER_READ'] });
+  await userSvc.createUser({ fullName: 'Live User', username: 'live0001xx', password: 'Passw0rd@1', roleCodes: ['LIVEROLE'] });
+  await logout();
+
+  await login('usrupd01xx', 'Passw0rd@1');
+  const a2lock = await userSvc.updateUser(victim.id!, { status: 'LOCKED' });
+  assert('AUTH-02: USER_UPDATE thiếu USER_LOCK → KHÔNG khóa được qua update (FORBIDDEN)', a2lock.ok === false && a2lock.error === 'FORBIDDEN', a2lock);
+  const a2ok = await userSvc.updateUser(victim.id!, { fullName: 'Doi Ten OK' });
+  assert('AUTH-02: sửa trường thường (không đụng status) vẫn OK', a2ok.ok === true, a2ok);
+  await logout();
+
+  await login('rlupd001xx', 'Passw0rd@1');
+  const a6 = await roleSvc.updateRole(tgtRole.id!, { name: 'Muc tieu', code: 'TARGETROLE', status: 'LOCKED', permissionCodes: ['DASHBOARD_VIEW'] });
+  assert('AUTH-06: ROLE_UPDATE thiếu ROLE_LOCK → KHÔNG khóa role qua update (FORBIDDEN)', a6.ok === false && a6.error === 'FORBIDDEN', a6);
+  await logout();
+
+  await login('sess0001xx', 'Passw0rd@1');
+  await db.user.update({ where: { id: sessU.id! }, data: { status: 'DISABLED' } });
+  const a3 = await validateCurrentSession();
+  assert('AUTH-03: phiên user DISABLED bị revoke NGAY (validateCurrentSession=null)', a3 === null, a3);
+  await logout();
+
+  await login('live0001xx', 'Passw0rd@1');
+  const liveBefore = await validateCurrentSession();
+  const hadRead = liveBefore?.user.permissions.includes('USER_READ') ?? false;
+  await db.role.update({ where: { code: 'LIVEROLE' }, data: { status: 'LOCKED' } });
+  const liveAfter = await validateCurrentSession();
+  assert('AUTH-01: khóa role → phiên đang sống MẤT quyền ngay (rebuild snapshot, không còn USER_READ)',
+    hadRead && liveAfter !== null && !liveAfter.user.permissions.includes('USER_READ'), { hadRead, after: liveAfter?.user.permissions });
+  await logout();
+  await login(ADMIN.u, ADMIN.p); // trả về admin cho phần audit-summary phía dưới nếu có
   await logout();
 
   // eslint-disable-next-line no-console

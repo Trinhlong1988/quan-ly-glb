@@ -8,6 +8,7 @@ import {
   isValidRoleCode,
   auditSnapshot
 } from '@glb/business-rules';
+import { hasPermission } from '@glb/shared';
 import { requirePermission, verifyActorPassword } from './guard.js';
 import { writeAudit } from './audit.js';
 import { staleGuard } from './optimistic-lock.js';
@@ -138,6 +139,23 @@ export async function updateRole(id: number, input: RoleInput): Promise<Mutation
   // The protected ADMIN role must never lose permissions or be locked via update.
   const isAdminSystem = role.code === 'ADMIN' && role.isSystem;
   const nextStatus = isAdminSystem ? 'ACTIVE' : input.status === 'LOCKED' ? 'LOCKED' : 'ACTIVE';
+
+  // AUTH-06 (audit 15/7, Codex) — khóa/mở role QUA updateRole phải chịu ĐÚNG guard như setRoleStatus:
+  // cần ROLE_LOCK/ROLE_UNLOCK + canLockRole/canUnlockRole. Không thì actor chỉ có ROLE_UPDATE khóa được
+  // role bất kỳ (trừ ADMIN đã chặn), vô hiệu hóa toàn bộ quyền của user mang role đó.
+  if (nextStatus !== role.status) {
+    const lock = nextStatus === 'LOCKED';
+    const needPerm = lock ? 'ROLE_LOCK' : 'ROLE_UNLOCK';
+    if (!hasPermission(user, needPerm)) {
+      return { ok: false, error: 'FORBIDDEN', message: `Đổi trạng thái vai trò cần quyền ${needPerm}.` };
+    }
+    const decision = lock
+      ? canLockRole({ code: role.code, isSystem: role.isSystem, status: role.status })
+      : canUnlockRole({ code: role.code, isSystem: role.isSystem, status: role.status });
+    if (!decision.allowed) {
+      return { ok: false, error: decision.reason, message: roleDenyMessage(decision.reason!) };
+    }
+  }
 
   await db.$transaction([
     db.role.update({

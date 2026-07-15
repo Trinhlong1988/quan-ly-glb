@@ -321,12 +321,18 @@ export async function validateCurrentSession(): Promise<{ user: AuthUser; forceC
     where: { id: current.sessionId, expiresAt: { gt: new Date() } },
     include: { user: { select: { status: true, deletedAt: true, forceChangePassword: true } } }
   });
-  if (!s || !s.user || s.user.deletedAt || s.user.status === 'DELETED' || s.user.status === 'LOCKED') {
+  // AUTH-03 (audit 15/7, Codex) — revoke phiên với MỌI trạng thái ≠ ACTIVE (trước chỉ chặn DELETED/LOCKED,
+  // LỌT DISABLED/PENDING → nhân sự đã ngưng/nghỉ vẫn thao tác tới hết TTL). Đồng bộ decideLogin/BLOCKED_STATUS.
+  if (!s || !s.user || s.user.deletedAt || s.user.status !== 'ACTIVE') {
     current = null;
     return null;
   }
-  current.user.forceChangePassword = s.user.forceChangePassword;
-  return { user: current.user, forceChangePassword: s.user.forceChangePassword };
+  // AUTH-01 (audit 15/7, Codex) — DỰNG LẠI snapshot role/permission từ DB mỗi request (không dùng snapshot
+  // cũ lúc login) → thu hồi quyền / khóa role có hiệu lực NGAY, không chờ logout/hết 12h TTL. buildAuthUser
+  // lọc role ACTIVE + gom permission hiện hành.
+  const fresh = await buildAuthUser(db, current.user.id);
+  current.user = fresh;
+  return { user: fresh, forceChangePassword: s.user.forceChangePassword };
 }
 
 /** R48 Pha 2 (#4) — cho guard tính lần re-auth SAI (mật khẩu/level2 khi xác nhận thao tác) vào bộ đếm khóa. */
