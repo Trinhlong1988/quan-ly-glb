@@ -28,7 +28,7 @@ import {
   Monitor
 } from 'lucide-react';
 
-const SEARCH_KIND_LABEL: Record<string, string> = { customer: 'Khách hàng', tid: 'TID', pos: 'Máy POS', transaction: 'Giao dịch' };
+const SEARCH_KIND_LABEL: Record<string, string> = { customer: 'Khách hàng', tid: 'TID', pos: 'Máy POS', transaction: 'Giao dịch', dossier: 'Hồ sơ HKD' };
 
 /** Tìm kiếm toàn cục trên topbar — debounce 250ms, chỉ trả bản ghi có quyền (backend), nhóm theo loại, điều hướng khi chọn.
  *  Không phát request cho chuỗi < 2 ký tự; hủy kết quả cũ (token) chống race; Esc đóng. */

@@ -881,7 +881,10 @@ export async function seedIfEmpty(db: Db): Promise<void> {
 export async function ensureCriticalSchema(db: Db): Promise<void> {
   const stmts = [
     `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "lock_reason" TEXT`,
-    `ALTER TABLE "export_requests" ADD COLUMN IF NOT EXISTS "method" TEXT NOT NULL DEFAULT 'CASH'`
+    `ALTER TABLE "export_requests" ADD COLUMN IF NOT EXISTS "method" TEXT NOT NULL DEFAULT 'CASH'`,
+    // Tìm kiếm tiếng Việt không phân biệt HOA/thường + DẤU (Mr.Long 15/7): ILIKE không fold Đ↔đ. Dùng
+    // unaccent(lower()) để "đức dũng"/"duc dung"/"ĐỨC DŨNG" đều khớp. Extension idempotent, tạo mỗi boot.
+    `CREATE EXTENSION IF NOT EXISTS unaccent`
   ];
   for (const s of stmts) {
     try {
