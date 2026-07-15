@@ -6,7 +6,7 @@
 //   KHÔNG từ .exe.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { app } from 'electron';
+import { app, safeStorage } from 'electron';
 import { Client } from 'pg';
 import { createPrisma, type Db } from '@glb/database';
 import {
@@ -513,9 +513,15 @@ export function readServerConfig(): ServerConfig | null {
   const p = serverConfigPath();
   if (!existsSync(p)) return null;
   try {
-    const cfg = JSON.parse(readFileSync(p, 'utf8')) as Partial<ServerConfig>;
-    if (!cfg.host || !cfg.database || !cfg.user || cfg.password == null) return null;
-    return { host: cfg.host, port: cfg.port ?? 5432, database: cfg.database, user: cfg.user, password: cfg.password };
+    const cfg = JSON.parse(readFileSync(p, 'utf8')) as Partial<ServerConfig> & { password_enc?: string };
+    // SEC-01 (audit 15/7, Codex): ưu tiên mật khẩu ĐÃ MÃ HÓA (password_enc base64 safeStorage); fallback
+    // password thô cho file cấu hình cũ (tương thích ngược, sẽ được mã hóa lại ở lần save kế).
+    let password = cfg.password ?? '';
+    if (cfg.password_enc && safeStorage.isEncryptionAvailable()) {
+      try { password = safeStorage.decryptString(Buffer.from(cfg.password_enc, 'base64')); } catch { /* hỏng → giữ rỗng */ }
+    }
+    if (!cfg.host || !cfg.database || !cfg.user || (cfg.password == null && !cfg.password_enc)) return null;
+    return { host: cfg.host, port: cfg.port ?? 5432, database: cfg.database, user: cfg.user, password };
   } catch {
     return null;
   }
@@ -1056,7 +1062,17 @@ export async function saveServerConfig(input: ServerConfigInput): Promise<{ ok: 
   const v = validateServerConfig(fillPasswordFromStored(input));
   if (!v.valid || !v.config) return { ok: false, error: v.error ?? 'Cấu hình không hợp lệ.' };
   try {
-    writeFileSync(serverConfigPath(), JSON.stringify(v.config, null, 2), 'utf8');
+    // SEC-01 (audit 15/7, Codex): KHÔNG ghi mật khẩu DB dạng thô — mã hóa bằng safeStorage (Windows DPAPI).
+    // Nếu OS không hỗ trợ mã hóa (hiếm) thì đành ghi thô để app vẫn chạy được.
+    const c = v.config;
+    const toWrite: Record<string, unknown> = { host: c.host, port: c.port, database: c.database, user: c.user };
+    if (c.password && safeStorage.isEncryptionAvailable()) {
+      toWrite.password = '';
+      toWrite.password_enc = safeStorage.encryptString(c.password).toString('base64');
+    } else {
+      toWrite.password = c.password;
+    }
+    writeFileSync(serverConfigPath(), JSON.stringify(toWrite, null, 2), 'utf8');
   } catch (err) {
     return { ok: false, error: 'Không ghi được file cấu hình máy chủ: ' + (err as Error).message };
   }

@@ -50,6 +50,21 @@ describe('P1-02 contract — server config secret không rời main', () => {
     expect(block).toMatch(/passwordSet:\s*boolean/);
   });
 
+  // SEC-01 (Codex 15/7): saveServerConfig mã hóa mật khẩu (safeStorage) thay vì ghi thô; readServerConfig giải mã.
+  it('SEC-01: saveServerConfig mã hóa mật khẩu bằng safeStorage', () => {
+    const start = dbSrc.indexOf('export async function saveServerConfig');
+    const body = dbSrc.slice(start, dbSrc.indexOf('\n}\n', start));
+    expect(body, 'phải mã hóa qua safeStorage.encryptString').toMatch(/safeStorage\.encryptString/);
+    expect(body, 'ghi password_enc (đã mã hóa)').toMatch(/password_enc/);
+    expect(body, 'KHÔNG ghi thẳng cả object config có password thô').not.toMatch(/JSON\.stringify\(v\.config/);
+  });
+  it('SEC-01: readServerConfig giải mã password_enc', () => {
+    const start = dbSrc.indexOf('export function readServerConfig');
+    const body = dbSrc.slice(start, dbSrc.indexOf('\n}\n', start));
+    expect(body).toMatch(/safeStorage\.decryptString/);
+    expect(body).toMatch(/password_enc/);
+  });
+
   // AUTH-04 (Codex 15/7): fillPasswordFromStored CHỈ bổ khuyết mật khẩu khi đích TRÙNG máy chủ đã lưu →
   // không rò credential DB ra host lạ qua serverConfig:test/save. Guard = so khớp host+user+database.
   it('AUTH-04: fillPasswordFromStored chỉ back-fill khi đích trùng máy chủ đã lưu', () => {
