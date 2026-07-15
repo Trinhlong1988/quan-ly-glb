@@ -205,6 +205,7 @@ async function toDtos(db: Db, rows: Awaited<ReturnType<Db['cashEntry']['findMany
       categoryId: r.categoryId,
       categoryName: cat?.name ?? null,
       sourceKind: cat?.sourceKind ?? null,
+      sourceType: r.sourceType, // audit 15/7 — renderer lọc phiếu hệ thống khỏi hủy/tích-chọn hàng loạt
       fundId: r.fundId,
       fundCode: fund?.code ?? null,
       fundName: fund?.name ?? null,
@@ -571,6 +572,16 @@ export async function cancelCashEntry(id: number, reason: string, password: stri
 
   const row = await db.cashEntry.findUnique({ where: { id } });
   if (!row || row.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Phiếu không tồn tại.' };
+
+  // P1 (audit 15/7) — CHỈ phiếu thủ công (sourceType=null: THU/CHI tay + thu công nợ) và thu tiền bán
+  // máy (SALE_COLLECT) mới hủy TRỰC TIẾP được — hai loại này có đường hoàn đối soát (M3/M3b) bên dưới.
+  // Phiếu hệ thống khác (DEVICE_DEPOSIT cọc/hoàn cọc, RENT thuê, BAD_DEBT ghi giảm nợ xấu, SALE_POS/
+  // SALE_TID doanh thu bán máy) hủy tại đây sẽ làm quỹ lệch tiền thật + mồ côi bản ghi cọc/nợ/bán máy.
+  // Phải hủy ở nghiệp vụ gốc (thu hồi máy / hủy hóa đơn / v.v.). Ghi audit cho lần bị chặn.
+  if (row.sourceType !== null && row.sourceType !== 'SALE_COLLECT') {
+    await writeAudit(db, { actorUserId: user.id, action: 'CASH_ENTRY_CANCELLED', targetType: 'CashEntry', targetId: String(id), after: { denied: true, reason: 'SOURCE_LOCKED', sourceType: row.sourceType } });
+    return { ok: false, error: 'SOURCE_LOCKED', message: 'Phiếu này sinh tự động từ nghiệp vụ khác (cọc/thuê/bán máy/ghi giảm nợ xấu). Hãy hủy ở nghiệp vụ gốc, không hủy trực tiếp tại đây.' };
+  }
 
   if (!(await verifyActorPassword(user, password))) {
     await writeAudit(db, { actorUserId: user.id, action: 'CASH_ENTRY_CANCELLED', targetType: 'CashEntry', targetId: String(id), after: { denied: true, reason: 'WRONG_PASSWORD' } });

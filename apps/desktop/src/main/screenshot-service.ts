@@ -58,8 +58,16 @@ export async function captureRegion(): Promise<CaptureResult> {
   overlay.setVisibleOnAllWorkspaces(true);
 
   const region = await new Promise<{ x: number; y: number; w: number; h: number } | null>((resolve) => {
-    const onRegion = (_e: unknown, r: { x: number; y: number; w: number; h: number }): void => { cleanup(); resolve(r); };
-    const onCancel = (): void => { cleanup(); resolve(null); };
+    const fromOverlay = (e: { sender?: unknown }): boolean => !overlay.isDestroyed() && e?.sender === overlay.webContents;
+    const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+    const onRegion = (e: { sender?: unknown }, r: { x: number; y: number; w: number; h: number }): void => {
+      // audit 15/7 — chỉ nhận sự kiện TỪ cửa sổ overlay này + toạ độ phải là số hữu hạn (chống crop NaN / cửa sổ khác giả mạo kênh)
+      if (!fromOverlay(e)) return;
+      cleanup();
+      if (!r || !finite(r.x) || !finite(r.y) || !finite(r.w) || !finite(r.h) || r.w < 1 || r.h < 1) { resolve(null); return; }
+      resolve({ x: r.x, y: r.y, w: r.w, h: r.h });
+    };
+    const onCancel = (e: { sender?: unknown }): void => { if (!fromOverlay(e)) return; cleanup(); resolve(null); };
     const cleanup = (): void => { ipcMain.removeListener('screenshot:region', onRegion); ipcMain.removeListener('screenshot:cancel', onCancel); };
     ipcMain.on('screenshot:region', onRegion);
     ipcMain.on('screenshot:cancel', onCancel);
@@ -73,11 +81,15 @@ export async function captureRegion(): Promise<CaptureResult> {
     const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: Math.round(width * scale), height: Math.round(height * scale) } });
     const source = sources.find((s) => s.display_id === String(display.id)) ?? sources[0];
     if (!source) return { ok: false, error: 'NO_SOURCE', message: 'Không lấy được ảnh màn hình.' };
+    // Clamp vùng cắt vào trong kích thước ảnh thật (chống crop vượt biên → lỗi/ảnh rỗng).
+    const size = source.thumbnail.getSize();
+    const cx = Math.min(Math.max(0, Math.round(region.x * scale)), Math.max(0, size.width - 1));
+    const cy = Math.min(Math.max(0, Math.round(region.y * scale)), Math.max(0, size.height - 1));
     const cropped = source.thumbnail.crop({
-      x: Math.round(region.x * scale),
-      y: Math.round(region.y * scale),
-      width: Math.max(1, Math.round(region.w * scale)),
-      height: Math.max(1, Math.round(region.h * scale))
+      x: cx,
+      y: cy,
+      width: Math.max(1, Math.min(Math.round(region.w * scale), size.width - cx)),
+      height: Math.max(1, Math.min(Math.round(region.h * scale), size.height - cy))
     });
     const dir = screenshotDir();
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);

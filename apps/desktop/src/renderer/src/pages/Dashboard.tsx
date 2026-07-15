@@ -437,7 +437,7 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
             <p className="mb-5 text-sm text-slate-600">Để đảm bảo dữ liệu luôn được lưu và cập nhật, hãy dọn dẹp lịch sử và thùng rác cũ. Hệ thống sẽ tự tạo bản sao lưu an toàn trước khi xóa.</p>
             <div className="flex justify-end gap-2">
               <button onClick={() => setStorageDismissed(true)} className="rounded-md border border-line px-4 py-2 text-sm text-slate-600 hover:bg-appbg">Để sau</button>
-              <button onClick={() => { setActive('maintenance'); setStorageDismissed(true); }} className="rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-hover">Đi tới Bảo trì</button>
+              <button onClick={() => { setActive('system'); setStorageDismissed(true); }} className="rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-hover">Đi tới Bảo trì</button>
             </div>
           </div>
         </div>

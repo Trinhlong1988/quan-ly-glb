@@ -312,7 +312,7 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
       {tab === 'all' && canCancelReq && <SelectionBar count={sel.count} entityLabel="TID" onClear={sel.clear} onDelete={() => setBulkCancel(true)} actionLabel={`Yêu cầu hủy (${sel.count})`} />}
       {(tab === 'all' || tab === 'undelivered') && <StaleBanner domain="Tid" onReload={reload} className="mb-2" />}
       {(tab === 'all' || tab === 'undelivered') && (
-        <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
+        <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm list-scroll">
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs uppercase tracking-wide text-slate-500">
               <tr>
@@ -817,7 +817,7 @@ function RevenueRankingTab(): JSX.Element {
         ]}
       />
 
-      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm list-scroll">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>

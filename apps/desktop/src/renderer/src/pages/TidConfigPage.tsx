@@ -94,7 +94,7 @@ export function StatusTab({ canManage }: { canManage: boolean }): JSX.Element {
       </div>
       <StatBar items={[{ label: 'Tổng trạng thái', value: rows.length, tone: 'bg-brand-tint text-brand' }]} />
       {canManage && <SelectionBar count={sel.count} entityLabel="trạng thái" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
-      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm list-scroll">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>
@@ -208,7 +208,7 @@ function TidTab({ canManage, canCancelReq }: { canManage: boolean; canCancelReq:
           ...(rows.some((r) => !r.configStatusName) ? [{ label: 'Chưa đặt trạng thái', value: rows.filter((r) => !r.configStatusName).length, tone: 'bg-slate-100 text-slate-500' }] : [])
         ]}
       />
-      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm list-scroll">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>

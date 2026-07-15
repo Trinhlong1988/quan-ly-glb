@@ -261,7 +261,7 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
 
       {canCancelReq && <SelectionBar count={sel.count} entityLabel="máy POS" onClear={sel.clear} onDelete={() => setBulkCancel(true)} actionLabel={`Yêu cầu hủy (${sel.count})`} />}
       <StaleBanner domain="Pos" onReload={reload} className="mb-2" />
-      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm list-scroll">
         <table className="w-full text-[13px]">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>

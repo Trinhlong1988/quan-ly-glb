@@ -127,7 +127,7 @@ function BankTab({ canManage }: { canManage: boolean }): JSX.Element {
       <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Tìm mã / tên ngân hàng…" fromDate={fromDate} toDate={toDate} onFromDate={setFromDate} onToDate={setToDate} selects={[{ key: 'status', placeholder: 'Tất cả trạng thái', value: statusFilter, options: bankStatusOptions.filter((o) => o.active).map((o) => ({ value: o.code, label: o.label })), onChange: setStatusFilter }]} onApply={reload} onReset={() => { setSearch(''); setStatusFilter(''); setFromDate(''); setToDate(''); setTimeout(reload, 0); }} />
       {canManage && <SelectionBar count={sel.count} entityLabel="ngân hàng" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
       <StaleBanner domain="Bank" onReload={reload} className="mb-2" />
-      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm list-scroll">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>
@@ -254,7 +254,7 @@ function CardTypeTab({ canManage }: { canManage: boolean }): JSX.Element {
       </div>
       <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Tìm mã / tên loại thẻ…" selects={[{ key: 'bank', placeholder: 'Tất cả ngân hàng', value: bankId, options: banks.map((b) => ({ value: String(b.id), label: `${b.code} · ${b.name}` })), onChange: setBankId }]} onApply={reload} onReset={() => { setSearch(''); setBankId(''); setTimeout(reload, 0); }} />
       {canManage && <SelectionBar count={sel.count} entityLabel="loại thẻ" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
-      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm list-scroll">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>
@@ -395,7 +395,7 @@ function PartnerTab({ canManage }: { canManage: boolean }): JSX.Element {
       />
       <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Tìm mã / tên / Số điện thoại đối tác…" selects={[{ key: 'status', placeholder: 'Tất cả trạng thái', value: statusFilter, options: partnerStatusOptions.filter((o) => o.active).map((o) => ({ value: o.code, label: o.label })), onChange: setStatusFilter }]} onApply={reload} onReset={() => { setSearch(''); setStatusFilter(''); setTimeout(reload, 0); }} />
       {canManage && <SelectionBar count={sel.count} entityLabel="đối tác" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
-      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm list-scroll">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>

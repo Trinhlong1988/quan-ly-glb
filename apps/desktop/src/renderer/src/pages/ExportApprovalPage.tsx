@@ -111,7 +111,7 @@ export function ExportApprovalPage({ user }: { user: AuthUser }): JSX.Element {
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm list-scroll">
         <table className="w-full text-[13px]">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>

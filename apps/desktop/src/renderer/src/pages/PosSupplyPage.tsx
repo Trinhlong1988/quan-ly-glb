@@ -118,7 +118,7 @@ export function SupplierTab({ canManage }: { canManage: boolean }): JSX.Element 
       <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Tìm mã / tên / số điện thoại nhà cung cấp…" onApply={reload} onReset={() => { setSearch(''); setTimeout(reload, 0); }} />
       <StatBar items={[{ label: 'Tổng nhà cung cấp', value: rows.length, tone: 'bg-brand-tint text-brand' }]} />
       {canManage && <SelectionBar count={sel.count} entityLabel="nhà cung cấp" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
-      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm list-scroll">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>
@@ -247,7 +247,7 @@ export function ModelTab({ canManage }: { canManage: boolean }): JSX.Element {
       <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Tìm mã / tên máy…" onApply={reload} onReset={() => { setSearch(''); setTimeout(reload, 0); }} />
       <StatBar items={[{ label: 'Tổng chủng loại', value: rows.length, tone: 'bg-brand-tint text-brand' }]} />
       {canManage && <SelectionBar count={sel.count} entityLabel="chủng loại" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
-      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm list-scroll">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>
@@ -364,7 +364,7 @@ export function StatusTab({ canManage }: { canManage: boolean }): JSX.Element {
       </div>
       <StatBar items={[{ label: 'Tổng trạng thái', value: rows.length, tone: 'bg-brand-tint text-brand' }]} />
       {canManage && <SelectionBar count={sel.count} entityLabel="trạng thái" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
-      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm list-scroll">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>
@@ -513,7 +513,7 @@ export function IntakeTab({ canManage }: { canManage: boolean }): JSX.Element {
         ]}
       />
       {canManage && <SelectionBar count={sel.count} entityLabel="máy POS" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
-      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm list-scroll">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>

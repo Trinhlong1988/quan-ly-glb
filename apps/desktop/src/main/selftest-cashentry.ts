@@ -77,6 +77,24 @@ export async function runCashEntrySelfTest(): Promise<number> {
   ok('hủy phiếu THU 300.000 (đúng mk) → ok', (await ce.cancelCashEntry(t2.id!, 'ghi nhầm số tiền', PW)).ok === true);
   ok('audit CASH_ENTRY_CANCELLED tăng', (await auditCount(db, 'CASH_ENTRY_CANCELLED')) >= cancelBefore + 1);
   ok('I#1 sau hủy: số dư = 1.300.000 (phiếu CANCELLED không tính)', (await fundSvc.fundCurrentBalance(db, f1r.id!)) === 1_300_000);
+
+  // ═══════════ REGRESSION (audit 15/7) — CHẶN hủy TRỰC TIẾP phiếu sinh từ nghiệp vụ khác ═══════════
+  // Bug: cancelCashEntry không xét sourceType → hủy phiếu THU cọc (DEVICE_DEPOSIT) làm quỹ lệch tiền
+  // thật + mồ côi DeviceDeposit. Fix = chỉ cho hủy sourceType null | SALE_COLLECT. Test mô phỏng phiếu
+  // hệ thống bằng insert thẳng (createCashEntry không set sourceType), rồi khẳng định hủy bị chặn.
+  const sysCode = `PT-DEP-ST26-${payerId}`;
+  const sysEntry = await db.cashEntry.create({
+    data: { code: sysCode, kind: 'THU', categoryId: thuCat!.id, fundId: f1r.id!, amount: 250_000, method: 'CASH', entryDate: new Date(dateStr(15)), sourceType: 'DEVICE_DEPOSIT', sourceId: 999999, status: 'POSTED', createdBy: payerId }
+  });
+  ok('phiếu hệ thống POSTED tính vào quỹ → 1.550.000', (await fundSvc.fundCurrentBalance(db, f1r.id!)) === 1_550_000);
+  const lockRes = await ce.cancelCashEntry(sysEntry.id, 'thử hủy phiếu cọc', PW);
+  ok('CHẶN hủy phiếu DEVICE_DEPOSIT → SOURCE_LOCKED', lockRes.error === 'SOURCE_LOCKED', lockRes);
+  const sysAfter = await db.cashEntry.findUnique({ where: { id: sysEntry.id }, select: { status: true } });
+  ok('phiếu hệ thống VẪN POSTED sau khi bị chặn', sysAfter?.status === 'POSTED', sysAfter);
+  ok('quỹ KHÔNG đổi sau khi chặn = 1.550.000', (await fundSvc.fundCurrentBalance(db, f1r.id!)) === 1_550_000);
+  // Dọn để không lệch các phép so số dư phía sau (đưa về CANCELLED thủ công qua DB, không qua service).
+  await db.cashEntry.update({ where: { id: sysEntry.id }, data: { status: 'CANCELLED', cancelReason: 'dọn test' } });
+  ok('sau dọn: số dư về 1.300.000', (await fundSvc.fundCurrentBalance(db, f1r.id!)) === 1_300_000);
   ok('SAI hủy lại phiếu đã hủy → INVALID_STATE', (await ce.cancelCashEntry(t2.id!, 'x', PW)).error === 'INVALID_STATE');
 
   // ═══════════ I#3 người chi bắt buộc ═══════════

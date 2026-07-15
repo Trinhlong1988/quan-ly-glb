@@ -17,6 +17,7 @@ import { Field, inputCls } from '../components/Field.js';
 import { PasswordInput } from '../components/PasswordInput.js';
 import { Button } from '../components/Button.js';
 import { exportCsv } from '../lib/exportCsv.js';
+import { useRowSelection, SelectAllCell, SelectCell } from '../components/Selection.js';
 
 const STATUSES = ['ACTIVE', 'PENDING', 'LOCKED', 'DISABLED', 'DELETED'];
 
@@ -33,6 +34,33 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
   const [confirm, setConfirm] = useState<{ kind: 'lock' | 'unlock'; u: UserDto } | null>(null);
   const [cancelTarget, setCancelTarget] = useState<RequestCancelTarget | null>(null);
   const [resetTarget, setResetTarget] = useState<UserDto | null>(null);
+  const sel = useRowSelection(); // Mr.Long 15/7 — tích chọn nhiều nhân sự để yêu cầu hủy hàng loạt
+  const [bulkBusy, setBulkBusy] = useState(false);
+  // KHÔNG cho chọn: tài khoản đang đăng nhập (self) — chống tự-xóa. Backend còn chặn Admin cuối cùng.
+  const selectableIds = rows.filter((u) => u.id !== user.id && u.status !== 'DELETED').map((u) => u.id);
+
+  async function doBulkCancel(): Promise<void> {
+    const ids = [...sel.selected];
+    if (ids.length === 0) return;
+    const okc = await toast.confirm(
+      `Yêu cầu hủy ${ids.length} nhân sự đã chọn? Mỗi người tạo 1 yêu cầu hủy (chờ duyệt). Không gồm tài khoản của bạn; Admin cuối cùng sẽ bị backend từ chối.`,
+      { title: 'Yêu cầu hủy hàng loạt', okLabel: `Tạo ${ids.length} yêu cầu`, cancelLabel: 'Hủy' }
+    );
+    if (!okc) return;
+    setBulkBusy(true);
+    let done = 0;
+    const failed: string[] = [];
+    for (const id of ids) {
+      const res = await window.api.entityCancelRequest('User', id, 'Yêu cầu hủy hàng loạt');
+      if (res.ok) done++;
+      else failed.push(`#${id}: ${res.message ?? res.error}`);
+    }
+    setBulkBusy(false);
+    sel.clear();
+    await reload();
+    if (failed.length) toast.alert(`Đã tạo ${done} yêu cầu. Bỏ qua ${failed.length}:\n${failed.slice(0, 8).join('\n')}`, 'Kết quả hàng loạt');
+    else toast.success(`Đã tạo ${done} yêu cầu hủy — chờ duyệt.`);
+  }
 
   const canCreate = hasPermission(user, 'USER_CREATE') || hasPermission(user, 'USER_CREATE_LIMITED');
   const canUpdate = hasPermission(user, 'USER_UPDATE');
@@ -43,6 +71,7 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
 
   async function reload(): Promise<void> {
     setLoading(true);
+    sel.clear(); // audit 15/7 — dọn lựa chọn cũ khi lọc/tải lại để không hủy nhầm hàng đã ẩn
     const res = await window.api.userList({ roleCode: roleFilter || undefined, status: statusFilter || undefined, search: search || undefined });
     if (res.ok && res.data) setRows(res.data);
     else if (res.message) toast.alert(res.message);
@@ -144,10 +173,20 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
       </div>
 
       <StaleBanner domain="User" onReload={reload} className="mb-2" />
-      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
+
+      {canCancelReq && sel.count > 0 && (
+        <div className="mb-3 flex items-center gap-3 rounded-lg border border-brand/30 bg-brand-tint px-4 py-2.5">
+          <span className="text-sm font-medium text-brand">Đã chọn {sel.count} nhân sự</span>
+          <div className="flex-1" />
+          <Button variant="neutral" onClick={sel.clear}>Bỏ chọn tất cả</Button>
+          <Button variant="danger" disabled={bulkBusy} onClick={doBulkCancel}>Yêu cầu hủy đã chọn ({sel.count})</Button>
+        </div>
+      )}
+      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm list-scroll">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
+              {canCancelReq && <SelectAllCell ids={selectableIds} sel={sel} />}
               <th className="px-4 py-3">Mã NV</th>
               <th className="px-4 py-3">Nhân sự</th>
               <th className="px-4 py-3">Tên đăng nhập</th>
@@ -160,14 +199,14 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
           <tbody className="divide-y divide-line">
             {loading && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={canCancelReq ? 8 : 7} className="px-4 py-8 text-center text-slate-400">
                   <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                 </td>
               </tr>
             )}
             {!loading && rows.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-slate-400">
+                <td colSpan={canCancelReq ? 8 : 7} className="px-4 py-10 text-center text-slate-400">
                   <Users className="mx-auto mb-2 h-6 w-6" />
                   Không có nhân sự phù hợp bộ lọc.
                 </td>
@@ -176,6 +215,9 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
             {!loading &&
               rows.map((u) => (
                 <tr key={u.id} className="hover:bg-appbg/60">
+                  {canCancelReq && (u.id === user.id || u.status === 'DELETED'
+                    ? <td className="px-4 py-3" title="Không thể chọn tài khoản này"><span className="text-xs text-slate-300">—</span></td>
+                    : <SelectCell id={u.id} sel={sel} />)}
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1.5">
                       <span className="font-mono text-xs font-semibold text-brand whitespace-nowrap">{u.employeeCode ?? '—'}</span>

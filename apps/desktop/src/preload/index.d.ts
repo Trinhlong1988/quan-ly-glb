@@ -1335,6 +1335,7 @@ export interface CashEntryDto {
   categoryId: number;
   categoryName: string | null;
   sourceKind: string | null;
+  sourceType: string | null; // null=thủ công/thu công nợ · SALE_COLLECT/DEVICE_DEPOSIT/RENT/BAD_DEBT/SALE_* = hệ thống
   fundId: number | null; // H2b: null cho bút toán phi tiền mặt (write-off nợ xấu)
   fundCode: string | null;
   fundName: string | null;

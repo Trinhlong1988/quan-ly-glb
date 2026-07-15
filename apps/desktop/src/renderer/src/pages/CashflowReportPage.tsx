@@ -82,7 +82,7 @@ export function CashflowReportPage({ user: _user }: { user: AuthUser }): JSX.Ele
         <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv('bao_cao_thu_chi', ['Mã', 'Ngày', 'Loại', 'Danh mục', 'Quỹ', 'Số tiền', 'Hình thức', 'Ghi chú'], rows.map((r) => [r.code ?? '', fmtDate(r.entryDate), r.kind === 'THU' ? 'Thu' : 'Chi', r.categoryName ?? '', r.fundName ?? '', String(r.amount), r.method === 'CK' ? 'Chuyển khoản' : 'Tiền mặt', r.note ?? '']))}>Xuất Excel</Button>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm list-scroll">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>

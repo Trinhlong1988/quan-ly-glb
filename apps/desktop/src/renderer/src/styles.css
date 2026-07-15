@@ -35,6 +35,15 @@ body,
 }
 .page-enter { animation: pageIn 0.3s cubic-bezier(0.22, 0.61, 0.36, 1); }
 
+/* Mr.Long 15/7 — GHIM thanh cuộn NGANG của bảng danh sách ở đáy khung nhìn: giới hạn chiều cao khung
+ * bảng theo viewport rồi cho cuộn TRONG khung. thead đã sticky top-0 nên tiêu đề luôn hiện; thanh cuộn
+ * ngang nằm ở đáy khung (trong tầm nhìn) thay vì cuối bảng dài phải cuộn cả trang mới thấy. */
+.list-scroll {
+  max-height: calc(100vh - 15rem);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
 body {
   margin: 0;
   font-family: var(--font-sans);

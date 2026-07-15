@@ -18,6 +18,13 @@ import { statusTone } from '../components/StatusPill.js';
 import { PasswordInput } from '../components/PasswordInput.js';
 import { ImportButton } from '../components/ImportModal.js';
 import { exportCsv } from '../lib/exportCsv.js';
+import { useRowSelection, SelectAllCell, SelectCell } from '../components/Selection.js';
+
+/** Phiếu hủy TRỰC TIẾP được: thủ công (sourceType=null) + thu tiền bán máy (SALE_COLLECT). Phiếu hệ
+ *  thống khác (cọc/thuê/nợ xấu/doanh thu bán máy) phải hủy ở nghiệp vụ gốc — backend cũng chặn (SOURCE_LOCKED). */
+function isCancellable(r: CashEntryDto): boolean {
+  return r.status === 'POSTED' && (r.sourceType === null || r.sourceType === 'SALE_COLLECT');
+}
 
 function money(n: number): string {
   const neg = n < 0;
@@ -61,8 +68,13 @@ export function CashEntryPage({ user, kind }: { user: AuthUser; kind: 'THU' | 'C
 
   const [form, setForm] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<CashEntryDto | null>(null);
+  const sel = useRowSelection();
+  const [bulkOpen, setBulkOpen] = useState(false);
 
   const kindCats = cats.filter((c) => c.kind === kind);
+  const selectableIds = rows.filter(isCancellable).map((r) => r.id);
+  const selectedRows = rows.filter((r) => sel.isSelected(r.id));
+  const selectedTotal = selectedRows.reduce((s, r) => s + r.amount, 0);
 
   async function loadRefs(): Promise<void> {
     const [c, f, u] = await Promise.all([window.api.cashEntryCategoryLite(), window.api.fundList({ active: true }), window.api.fundUserLite()]);
@@ -72,6 +84,7 @@ export function CashEntryPage({ user, kind }: { user: AuthUser; kind: 'THU' | 'C
   }
   async function reload(): Promise<void> {
     setLoading(true);
+    sel.clear(); // audit 15/7 — dọn lựa chọn cũ để không thao tác nhầm hàng đã bị lọc/ẩn
     const res = await window.api.cashEntryList({
       kind,
       categoryId: fCategory ? Number(fCategory) : undefined,
@@ -122,10 +135,20 @@ export function CashEntryPage({ user, kind }: { user: AuthUser; kind: 'THU' | 'C
       </div>
 
       <StaleBanner domain="CashEntry" onReload={reload} className="mb-2" />
-      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
+      {canCancel && sel.count > 0 && (
+        <div className="mb-2 flex flex-wrap items-center gap-3 rounded-xl border border-danger/30 bg-danger/5 px-4 py-2.5">
+          <span className="text-sm font-medium text-slate-700">Đã chọn <b>{sel.count}</b> phiếu · tổng <b className="tabular-nums">{money(selectedTotal)}</b></span>
+          <div className="ml-auto flex items-center gap-2">
+            <button onClick={() => sel.clear()} className="rounded-md px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100">Bỏ chọn</button>
+            <button onClick={() => setBulkOpen(true)} className="flex items-center gap-1.5 rounded-md bg-danger px-3 py-1.5 text-sm font-semibold text-white hover:bg-danger/90"><Ban className="h-4 w-4" /> Hủy {sel.count} phiếu đã chọn</button>
+          </div>
+        </div>
+      )}
+      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm list-scroll">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>
+              {canCancel && <SelectAllCell ids={selectableIds} sel={sel} />}
               <th className="px-4 py-3">Mã</th>
               <th className="px-4 py-3">Ngày</th>
               <th className="px-4 py-3">Danh mục</th>
@@ -138,10 +161,11 @@ export function CashEntryPage({ user, kind }: { user: AuthUser; kind: 'THU' | 'C
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {loading && <tr><td colSpan={9} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
-            {!loading && rows.length === 0 && <tr><td colSpan={9} className="px-4 py-10 text-center text-slate-400"><Receipt className="mx-auto mb-2 h-6 w-6" /> Chưa có phiếu {isThu ? 'thu' : 'chi'}.</td></tr>}
+            {loading && <tr><td colSpan={canCancel ? 10 : 8} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+            {!loading && rows.length === 0 && <tr><td colSpan={canCancel ? 10 : 8} className="px-4 py-10 text-center text-slate-400"><Receipt className="mx-auto mb-2 h-6 w-6" /> Chưa có phiếu {isThu ? 'thu' : 'chi'}.</td></tr>}
             {!loading && rows.map((r) => (
               <tr key={r.id} className={'hover:bg-appbg/60 ' + (r.status === 'CANCELLED' ? 'opacity-60' : '')}>
+                {canCancel && (isCancellable(r) ? <SelectCell id={r.id} sel={sel} /> : <td className="px-4 py-3" />)}
                 <td className="px-4 py-3 font-mono text-xs text-slate-500 whitespace-nowrap">{r.code}</td>
                 <td className="px-4 py-3 text-slate-600">{fmtDate(r.entryDate)}</td>
                 <td className="px-4 py-3 text-slate-700">{r.categoryName ?? '—'}</td>
@@ -152,7 +176,7 @@ export function CashEntryPage({ user, kind }: { user: AuthUser; kind: 'THU' | 'C
                 <td className="px-4 py-3"><StatusBadge status={r.status} /></td>
                 {canCancel && (
                   <td className="px-4 py-3"><div className="flex justify-end">
-                    {r.status === 'POSTED' && <button title="Hủy phiếu" onClick={() => setCancelTarget(r)} className="rounded-md p-1.5 text-danger transition hover:bg-danger/10"><Ban className="h-4 w-4" /></button>}
+                    {isCancellable(r) && <button title="Hủy phiếu" onClick={() => setCancelTarget(r)} className="rounded-md p-1.5 text-danger transition hover:bg-danger/10"><Ban className="h-4 w-4" /></button>}
                   </div></td>
                 )}
               </tr>
@@ -163,7 +187,52 @@ export function CashEntryPage({ user, kind }: { user: AuthUser; kind: 'THU' | 'C
 
       {form && <CashEntryForm kind={kind} cats={kindCats} funds={funds} users={users} onClose={() => setForm(false)} onSaved={() => { setForm(false); void reload(); }} />}
       {cancelTarget && <CancelEntryModal entry={cancelTarget} isThu={isThu} onClose={() => setCancelTarget(null)} onDone={() => { setCancelTarget(null); void reload(); }} />}
+      {bulkOpen && <BulkCancelEntryModal entries={selectedRows} isThu={isThu} onClose={() => setBulkOpen(false)} onDone={() => { setBulkOpen(false); void reload(); }} />}
     </div>
+  );
+}
+
+/** Hủy hàng loạt phiếu thu/chi: nhập lý do + mật khẩu MỘT lần, gọi cashEntryCancel từng phiếu (mỗi
+ *  phiếu = 1 transaction backend, tự re-check quyền + sourceType). Báo cáo TRUNG THỰC số hủy được / bỏ qua. */
+function BulkCancelEntryModal({ entries, isThu, onClose, onDone }: { entries: CashEntryDto[]; isThu: boolean; onClose: () => void; onDone: () => void }): JSX.Element {
+  const toast = useToast();
+  const [reason, setReason] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const total = entries.reduce((s, e) => s + e.amount, 0);
+
+  async function run(): Promise<void> {
+    if (!reason.trim()) return toast.alert('Vui lòng nhập lý do hủy phiếu.', 'Thiếu lý do');
+    if (!password) return;
+    setBusy(true);
+    let done = 0;
+    const failed: string[] = [];
+    for (const e of entries) {
+      const res = await window.api.cashEntryCancel(e.id, reason.trim(), password);
+      if (res.ok) done++;
+      else failed.push(`${e.code ?? '#' + e.id}: ${res.message ?? res.error}`);
+    }
+    setBusy(false);
+    if (done > 0) toast.success(`Đã hủy ${done}/${entries.length} phiếu ${isThu ? 'thu' : 'chi'}.`);
+    if (failed.length) toast.alert(`Bỏ qua ${failed.length} phiếu:\n${failed.slice(0, 8).join('\n')}`, 'Kết quả hủy hàng loạt');
+    onDone();
+  }
+
+  return (
+    <Modal title={`Hủy ${entries.length} phiếu ${isThu ? 'thu' : 'chi'} đã chọn`} onClose={onClose} width="max-w-md">
+      <p className="text-sm text-slate-600">Tổng tiền <b className="tabular-nums">{money(total)}</b>. Phiếu đã hủy không còn tính vào số dư quỹ. Mỗi phiếu ghi nhật ký riêng; phiếu sinh từ nghiệp vụ khác sẽ bị bỏ qua.</p>
+      <Field label="Lý do hủy" required><textarea className={inputCls} rows={2} value={reason} onChange={(e) => setReason(e.target.value)} autoFocus /></Field>
+      <label className="mt-2 flex flex-col gap-1.5">
+        <span className="text-sm font-medium text-slate-700">Nhập lại mật khẩu để xác nhận</span>
+        <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && run()} placeholder="Mật khẩu của bạn" />
+      </label>
+      <div className="mt-6 flex justify-end gap-2">
+        <Button variant="neutral" onClick={onClose}>Đóng</Button>
+        <button onClick={run} disabled={busy || !password} className="flex items-center gap-2 rounded-md bg-danger px-4 py-2 text-sm font-semibold text-white hover:bg-danger/90 disabled:opacity-60">
+          {busy && <Loader2 className="h-4 w-4 animate-spin" />} Hủy {entries.length} phiếu
+        </button>
+      </div>
+    </Modal>
   );
 }
 

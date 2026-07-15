@@ -94,7 +94,7 @@ function SourceTab({ canManage }: { canManage: boolean }): JSX.Element {
         </div>
       </div>
       {canManage && <SelectionBar count={sel.count} entityLabel="nguồn" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
-      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm list-scroll">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>
@@ -230,7 +230,7 @@ function AccountTab({ canManage }: { canManage: boolean }): JSX.Element {
         onApply={reload} onReset={() => { setSearch(''); setFSource(''); setTimeout(reload, 0); }} />
       {canManage && <SelectionBar count={sel.count} entityLabel="tài khoản" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
       <StaleBanner domain="ReceiveAccount" onReload={reload} className="mb-2" />
-      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm list-scroll">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>

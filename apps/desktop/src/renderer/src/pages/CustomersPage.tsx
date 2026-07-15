@@ -68,6 +68,7 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
 
   async function reload(): Promise<void> {
     setLoading(true);
+    sel.clear(); // audit 15/7 — dọn lựa chọn cũ khi lọc/tải lại để không yêu-cầu-hủy nhầm hàng đã ẩn
     const res = await window.api.customerList({
       search: search || undefined,
       status: statusFilter || undefined,
@@ -169,11 +170,11 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
           <Button variant="danger" disabled={bulkBusy} onClick={doBulkCancel}>Yêu cầu hủy đã chọn ({sel.count})</Button>
         </div>
       )}
-      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm list-scroll">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
-              {canCancelReq && <th className="w-10 px-4 py-3"><SelectAllCell ids={rows.map((r) => r.id)} sel={sel} /></th>}
+              {canCancelReq && <SelectAllCell ids={rows.map((r) => r.id)} sel={sel} />}
               <th className="px-4 py-3">Mã khách hàng</th>
               <th className="px-4 py-3">Khách hàng</th>
               <th className="px-4 py-3">Trạng thái</th>
@@ -201,7 +202,7 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
             {!loading &&
               rows.map((c) => (
                 <tr key={c.id} className="hover:bg-appbg/60">
-                  {canCancelReq && <td className="px-4 py-3"><SelectCell id={c.id} sel={sel} /></td>}
+                  {canCancelReq && <SelectCell id={c.id} sel={sel} />}
                   <td className="px-4 py-3 font-mono text-xs font-semibold text-brand whitespace-nowrap">{c.code}</td>
                   <td className="px-4 py-3">
                     <div className="font-medium text-slate-800">{c.nickname}</div>

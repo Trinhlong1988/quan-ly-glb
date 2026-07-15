@@ -183,7 +183,7 @@ export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
       </div>
 
       {showApproved && (
-        <div className="mb-5 overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
+        <div className="mb-5 overflow-x-auto rounded-xl border border-line bg-white shadow-sm list-scroll">
           <div className="border-b border-line px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
             Lệnh duyệt đã xóa — {approvedBills.length + approvedEntities.length} bản ghi (chỉ xem)
           </div>
@@ -253,7 +253,7 @@ export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm list-scroll">
         {/* Mr.Long 12/7 — table-fixed + colgroup: cột trước "Lý do hủy" (chọn+Mã bill+Số tiền = 21rem) khớp
             đúng cột trước của bảng "Yêu cầu hủy dữ liệu" (Loại+Đối tượng = 21rem) → 4 cột chung THẲNG HÀNG 2 bảng.
             Số tiền cạnh Mã bill (không xa), có khoảng cách với Lý do hủy (không sát). */}
@@ -322,7 +322,7 @@ export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
               </div>
             )}
           </div>
-          <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
+          <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm list-scroll">
             <table className="w-full table-fixed text-sm">
               <colgroup>
                 <col className="w-10" />

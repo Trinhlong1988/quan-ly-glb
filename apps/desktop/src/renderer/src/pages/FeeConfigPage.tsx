@@ -97,7 +97,7 @@ function TypeTab({ canManage }: { canManage: boolean }): JSX.Element {
         </div>
       </div>
       {canManage && <SelectionBar count={sel.count} entityLabel="loại phí" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
-      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm list-scroll">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>
@@ -239,7 +239,7 @@ function RateTab({ canManage }: { canManage: boolean }): JSX.Element {
         onApply={reload} onReset={() => { setFPartner(''); setFBank(''); setTimeout(reload, 0); }}
       />
       {canManage && <SelectionBar count={sel.count} entityLabel="biểu phí" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
-      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm list-scroll">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>
