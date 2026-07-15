@@ -505,6 +505,7 @@ export interface CreateExportRequestInput {
   paidAmount?: string | null; // SALE thu ngay khi duyệt (0..amount); RENT phải = 0
   fundId?: number | null; // quỹ nhận tiền khi duyệt (bắt buộc khi có tiền)
   method?: string | null; // CASH | CK
+  requestedAt?: string | null; // FE-01 — ngày/giờ yêu cầu (mặc định now, cho sửa)
   note?: string | null;
 }
 export interface ExportRequestDto {

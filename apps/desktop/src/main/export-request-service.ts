@@ -97,6 +97,7 @@ export interface CreateExportRequestInput {
   paidAmount?: string | number | null; // SALE thu ngay khi duyệt (0..amount); RENT phải = 0
   fundId?: number | null; // quỹ nhận tiền khi duyệt (bắt buộc khi có tiền)
   method?: string | null; // Mr.Long 14/7 — CASH | CK (mặc định CASH); áp cho mọi bút toán tiền khi duyệt
+  requestedAt?: string | null; // FE-01 (Mr.Long 15/7) — ngày/giờ yêu cầu: mặc định giờ hiện tại, CHO SỬA
   note?: string | null;
 }
 
@@ -169,12 +170,21 @@ export async function createExportRequest(input: CreateExportRequestInput): Prom
     const method = String(input.method ?? 'CASH').trim().toUpperCase();
     if (!PAYMENT_METHODS.has(method)) throw new ReqAbort({ ok: false, error: 'VALIDATION', message: 'Hình thức thanh toán chỉ có Tiền mặt (CASH) hoặc Chuyển khoản (CK).' });
     const code = await nextCode('YCXK', db);
+    // FE-01 (audit 15/7, Codex): ngày/giờ yêu cầu cho sửa — mặc định giờ hiện tại; nếu client gửi thì dùng
+    // (phải là mốc hợp lệ). Trước đây 2 ô ngày/giờ ở form BỊ BỎ, luôn dùng @default(now()) → nhập vô nghĩa.
+    let requestedAt: Date | undefined;
+    if (input.requestedAt) {
+      const d = new Date(input.requestedAt);
+      if (isNaN(d.getTime())) throw new ReqAbort({ ok: false, error: 'VALIDATION', message: 'Ngày/giờ yêu cầu không hợp lệ.' });
+      requestedAt = d;
+    }
     const created = await db.exportRequest.create({
       data: {
         code, kind, handoverKind, withTid, requesterUserId: user.id,
         bankId: input.bankId ?? null, partnerId: input.partnerId ?? null, customerId: input.customerId,
         cardTypeId: input.cardTypeId ?? null, feeTypeId: input.feeTypeId ?? null, priceMode,
         unitPrice, quantity, amount, depositAmount, paidAmount, fundId: input.fundId ?? null, method,
+        ...(requestedAt ? { requestedAt } : {}),
         status: 'PENDING', note: input.note?.trim() || null
       }
     });
@@ -418,6 +428,9 @@ async function processTidLineTx(tx: PrismaTx, req: ReqRow, tid: string, allocPai
   const row = await tx.tid.findUnique({ where: { tid } });
   if (!row || row.deletedAt) throw new ReqAbort({ ok: false, error: 'NOT_FOUND', message: `Không tìm thấy TID "${tid}".` });
   if (row.deliveredAt != null) throw new ReqAbort({ ok: false, error: 'ALREADY_DELIVERED', message: `TID "${tid}" đã được giao trước đó.` });
+  // REL-08 (audit 15/7, Codex) — TID còn GẮN TRÊN MÁY (posSerial≠null) KHÔNG được xuất lẻ (spec POS_SALE_DEBT
+  // §31: bán TID lẻ chỉ khi posSerial=null). Nếu không → POS.currentTid treo về TID đã đổi chủ (mâu thuẫn POS↔TID).
+  if (row.posSerial != null) throw new ReqAbort({ ok: false, error: 'TID_ON_DEVICE', message: `TID "${tid}" đang gắn trên máy ${row.posSerial} — xuất/bán kèm máy, không xuất lẻ.` });
   if (req.bankId != null && row.bankId !== req.bankId) throw new ReqAbort({ ok: false, error: 'BANK_MISMATCH', message: `Ngân hàng của TID "${tid}" không khớp yêu cầu.` });
   if (req.partnerId != null && row.partnerId !== req.partnerId) throw new ReqAbort({ ok: false, error: 'PARTNER_MISMATCH', message: `Đối tác của TID "${tid}" không khớp yêu cầu.` });
   const customerId = req.customerId;

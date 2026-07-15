@@ -320,6 +320,8 @@ function ExportRequestForm({ kind, onClose, onSaved }: { kind: 'POS' | 'TID'; on
       depositAmount: digitsOnly(depositAmount),
       paidAmount: handoverKind === 'RENT' ? '0' : digitsOnly(paidAmount),
       fundId: fundId ? Number(fundId) : null,
+      // FE-01 (Codex 15/7): gửi ngày/giờ yêu cầu người dùng chọn (mặc định giờ hiện tại) — trước đây bị bỏ.
+      requestedAt: reqDate ? new Date(`${reqDate}T${reqTime || '00:00'}:00`).toISOString() : null,
       note: note.trim() || null
     };
     const res = await window.api.exportReqCreate(input);
