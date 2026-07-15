@@ -216,6 +216,13 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
   const [showInbox, setShowInbox] = useState(false);
   const [showChangePw, setShowChangePw] = useState(false);
   const [showLevel2, setShowLevel2] = useState(false);
+
+  // Mr.Long 15/7 — bấm Đăng xuất PHẢI xác nhận (chống thoát nhầm).
+  async function confirmLogout(): Promise<void> {
+    setMenuOpen(false);
+    const ok = await toast.confirm('Bạn có chắc muốn đăng xuất khỏi hệ thống?', { title: 'Xác nhận đăng xuất', okLabel: 'Đăng xuất', cancelLabel: 'Ở lại' });
+    if (ok) onLogout();
+  }
   const [unread, setUnread] = useState(0);
   const [storageOver, setStorageOver] = useState<{ pct: number | null; threshold: number } | null>(null);
   const [storageDismissed, setStorageDismissed] = useState(false);
@@ -324,7 +331,7 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
         </nav>
         <div className="px-3 py-3">
           <button
-            onClick={onLogout}
+            onClick={() => void confirmLogout()}
             className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-sidebar-text transition hover:bg-danger/20 hover:text-white"
           >
             <LogOut className="h-[18px] w-[18px]" />
@@ -406,7 +413,7 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
                 )}
                 <div className="my-1 border-t border-line" />
                 <button
-                  onClick={onLogout}
+                  onClick={() => void confirmLogout()}
                   className="flex w-full items-center gap-2 px-3 py-2 text-sm text-danger hover:bg-appbg"
                 >
                   <LogOut className="h-4 w-4" /> Đăng xuất
