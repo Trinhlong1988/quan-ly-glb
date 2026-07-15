@@ -408,12 +408,15 @@ export async function listEntityCancelRequests(status = 'PENDING', entityTypeFil
   const reqUserIds = [...new Set(rows.map((r) => r.requestedBy))];
   const nameIds = [...new Set([...reqUserIds, ...rows.map((r) => r.decidedBy).filter((x): x is number => x != null)])];
   const names = new Map((await db.user.findMany({ where: { id: { in: nameIds } }, select: { id: true, fullName: true, username: true } })).map((u) => [u.id, u.fullName || u.username]));
+  // Perf (audit 15/7): nạp permSet 1 LẦN cho mỗi người-yêu-cầu (trước gọi userPermSet MỖI DÒNG = N+1 → chậm).
+  const permMap = new Map<number, Set<string>>();
+  for (const uid of reqUserIds) permMap.set(uid, await userPermSet(db, uid));
 
   const data: EntityCancelRequestDto[] = [];
   for (const r of rows) {
     const cfg = REGISTRY[r.entityType];
     if (!cfg) continue;
-    const requesterPerms = await userPermSet(db, r.requestedBy);
+    const requesterPerms = permMap.get(r.requestedBy) ?? new Set<string>();
     const requesterIsApprover = requesterPerms.has(cfg.perms.approve);
     const approverElevated = hasPermission(user, cfg.perms.elevated);
     const isSelf = user.id === r.requestedBy;

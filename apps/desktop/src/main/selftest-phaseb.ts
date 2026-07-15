@@ -3,7 +3,7 @@
 //   403 + audit on missing permission (R_AUDIT_003), manager cannot create admin (R_MANAGER_002),
 //   delete role-with-users blocked (R_ROLE_005), delete protected ADMIN role blocked (R_ROLE_006),
 //   last-admin delete blocked (R004), backup produces file + checksum + audit (R_BACKUP).
-import { login, logout, validateCurrentSession } from './auth-service.js';
+import { login, logout, validateCurrentSession, invalidateAuthSnapshot } from './auth-service.js';
 import { getDb } from './db.js';
 import * as roleSvc from './role-service.js';
 import * as userSvc from './user-service.js';
@@ -215,6 +215,7 @@ export async function runServiceSelfTest(): Promise<number> {
   const liveBefore = await validateCurrentSession();
   const hadRead = liveBefore?.user.permissions.includes('USER_READ') ?? false;
   await db.role.update({ where: { code: 'LIVEROLE' }, data: { status: 'LOCKED' } });
+  invalidateAuthSnapshot(); // mô phỏng TTL 8s hết / thay đổi từ client khác đã lan tới → rebuild snapshot
   const liveAfter = await validateCurrentSession();
   assert('AUTH-01: khóa role → phiên đang sống MẤT quyền ngay (rebuild snapshot, không còn USER_READ)',
     hadRead && liveAfter !== null && !liveAfter.user.permissions.includes('USER_READ'), { hadRead, after: liveAfter?.user.permissions });

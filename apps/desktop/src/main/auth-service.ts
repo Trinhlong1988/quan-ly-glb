@@ -79,8 +79,19 @@ const LOGIN_LOCK_KEY = 918273;
 interface SessionState {
   sessionId: string;
   user: AuthUser;
+  snapshotAt?: number; // mốc lần rebuild snapshot quyền gần nhất (cache TTL — perf, xem validateCurrentSession)
 }
 let current: SessionState | null = null;
+// AUTH-01 perf (Mr.Long 15/7): rebuild snapshot role/permission mỗi request (query nested) làm mỗi trang gọi
+// nhiều IPC bị chậm mấy giây qua LAN. Cache snapshot TTL ngắn: thu hồi quyền/khóa role vẫn hiệu lực trong ≤ TTL,
+// mà phần lớn request dùng snapshot đã cache → nhanh. Session/status vẫn kiểm mỗi request (1 query nhẹ, có index).
+const AUTH_SNAPSHOT_TTL_MS = 8000;
+
+/** Buộc rebuild snapshot quyền ở request kế (không chờ hết TTL). Dùng khi CHÍNH tiến trình này đổi vai trò/
+ *  quyền của user đang đăng nhập, và cho selftest mô phỏng "TTL hết / đổi từ client khác đã lan tới". */
+export function invalidateAuthSnapshot(): void {
+  if (current) current.snapshotAt = undefined;
+}
 
 /** Danh sách phiên CÒN SỐNG (chưa hết hạn + nhịp tim còn) của 1 user — trừ phiên `exceptId` nếu có. */
 async function liveSessionsOf(db: Db, userId: number, exceptId?: string): Promise<{ id: string; deviceInfo: string | null; deviceId: string | null; lastSeenAt: Date }[]> {
@@ -244,7 +255,7 @@ export async function login(username: string, password: string, opts: LoginOpts 
     };
   }
 
-  current = { sessionId, user: authUser };
+  current = { sessionId, user: authUser, snapshotAt: Date.now() };
   await writeAudit(db, {
     actorUserId: userId,
     action: 'LOGIN_SUCCESS',
@@ -327,12 +338,14 @@ export async function validateCurrentSession(): Promise<{ user: AuthUser; forceC
     current = null;
     return null;
   }
-  // AUTH-01 (audit 15/7, Codex) — DỰNG LẠI snapshot role/permission từ DB mỗi request (không dùng snapshot
-  // cũ lúc login) → thu hồi quyền / khóa role có hiệu lực NGAY, không chờ logout/hết 12h TTL. buildAuthUser
-  // lọc role ACTIVE + gom permission hiện hành.
-  const fresh = await buildAuthUser(db, current.user.id);
-  current.user = fresh;
-  return { user: fresh, forceChangePassword: s.user.forceChangePassword };
+  // AUTH-01 (audit 15/7, Codex) — dựng lại snapshot role/permission từ DB → thu hồi quyền/khóa role có hiệu
+  // lực trong ≤ TTL (8s), không chờ logout/hết 12h. Cache TTL ngắn để KHÔNG query nested mỗi request (perf LAN).
+  const now = Date.now();
+  if (!current.snapshotAt || now - current.snapshotAt > AUTH_SNAPSHOT_TTL_MS) {
+    current.user = await buildAuthUser(db, current.user.id);
+    current.snapshotAt = now;
+  }
+  return { user: current.user, forceChangePassword: s.user.forceChangePassword };
 }
 
 /** R48 Pha 2 (#4) — cho guard tính lần re-auth SAI (mật khẩu/level2 khi xác nhận thao tác) vào bộ đếm khóa. */
