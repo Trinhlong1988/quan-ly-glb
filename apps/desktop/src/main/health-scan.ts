@@ -75,6 +75,27 @@ export async function collectFindings(db: Db): Promise<Finding[]> {
     if (badCard.length) f.push({ code: 'TXN_ORPHAN_CARDTYPE', severity: 'WARN', title: 'Giao dịch trỏ tới loại thẻ không tồn tại', count: badCard.length, detail: 'card_type_id không còn bản ghi loại thẻ.', suggestion: 'Gán lại loại thẻ hợp lệ cho giao dịch.', autoFixable: false, sampleIds: badCard.slice(0, 10) });
   });
 
+  // REL-02 (Codex 15/7) — WARN: trạng thái KHÔNG nằm trong danh mục StatusOption hợp lệ (gõ sai / import / sửa
+  // DB trực tiếp). App dùng StatusOption cấu-hình-được nên KHÔNG dùng CHECK cứng; scanner phát hiện để sửa.
+  await safe(async () => {
+    const opts = await db.statusOption.findMany({ where: { deletedAt: null }, select: { entity: true, code: true } });
+    const validBy = new Map<string, Set<string>>();
+    for (const o of opts) { if (!validBy.has(o.entity)) validBy.set(o.entity, new Set()); validBy.get(o.entity)!.add(o.code); }
+    const checks: { entity: string; rows: { id: number; status: string }[] }[] = [
+      { entity: 'CUSTOMER', rows: await db.customer.findMany({ where: { deletedAt: null }, select: { id: true, status: true } }) },
+      { entity: 'BANK', rows: await db.bank.findMany({ where: { deletedAt: null }, select: { id: true, status: true } }) },
+      { entity: 'PARTNER', rows: await db.partner.findMany({ where: { deletedAt: null }, select: { id: true, status: true } }) },
+      { entity: 'POS_DEVICE', rows: await db.posDevice.findMany({ where: { deletedAt: null }, select: { id: true, status: true } }) }
+    ];
+    const bad: number[] = [];
+    for (const c of checks) {
+      const valid = validBy.get(c.entity);
+      if (!valid || valid.size === 0) continue; // danh mục chưa seed → bỏ qua (không báo giả)
+      for (const r of c.rows) if (r.status && !valid.has(r.status)) bad.push(r.id);
+    }
+    if (bad.length) f.push({ code: 'INVALID_STATUS', severity: 'WARN', title: 'Bản ghi có trạng thái không nằm trong danh mục', count: bad.length, detail: 'status không khớp StatusOption hợp lệ (gõ sai / import / sửa DB trực tiếp) → dễ bị lọc/báo cáo bỏ sót.', suggestion: 'Sửa lại trạng thái đúng, hoặc thêm mã vào danh mục nếu hợp lệ.', autoFixable: false, sampleIds: bad.slice(0, 10) });
+  });
+
   // 5) WARN — biểu phí trỏ tới đối tác/loại thẻ không tồn tại.
   await safe(async () => {
     const rates = await db.feeRate.findMany({ where: { deletedAt: null }, select: { id: true, partnerId: true, cardTypeId: true } });
