@@ -212,6 +212,10 @@ async function buildResolvers(db: Db, keys: string[]): Promise<Resolvers> {
     const rows = await db.supplier.findMany({ where: { deletedAt: null }, select: { id: true, code: true, name: true } });
     r.supplier = makeRefResolver('nhà cung cấp', rows.map((x) => ({ id: x.id, keys: [x.code, x.name] })));
   }
+  if (need.has('warehouse')) {
+    const rows = await db.warehouse.findMany({ where: { deletedAt: null, status: 'ACTIVE' }, select: { id: true, code: true, name: true } });
+    r.warehouse = makeRefResolver('kho', rows.map((x) => ({ id: x.id, keys: [x.code, x.name] })));
+  }
   if (need.has('intakeStatus')) {
     const rows = await db.posIntakeStatus.findMany({ where: { deletedAt: null }, select: { id: true, name: true } });
     r.intakeStatus = makeRefResolver('trạng thái nhập', rows.map((x) => ({ id: x.id, keys: [x.name] })));
@@ -287,12 +291,15 @@ export const IMPORT_REGISTRY: Record<string, ImportEntity> = {
   posIntake: {
     label: 'POS nhập kho',
     permission: 'CONFIG_POS_SUPPLY_MANAGE',
-    resolverKeys: ['posModel', 'supplier', 'intakeStatus', 'bankApp'],
+    resolverKeys: ['posModel', 'supplier', 'intakeStatus', 'bankApp', 'warehouse'],
     templateColumns: [
       { header: 'Số seri', field: 'serial', required: true, kind: 'text' },
       { header: 'Chủng loại', field: 'posModelId', required: true, kind: 'ref', ref: 'posModel', hint: 'Tên hoặc mã chủng loại' },
       { header: 'Cài APP (ngân hàng)', field: 'bankId', required: false, kind: 'ref', ref: 'bankApp', hint: 'Mã/tên ngân hàng (EIB, Exim, VP…) — để TRỐNG hoặc ghi "Máy trắng" = chưa cài app' },
       { header: 'Nhà cung cấp', field: 'supplierId', required: true, kind: 'ref', ref: 'supplier', hint: 'Tên hoặc mã NCC' },
+      // Mr.Long 15/7 — nhập kho VÀO kho nào + vị trí trong kho (đồng bộ file xuất rỗng).
+      { header: 'Kho', field: 'warehouseId', required: false, kind: 'ref', ref: 'warehouse', hint: 'Tên hoặc mã kho (để TRỐNG = chưa gán kho)' },
+      { header: 'Vị trí kho', field: 'warehouseLoc', required: false, kind: 'text', hint: 'Ghi chú vị trí trong kho (kệ/ô…)' },
       { header: 'Trạng thái nhập', field: 'intakeStatusId', required: true, kind: 'ref', ref: 'intakeStatus', hint: 'Tên trạng thái nhập' },
       { header: 'Giá nhập', field: 'importPrice', required: true, kind: 'money' },
       { header: 'Ngày nhập', field: 'importedAt', required: true, kind: 'date', hint: 'yyyy-mm-dd hoặc dd/mm/yyyy' },
@@ -307,6 +314,8 @@ export const IMPORT_REGISTRY: Record<string, ImportEntity> = {
         importPrice: r.importPrice,
         importedAt: r.importedAt,
         bankId: (r.bankId as number | undefined) ?? null,
+        warehouseId: (r.warehouseId as number | undefined) ?? null,
+        warehouseLoc: (r.warehouseLoc as string | undefined) ?? null,
         note: (r.note as string | undefined) ?? null
       } as CreatePosIntakeInput
     }),

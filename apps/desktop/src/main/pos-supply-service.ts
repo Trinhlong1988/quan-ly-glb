@@ -441,6 +441,7 @@ export interface CreatePosIntakeInput {
   importedAt: string; // yyyy-mm-dd hoặc ISO
   note?: string | null;
   warehouseId?: number | null; // Model 1 — nhập vào KHO nào (set PosDevice.warehouseId khi máy IN_STOCK)
+  warehouseLoc?: string | null; // Mr.Long 15/7 — vị trí trong kho (nhập/import) — đồng bộ file xuất rỗng
   bankId?: number | null; // Cài APP (Mr.Long 13/7) — app ngân hàng cài sẵn (null/0 = MÁY TRẮNG, mặc định). Chỉ set khi tạo máy MỚI.
 }
 export interface UpdatePosIntakeInput {
@@ -584,7 +585,7 @@ export async function createPosIntake(input: CreatePosIntakeInput): Promise<Muta
       if (!existing) {
         // Máy mới nhập kho → IN_STOCK + gán KHO (Model 1: warehouseId≠null ⟺ IN_STOCK).
         // Cài APP: set bankId khi tạo MÁY MỚI (null/0 = máy trắng). Re-intake máy cũ KHÔNG đổi app (đổi qua Sửa máy).
-        await tx.posDevice.create({ data: { serial, status: 'IN_STOCK', ...intakeCols, warehouseId: input.warehouseId ?? null, bankId: input.bankId && input.bankId > 0 ? input.bankId : null, createdBy: user.id } });
+        await tx.posDevice.create({ data: { serial, status: 'IN_STOCK', ...intakeCols, warehouseId: input.warehouseId ?? null, warehouseLoc: input.warehouseLoc?.trim() || null, bankId: input.bankId && input.bankId > 0 ? input.bankId : null, createdBy: user.id } });
         fromState = null;
         eventType = 'STOCK_IN';
       } else if (existing.deletedAt != null) {
@@ -595,7 +596,7 @@ export async function createPosIntake(input: CreatePosIntakeInput): Promise<Muta
           where: { id: existing.id },
           data: {
             ...intakeCols, deletedAt: null, deletedBy: null, status: 'IN_STOCK',
-            warehouseId: input.warehouseId ?? null, bankId: input.bankId && input.bankId > 0 ? input.bankId : null,
+            warehouseId: input.warehouseId ?? null, warehouseLoc: input.warehouseLoc?.trim() || null, bankId: input.bankId && input.bankId > 0 ? input.bankId : null,
             currentTid: null, currentCustomerId: null, currentAgentId: null, recallPending: false, updatedBy: user.id
           }
         });
@@ -604,7 +605,7 @@ export async function createPosIntake(input: CreatePosIntakeInput): Promise<Muta
       } else {
         // GIỮ status/currentTid/currentCustomerId/currentAgentId — chỉ cập nhật cột nhập gần nhất.
         // Kho: CHỈ đổi khi máy đang IN_STOCK (đang ở kho); máy đang DEPLOYED/… thì KHÔNG gán kho (giữ đồng bộ bất biến).
-        const whPatch = existing.status === 'IN_STOCK' ? { warehouseId: input.warehouseId ?? null } : {};
+        const whPatch = existing.status === 'IN_STOCK' ? { warehouseId: input.warehouseId ?? null, warehouseLoc: input.warehouseLoc?.trim() || null } : {};
         await tx.posDevice.update({ where: { id: existing.id }, data: { ...intakeCols, ...whPatch, updatedBy: user.id } });
         fromState = existing.status;
         eventType = existing.status === 'IN_STOCK' ? 'STOCK_IN' : 'INTAKE_UPDATE';
