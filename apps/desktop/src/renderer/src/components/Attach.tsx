@@ -9,7 +9,12 @@ export function Thumb({ relPath, label }: { relPath: string; label: string }): J
   const [url, setUrl] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   useEffect(() => {
-    window.api.readAttachment(relPath).then((r) => { if (r.ok && r.dataUrl) setUrl(r.dataUrl); });
+    // FE-10 (Codex 15/7): sequence guard + clear khi đổi path → chống ảnh cũ đè ảnh mới (promise A trả sau B)
+    // và không giữ ảnh path cũ khi path mới lỗi.
+    let live = true;
+    setUrl(null);
+    window.api.readAttachment(relPath).then((r) => { if (live && r.ok && r.dataUrl) setUrl(r.dataUrl); }).catch(() => undefined);
+    return () => { live = false; };
   }, [relPath]);
   const isPdf = relPath.toLowerCase().endsWith('.pdf');
   return (

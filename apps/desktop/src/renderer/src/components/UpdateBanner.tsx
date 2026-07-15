@@ -26,6 +26,7 @@ export function UpdateBanner(): JSX.Element | null {
   const [downloadedVersion, setDownloadedVersion] = useState<string | null>(null);
   const [boot, setBoot] = useState<UpdateBootResult | null>(null);
   const [bootDismissed, setBootDismissed] = useState(false);
+  const [installing, setInstalling] = useState(false); // FE-08 — chống bấm cài nhiều lần
 
   useEffect(() => {
     let alive = true;
@@ -73,6 +74,9 @@ export function UpdateBanner(): JSX.Element | null {
     void window.api.checkUpdate();
   };
   const doInstall = (): void => {
+    // FE-08 (Codex 15/7): chống bấm nhiều lần → gọi installUpdateNow nhiều lần (nhiều lần quit-and-install).
+    if (installing) return;
+    setInstalling(true);
     void window.api.installUpdateNow();
   };
 
@@ -101,9 +105,10 @@ export function UpdateBanner(): JSX.Element | null {
             </button>
             <button
               onClick={doInstall}
-              className="rounded-lg bg-brand px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-hover"
+              disabled={installing}
+              className="rounded-lg bg-brand px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-hover disabled:opacity-60"
             >
-              Cài đặt &amp; khởi động lại
+              {installing ? 'Đang cài…' : 'Cài đặt & khởi động lại'}
             </button>
           </div>
         </div>

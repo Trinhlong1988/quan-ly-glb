@@ -162,7 +162,9 @@ export async function createWarehouse(input: CreateWarehouseInput): Promise<Muta
 
   const code = input.code?.trim().toUpperCase();
   const name = input.name?.trim();
-  const status = input.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE';
+  // REL-13 (audit 15/7, Codex): validate status thay vì coerce (typo trước đây âm thầm về 'ACTIVE').
+  if (input.status !== undefined && input.status !== 'ACTIVE' && input.status !== 'INACTIVE') return { ok: false, error: 'VALIDATION', message: 'Trạng thái kho không hợp lệ.' };
+  const status = input.status ?? 'ACTIVE';
   if (!code) return { ok: false, error: 'VALIDATION', message: 'Mã kho bắt buộc.' };
   if (!name) return { ok: false, error: 'VALIDATION', message: 'Tên kho bắt buộc.' };
 
@@ -207,7 +209,9 @@ export async function updateWarehouse(id: number, input: UpdateWarehouseInput): 
 
   const code = input.code !== undefined ? input.code.trim().toUpperCase() : row.code;
   const name = input.name !== undefined ? input.name.trim() : row.name;
-  const status = input.status !== undefined ? (input.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE') : row.status;
+  // REL-13 (audit 15/7, Codex): validate status thay vì coerce (typo → không còn âm thầm về 'ACTIVE').
+  if (input.status !== undefined && input.status !== 'ACTIVE' && input.status !== 'INACTIVE') return { ok: false, error: 'VALIDATION', message: 'Trạng thái kho không hợp lệ.' };
+  const status = input.status !== undefined ? input.status : row.status;
   if (!code) return { ok: false, error: 'VALIDATION', message: 'Mã kho không được để trống.' };
   if (!name) return { ok: false, error: 'VALIDATION', message: 'Tên kho không được để trống.' };
   if (input.managerUserId !== undefined) {

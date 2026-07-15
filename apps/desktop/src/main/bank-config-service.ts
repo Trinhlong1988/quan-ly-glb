@@ -114,7 +114,10 @@ export async function createBank(input: CreateBankInput): Promise<MutationResult
 
   const name = input.name?.trim();
   const code = input.code?.trim().toUpperCase();
-  const status = input.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE';
+  // REL-13 (audit 15/7, Codex): validate status theo StatusOption thay vì coerce (input sai chính tả trước
+  // đây âm thầm thành 'ACTIVE' → kích hoạt lại nhầm; và bỏ qua status tùy biến).
+  const status = input.status ?? 'ACTIVE';
+  if (!(await isValidStatus('BANK', status))) return { ok: false, error: 'VALIDATION', message: 'Trạng thái ngân hàng không hợp lệ.' };
   if (!name) return { ok: false, error: 'VALIDATION', message: 'Tên ngân hàng bắt buộc.' };
   if (!code) return { ok: false, error: 'VALIDATION', message: 'Mã ngân hàng bắt buộc.' };
 
@@ -158,7 +161,9 @@ export async function updateBank(id: number, input: UpdateBankInput): Promise<Mu
 
   const name = input.name !== undefined ? input.name.trim() : row.name;
   const code = input.code !== undefined ? input.code.trim().toUpperCase() : row.code;
-  const status = input.status !== undefined ? (input.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE') : row.status;
+  // REL-13 (audit 15/7, Codex): validate status thay vì coerce (typo → không còn âm thầm về 'ACTIVE').
+  if (input.status !== undefined && !(await isValidStatus('BANK', input.status))) return { ok: false, error: 'VALIDATION', message: 'Trạng thái ngân hàng không hợp lệ.' };
+  const status = input.status !== undefined ? input.status : row.status;
   if (!name) return { ok: false, error: 'VALIDATION', message: 'Tên ngân hàng không được để trống.' };
   if (!code) return { ok: false, error: 'VALIDATION', message: 'Mã ngân hàng không được để trống.' };
   if (code !== row.code) {

@@ -59,13 +59,18 @@ export function MessagesDrawer({
     setMode('read');
     setSelectedId(m.id);
     if (m.readAt === null) {
-      await window.api.messageMarkRead(m.id);
-      setRows((prev) => prev.map((x) => (x.id === m.id ? { ...x, readAt: new Date().toISOString() } : x)));
-      onChanged?.();
+      // FE-09 (Codex 15/7): CHỈ cập nhật cục bộ + giảm badge khi backend BÁO OK — trước đây bỏ qua res.ok
+      // nên đánh dấu-đã-đọc thất bại vẫn hiện "đã đọc" giả, badge lệch.
+      const res = await window.api.messageMarkRead(m.id);
+      if (res.ok) {
+        setRows((prev) => prev.map((x) => (x.id === m.id ? { ...x, readAt: new Date().toISOString() } : x)));
+        onChanged?.();
+      } else toast.alert(res.message ?? 'Không đánh dấu được đã đọc.', 'Lỗi');
     }
   }
   async function markAll(): Promise<void> {
-    await window.api.messageMarkAllRead();
+    const res = await window.api.messageMarkAllRead();
+    if (!res.ok) { toast.alert(res.message ?? 'Không đánh dấu được tất cả.', 'Lỗi'); return; }
     setRows((prev) => prev.map((x) => ({ ...x, readAt: x.readAt ?? new Date().toISOString() })));
     onChanged?.();
     toast.success('Đã đánh dấu tất cả là đã đọc.');

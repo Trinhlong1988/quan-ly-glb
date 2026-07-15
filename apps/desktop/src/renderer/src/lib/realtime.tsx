@@ -67,9 +67,11 @@ export function StaleBanner({ domain, onReload, className }: { domain: string | 
         <RefreshCw className="h-4 w-4" /> Dữ liệu vừa được người khác cập nhật.
       </span>
       <button
-        onClick={() => {
+        onClick={async () => {
+          // FE-11 (Codex 15/7): ACK SAU khi reload xong (trước đây ack trước → reload lỗi làm banner biến mất
+          // trong khi bảng vẫn cũ, không cảnh báo lại tới lần đổi version sau).
+          await onReload();
           ack();
-          onReload();
         }}
         className="rounded-md bg-amber-500 px-3 py-1 text-xs font-semibold text-white transition hover:bg-amber-600"
       >

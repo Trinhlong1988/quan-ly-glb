@@ -42,7 +42,7 @@ export async function getStats(): Promise<{ ok: boolean; data?: DashboardStats; 
   const [tids, customers, posDevices, dossiers, users, banks, banksActive, banksInactive, partners] = await Promise.all([
     db.tid.count({ where: alive }),
     db.customer.count({ where: alive }),
-    db.posDevice.count(),
+    db.posDevice.count({ where: alive }), // REL-10 (Codex 15/7): loại POS đã xóa mềm khỏi bộ đếm dashboard
     db.dossier.count({ where: alive }),
     db.user.count({ where: { deletedAt: null, status: { not: 'DELETED' } } }),
     db.bank.count({ where: alive }),
@@ -64,7 +64,7 @@ export async function getStats(): Promise<{ ok: boolean; data?: DashboardStats; 
   const tidsByBank = [...bankTally.entries()].map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count);
 
   // Máy POS theo trạng thái.
-  const posRows = await db.posDevice.findMany({ select: { status: true } });
+  const posRows = await db.posDevice.findMany({ where: alive, select: { status: true } }); // REL-10: loại POS xóa mềm khỏi posByStatus
   const posTally = new Map<string, number>();
   for (const p of posRows) posTally.set(p.status, (posTally.get(p.status) ?? 0) + 1);
   const posByStatus = [...posTally.entries()].map(([s, count]) => ({ label: POS_STATUS_LABEL[s] ?? s, count })).sort((a, b) => b.count - a.count);
