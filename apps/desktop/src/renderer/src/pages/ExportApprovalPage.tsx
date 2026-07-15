@@ -43,14 +43,29 @@ export function ExportApprovalPage({ user }: { user: AuthUser }): JSX.Element {
   const [rejectTarget, setRejectTarget] = useState<ExportRequestDto | null>(null);
   const [bulkReject, setBulkReject] = useState(false);
   const sel = useRowSelection();
+  // Mr.Long 15/7 — xem lịch sử phiếu ĐÃ DUYỆT + ĐÃ TỪ CHỐI (chỉ xem).
+  const [history, setHistory] = useState<ExportRequestDto[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
 
   async function reload(): Promise<void> {
     setLoading(true);
-    const res = await window.api.exportReqList({ status: 'PENDING' });
-    if (res.ok && res.data) { setRows(res.data); setKpi(res.kpi ?? null); }
-    else if (res.message) toast.alert(res.message);
-    sel.clear();
-    setLoading(false);
+    try {
+      const [res, appr, rej] = await Promise.all([
+        window.api.exportReqList({ status: 'PENDING' }),
+        window.api.exportReqList({ status: 'APPROVED' }),
+        window.api.exportReqList({ status: 'REJECTED' })
+      ]);
+      if (res.ok && res.data) { setRows(res.data); setKpi(res.kpi ?? null); }
+      else if (res.message) toast.alert(res.message);
+      const hist = [...(appr.ok && appr.data ? appr.data : []), ...(rej.ok && rej.data ? rej.data : [])]
+        .sort((a, b) => (b.decidedAt ?? '').localeCompare(a.decidedAt ?? ''));
+      setHistory(hist);
+    } catch (e) {
+      toast.alert(e instanceof Error ? e.message : 'Không tải được dữ liệu (mất kết nối máy chủ?).', 'Lỗi tải dữ liệu');
+    } finally {
+      sel.clear();
+      setLoading(false);
+    }
   }
   useEffect(() => {
     void reload();
@@ -101,6 +116,43 @@ export function ExportApprovalPage({ user }: { user: AuthUser }): JSX.Element {
           { label: 'Tổng phiếu', value: kpi?.total ?? 0, tone: 'bg-brand-tint text-brand' }
         ]}
       />
+
+      {/* Mr.Long 15/7 — lịch sử phiếu đã duyệt / từ chối (chỉ xem). */}
+      <div className="mb-3">
+        <Button variant={showHistory ? 'confirm' : 'neutral'} onClick={() => setShowHistory((v) => !v)}>
+          {showHistory ? 'Ẩn lịch sử đã xử lý' : `Xem lịch sử đã duyệt / từ chối (${history.length})`}
+        </Button>
+      </div>
+      {showHistory && (
+        <div className="mb-5 overflow-x-auto rounded-xl border border-line bg-white shadow-sm list-scroll">
+          <div className="border-b border-line px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500">Lịch sử phiếu xuất kho đã xử lý — {history.length} phiếu (chỉ xem)</div>
+          <table className="w-full text-sm">
+            <thead className="bg-appbg text-xs uppercase text-slate-500"><tr>
+              <th className="px-3 py-2 text-left">Kết quả</th>
+              <th className="px-3 py-2 text-left">Mã phiếu</th>
+              <th className="px-3 py-2 text-left">Loại</th>
+              <th className="px-3 py-2 text-left">Khách</th>
+              <th className="px-3 py-2 text-left">Người tạo</th>
+              <th className="px-3 py-2 text-left">Người xử lý</th>
+              <th className="px-3 py-2 text-left">Thời điểm</th>
+            </tr></thead>
+            <tbody>
+              {history.map((r) => (
+                <tr key={r.id} className="border-t border-line hover:bg-appbg/60">
+                  <td className="px-3 py-2"><span className={'rounded-full px-2 py-0.5 text-xs font-medium ' + (r.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-700')}>{r.status === 'APPROVED' ? 'Đã duyệt' : 'Đã từ chối'}</span></td>
+                  <td className="px-3 py-2 font-mono text-xs font-semibold text-slate-700">{r.code ?? `#${r.id}`}</td>
+                  <td className="px-3 py-2 text-slate-600">{KIND_LABEL[r.kind] ?? r.kind}</td>
+                  <td className="px-3 py-2 text-slate-600">{r.customerName ?? '—'}</td>
+                  <td className="px-3 py-2 text-slate-600">{r.requesterName ?? '—'}</td>
+                  <td className="px-3 py-2 text-slate-600">{r.decidedByName ?? '—'}</td>
+                  <td className="px-3 py-2 whitespace-nowrap text-slate-500">{r.decidedAt ? new Date(r.decidedAt).toLocaleString('vi-VN') : '—'}</td>
+                </tr>
+              ))}
+              {history.length === 0 && <tr><td colSpan={7} className="px-3 py-4 text-center text-sm text-slate-400">Chưa có phiếu nào được xử lý.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {canApprove && sel.count > 0 && (
         <div className="mb-3 flex items-center gap-3 rounded-lg border border-brand/30 bg-brand-tint px-4 py-2.5">
