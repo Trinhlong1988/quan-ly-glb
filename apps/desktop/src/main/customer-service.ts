@@ -286,6 +286,16 @@ export async function customerLiveRelationGuard(db: Db, id: number): Promise<Mut
   if (holdTid > 0) return { ok: false, error: 'IN_USE', message: `Khách đang giữ ${holdTid} TID đã giao. Thu hồi TID trước khi hủy khách.` };
   const openDep = await db.deviceDeposit.count({ where: { customerId: id, status: 'OPEN' } });
   if (openDep > 0) return { ok: false, error: 'IN_USE', message: `Khách còn ${openDep} khoản cọc chưa tất toán. Xử lý cọc trước khi hủy khách.` };
+  // REL-05 (audit 15/7, Codex) — bổ sung: phiếu yêu cầu XUẤT KHO đang chờ + NỢ MUA THIẾT BỊ (device sale)
+  // chưa tất toán → chặn xóa (trước bỏ sót → xóa khách vẫn còn nợ/phiếu chờ, mồ côi tham chiếu).
+  const pendingExport = await db.exportRequest.count({ where: { customerId: id, status: 'PENDING' } });
+  if (pendingExport > 0) return { ok: false, error: 'IN_USE', message: `Khách còn ${pendingExport} phiếu yêu cầu xuất kho đang chờ duyệt. Xử lý trước khi hủy khách.` };
+  const sales = await db.deviceSale.findMany({ where: { customerId: id, status: 'POSTED', deletedAt: null }, select: { id: true, salePrice: true } });
+  if (sales.length > 0) {
+    const totalSale = sales.reduce((s, x) => s + x.salePrice, 0n);
+    const agg = await db.deviceSaleSettlement.aggregate({ _sum: { amount: true }, where: { deviceSaleId: { in: sales.map((x) => x.id) } } });
+    if (totalSale - (agg._sum.amount ?? 0n) > 0n) return { ok: false, error: 'IN_USE', message: 'Khách còn nợ mua thiết bị chưa tất toán. Thu nợ trước khi hủy khách.' };
+  }
   return null;
 }
 
