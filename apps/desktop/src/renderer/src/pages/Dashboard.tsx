@@ -521,11 +521,12 @@ function Home({ user }: { user: AuthUser; visibleCount: number }): JSX.Element {
   return (
     <div className="space-y-6">
       {/* Lời chào */}
-      <div className="rounded-2xl border border-line bg-gradient-to-r from-brand to-brand-hover p-6 text-white shadow-sm">
-        <h2 className="text-2xl font-bold">Xin chào {user.fullName} 👋</h2>
-        <p className="mt-1 text-sm text-white/85">
+      {/* Mr.Long 15/7 — banner nhỏ gọn (~50%), nền xám nhẹ đồng màu sidebar, chữ đậm cho nền sáng. */}
+      <div className="rounded-xl border border-line bg-sidebar px-4 py-2.5 shadow-sm">
+        <h2 className="text-base font-bold text-slate-800">Xin chào {user.fullName} 👋</h2>
+        <p className="text-xs text-slate-500">
           Tổng quan hệ thống Quản Lý GLB — vai trò{' '}
-          <span className="font-semibold">{user.roles.join(', ') || 'chưa gán'}</span>. Dữ liệu cập nhật thời gian thực.
+          <span className="font-semibold text-slate-700">{user.roles.join(', ') || 'chưa gán'}</span>. Dữ liệu cập nhật thời gian thực.
         </p>
       </div>
 
