@@ -888,7 +888,12 @@ export async function ensureCriticalSchema(db: Db): Promise<void> {
     // REL-12 (Codex 15/7): đổi txn_date sang timestamptz như mọi cột thời gian khác (chống lệch múi giờ). GUARD:
     // CHỈ đổi khi còn 'timestamp without time zone' → idempotent, KHÔNG double-convert. Giá trị cũ lưu là UTC
     // instant nên interpret AT TIME ZONE 'UTC' là đúng.
-    `DO $$ BEGIN IF (SELECT data_type FROM information_schema.columns WHERE table_name='transactions' AND column_name='txn_date') = 'timestamp without time zone' THEN ALTER TABLE transactions ALTER COLUMN txn_date TYPE timestamptz(3) USING txn_date AT TIME ZONE 'UTC'; END IF; END $$`
+    `DO $$ BEGIN IF (SELECT data_type FROM information_schema.columns WHERE table_name='transactions' AND column_name='txn_date') = 'timestamp without time zone' THEN ALTER TABLE transactions ALTER COLUMN txn_date TYPE timestamptz(3) USING txn_date AT TIME ZONE 'UTC'; END IF; END $$`,
+    // REL-06 (Codex 15/7): partial-unique bản-ghi-SỐNG cho FeeRate/FeeSellQuote (trước chỉ enforce ở service
+    // FOR UPDATE → 2 transaction song song có thể chèn trùng kỳ giá). Partial (WHERE deleted_at IS NULL) để
+    // không phá soft-delete (bài học B05). Idempotent (IF NOT EXISTS).
+    `CREATE UNIQUE INDEX IF NOT EXISTS "fee_rates_active_uq" ON "fee_rates" ("partner_id", "card_type_id", "effective_from") WHERE "deleted_at" IS NULL`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "fee_sell_quotes_active_uq" ON "fee_sell_quotes" ("partner_id", "card_type_id", "fee_type_id", "effective_from") WHERE "deleted_at" IS NULL`
   ];
   for (const s of stmts) {
     try {
