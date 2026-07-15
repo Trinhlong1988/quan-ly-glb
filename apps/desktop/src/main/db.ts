@@ -884,7 +884,11 @@ export async function ensureCriticalSchema(db: Db): Promise<void> {
     `ALTER TABLE "export_requests" ADD COLUMN IF NOT EXISTS "method" TEXT NOT NULL DEFAULT 'CASH'`,
     // Tìm kiếm tiếng Việt không phân biệt HOA/thường + DẤU (Mr.Long 15/7): ILIKE không fold Đ↔đ. Dùng
     // unaccent(lower()) để "đức dũng"/"duc dung"/"ĐỨC DŨNG" đều khớp. Extension idempotent, tạo mỗi boot.
-    `CREATE EXTENSION IF NOT EXISTS unaccent`
+    `CREATE EXTENSION IF NOT EXISTS unaccent`,
+    // REL-12 (Codex 15/7): đổi txn_date sang timestamptz như mọi cột thời gian khác (chống lệch múi giờ). GUARD:
+    // CHỈ đổi khi còn 'timestamp without time zone' → idempotent, KHÔNG double-convert. Giá trị cũ lưu là UTC
+    // instant nên interpret AT TIME ZONE 'UTC' là đúng.
+    `DO $$ BEGIN IF (SELECT data_type FROM information_schema.columns WHERE table_name='transactions' AND column_name='txn_date') = 'timestamp without time zone' THEN ALTER TABLE transactions ALTER COLUMN txn_date TYPE timestamptz(3) USING txn_date AT TIME ZONE 'UTC'; END IF; END $$`
   ];
   for (const s of stmts) {
     try {

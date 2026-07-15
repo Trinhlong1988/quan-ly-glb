@@ -329,7 +329,7 @@ model Transaction {
   revenueAmount      BigInt    @default(0) @map("revenue_amount") // tổng doanh thu = partner + sell (VND) — BigInt
   settled            Boolean   @default(false) // đã thu/đối soát chưa (cho công nợ)
   settledAt          DateTime? @map("settled_at") @db.Timestamptz(3)
-  txnDate            DateTime  @map("txn_date")
+  txnDate            DateTime  @map("txn_date") @db.Timestamptz(3) // REL-12 (Codex 15/7): timestamptz như mọi cột thời gian khác (tránh lệch múi giờ)
   note               String?
   // P1.2 — chứng từ bất biến: bill không sửa; sai thì HỦY qua duyệt. status POSTED|CANCEL_PENDING|CANCELLED.
   status             String    @default("POSTED")
