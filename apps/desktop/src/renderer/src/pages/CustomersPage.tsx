@@ -66,15 +66,17 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
     else toast.success(`Đã tạo ${done} yêu cầu hủy — chờ duyệt.`);
   }
 
-  async function reload(): Promise<void> {
+  // FE-02 (Codex 15/7): nhận overrides để reset lọc truyền thẳng giá trị RỖNG (tránh setTimeout(reload) dùng
+  // closure cũ → query bằng bộ lọc cũ trong khi ô nhập đã trống).
+  async function reload(ov?: { search?: string; status?: string; fromDate?: string; toDate?: string }): Promise<void> {
     setLoading(true);
     sel.clear(); // audit 15/7 — dọn lựa chọn cũ khi lọc/tải lại để không yêu-cầu-hủy nhầm hàng đã ẩn
     try {
       const res = await window.api.customerList({
-        search: search || undefined,
-        status: statusFilter || undefined,
-        fromDate: fromDate || undefined,
-        toDate: toDate || undefined
+        search: (ov?.search ?? search) || undefined,
+        status: (ov?.status ?? statusFilter) || undefined,
+        fromDate: (ov?.fromDate ?? fromDate) || undefined,
+        toDate: (ov?.toDate ?? toDate) || undefined
       });
       if (res.ok && res.data) setRows(res.data);
       else if (res.message) toast.alert(res.message);
@@ -99,7 +101,7 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
     setStatusFilter('');
     setFromDate('');
     setToDate('');
-    setTimeout(reload, 0);
+    void reload({ search: '', status: '', fromDate: '', toDate: '' }); // FE-02: query ngay với bộ lọc rỗng (không dùng closure cũ)
   }
 
   return (
