@@ -630,6 +630,7 @@ export interface UpdatePosInput {
   supplierId?: number | null;
   importPrice?: number | null;
   importedAt?: string | null;
+  warehouseId?: number | null;
   warehouseLoc?: string | null;
   note?: string | null;
   expectedUpdatedAt?: string | null;

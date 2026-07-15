@@ -432,6 +432,9 @@ function EditDeviceModal({ device, onClose, onDone }: { device: PosDto; onClose:
   const [models, setModels] = useState<LiteRef[]>([]);
   const [suppliers, setSuppliers] = useState<LiteRef[]>([]);
   const [banks, setBanks] = useState<BankLite[]>([]); // Cài APP — danh mục ngân hàng
+  const [warehouses, setWarehouses] = useState<WarehouseLite[]>([]); // Mr.Long 15/7 — đổi kho ngay trong form
+  const isInStock = device.status === 'IN_STOCK'; // chỉ máy TRONG KHO mới đổi kho được (invariant)
+  const [warehouseId, setWarehouseId] = useState(device.warehouseId != null ? String(device.warehouseId) : '');
   const [posModelId, setPosModelId] = useState(device.posModelId ? String(device.posModelId) : '');
   const [supplierId, setSupplierId] = useState(device.supplierId ? String(device.supplierId) : '');
   const [bank, setBank] = useState(device.bank ?? '');
@@ -446,6 +449,7 @@ function EditDeviceModal({ device, onClose, onDone }: { device: PosDto; onClose:
     window.api.posModelLite().then((r) => r.ok && r.data && setModels(r.data));
     window.api.supplierLite().then((r) => r.ok && r.data && setSuppliers(r.data));
     window.api.bankLite().then((r) => r.ok && r.data && setBanks(r.data));
+    window.api.warehouseLite().then((r) => r.ok && r.data && setWarehouses(r.data));
   }, []);
 
   async function save(): Promise<void> {
@@ -457,6 +461,8 @@ function EditDeviceModal({ device, onClose, onDone }: { device: PosDto; onClose:
       bankId: bankId ? Number(bankId) : null,
       importPrice: importPrice ? Number(importPrice) : null,
       importedAt: importedAt ? new Date(importedAt).toISOString() : null,
+      // Chỉ gửi đổi kho khi máy IN_STOCK (backend cũng chặn); undefined = giữ nguyên.
+      warehouseId: isInStock ? (warehouseId ? Number(warehouseId) : null) : undefined,
       warehouseLoc: warehouseLoc.trim() || null,
       note: note.trim() || null
     };
@@ -470,7 +476,7 @@ function EditDeviceModal({ device, onClose, onDone }: { device: PosDto; onClose:
   return (
     <Modal title={`Sửa hồ sơ máy ${device.serial}`} onClose={onClose} width="max-w-lg">
       <div className="mb-2 rounded-md bg-appbg px-3 py-2 text-xs text-slate-500">
-        Serial <b className="font-mono text-slate-700">{device.serial}</b> là định danh cố định — không sửa ở đây. Trạng thái / gán khách / TID / kho vật lý đổi qua nút <b>Thao tác</b>.
+        Serial <b className="font-mono text-slate-700">{device.serial}</b> là định danh cố định — không sửa ở đây. Trạng thái / gán khách / TID đổi qua nút <b>Thao tác</b>. Kho đổi được ở đây khi máy đang TRONG KHO.
       </div>
       <div className="grid grid-cols-2 gap-4">
         <Field label="Chủng loại POS">
@@ -499,6 +505,12 @@ function EditDeviceModal({ device, onClose, onDone }: { device: PosDto; onClose:
         </Field>
         <Field label="Ngày nhập">
           <input type="date" className={inputCls} value={importedAt} onChange={(e) => setImportedAt(e.target.value)} />
+        </Field>
+        <Field label="Kho" hint={isInStock ? 'Kho vật lý đang chứa máy (chỉ đổi khi máy TRONG KHO).' : 'Máy đã giao/bán — đổi kho qua nút Thao tác.'}>
+          <select className={inputCls} value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)} disabled={!isInStock}>
+            {!isInStock && <option value="">— (ngoài kho) —</option>}
+            {warehouses.map((w) => <option key={w.id} value={w.id}>{w.code} · {w.name}</option>)}
+          </select>
         </Field>
         <Field label="Vị trí kho (ghi chú)">
           <input className={inputCls} value={warehouseLoc} onChange={(e) => setWarehouseLoc(e.target.value)} />

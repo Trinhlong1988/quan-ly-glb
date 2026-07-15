@@ -303,6 +303,7 @@ export interface UpdatePosInput {
   supplierId?: number | null;
   importPrice?: number | null;
   importedAt?: string | null;
+  warehouseId?: number | null; // Mr.Long 15/7 — đổi KHO đang chứa máy ngay trong form (chỉ khi IN_STOCK)
   warehouseLoc?: string | null;
   note?: string | null;
   expectedUpdatedAt?: string | null; // R48 #2 optimistic-lock — mốc updatedAt client giữ lúc mở form
@@ -327,6 +328,15 @@ export async function updatePos(id: number, input: UpdatePosInput): Promise<Muta
     const s = await db.supplier.findFirst({ where: { id: input.supplierId, deletedAt: null }, select: { id: true } });
     if (!s) return { ok: false, error: 'NOT_FOUND', message: 'Nhà cung cấp đã chọn không tồn tại.' };
   }
+  // Mr.Long 15/7 — đổi KHO trong form: chỉ khi máy đang IN_STOCK (giữ invariant warehouseId≠null⟺IN_STOCK);
+  // máy đã giao/bán đổi kho qua nút Thao tác (vòng đời). Kho đích phải tồn tại + còn hoạt động.
+  if (input.warehouseId !== undefined) {
+    if (row.status !== 'IN_STOCK') return { ok: false, error: 'VALIDATION', message: 'Chỉ đổi kho được khi máy đang TRONG KHO. Máy đã giao/bán đổi kho qua nút Thao tác.' };
+    if (input.warehouseId == null) return { ok: false, error: 'VALIDATION', message: 'Máy trong kho phải thuộc 1 kho — không để trống.' };
+    const wh = await db.warehouse.findFirst({ where: { id: input.warehouseId, deletedAt: null }, select: { id: true, status: true } });
+    if (!wh) return { ok: false, error: 'NOT_FOUND', message: 'Kho đã chọn không tồn tại.' };
+    if (wh.status !== 'ACTIVE') return { ok: false, error: 'VALIDATION', message: 'Kho đã ngừng hoạt động — không thể chuyển máy vào.' };
+  }
   // Cài APP — nếu chọn app ngân hàng (bankId>0) phải tồn tại + còn dùng (ACTIVE). bankId null/0 = máy trắng.
   if (input.bankId != null) {
     const bk = await db.bank.findFirst({ where: { id: input.bankId, deletedAt: null }, select: { id: true, status: true } });
@@ -334,7 +344,7 @@ export async function updatePos(id: number, input: UpdatePosInput): Promise<Muta
     if (bk.status !== 'ACTIVE') return { ok: false, error: 'VALIDATION', message: 'Ngân hàng (app) đã ngừng sử dụng — không thể cài lên máy.' };
   }
 
-  const before = auditSnapshot({ model: row.model, bank: row.bank, bankId: row.bankId, posModelId: row.posModelId, supplierId: row.supplierId, importPrice: row.importPrice, importedAt: row.importedAt ? row.importedAt.toISOString() : null, warehouseLoc: row.warehouseLoc, note: row.note });
+  const before = auditSnapshot({ model: row.model, bank: row.bank, bankId: row.bankId, posModelId: row.posModelId, supplierId: row.supplierId, importPrice: row.importPrice, importedAt: row.importedAt ? row.importedAt.toISOString() : null, warehouseId: row.warehouseId, warehouseLoc: row.warehouseLoc, note: row.note });
   const importedAt = input.importedAt !== undefined ? (input.importedAt ? parseWhen(input.importedAt) : null) : row.importedAt;
   const updated = await db.posDevice.update({
     where: { id },
@@ -346,6 +356,7 @@ export async function updatePos(id: number, input: UpdatePosInput): Promise<Muta
       supplierId: input.supplierId !== undefined ? input.supplierId : row.supplierId,
       importPrice: input.importPrice !== undefined ? input.importPrice : row.importPrice,
       importedAt,
+      warehouseId: input.warehouseId !== undefined ? input.warehouseId : row.warehouseId,
       warehouseLoc: input.warehouseLoc !== undefined ? input.warehouseLoc?.trim() || null : row.warehouseLoc,
       note: input.note !== undefined ? input.note?.trim() || null : row.note,
       updatedBy: user.id
@@ -357,7 +368,7 @@ export async function updatePos(id: number, input: UpdatePosInput): Promise<Muta
     targetType: 'PosDevice',
     targetId: String(id),
     before,
-    after: auditSnapshot({ model: updated.model, bank: updated.bank, bankId: updated.bankId, posModelId: updated.posModelId, supplierId: updated.supplierId, importPrice: updated.importPrice, warehouseLoc: updated.warehouseLoc, note: updated.note })
+    after: auditSnapshot({ model: updated.model, bank: updated.bank, bankId: updated.bankId, posModelId: updated.posModelId, supplierId: updated.supplierId, importPrice: updated.importPrice, warehouseId: updated.warehouseId, warehouseLoc: updated.warehouseLoc, note: updated.note })
   });
   return { ok: true, id };
 }
