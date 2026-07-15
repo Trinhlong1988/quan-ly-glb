@@ -36,7 +36,7 @@ type PosTab = 'warehouse' | 'devices' | 'exportreq' | 'intake' | 'supplier' | 'm
 
 /** PHASE K1 (§2.3) — 1 trang "Quản Lý Máy POS" nhiều tab. Danh sách máy (POS_*) + cấu hình cung ứng
  * (CONFIG_POS_SUPPLY_*). Ẩn/hiện từng tab theo quyền (rủi ro #4: quyền lệch sau gộp menu). */
-export function PosPage({ user }: { user: AuthUser }): JSX.Element {
+export function PosPage({ user, initialSearch }: { user: AuthUser; initialSearch?: string }): JSX.Element {
   const canView = hasPermission(user, 'POS_VIEW');
   const canConfigView = hasPermission(user, 'CONFIG_POS_SUPPLY_VIEW');
   const canConfigManage = hasPermission(user, 'CONFIG_POS_SUPPLY_MANAGE');
@@ -72,7 +72,7 @@ export function PosPage({ user }: { user: AuthUser }): JSX.Element {
         ))}
       </TabBar>
       {tab === 'warehouse' && <WarehousePage user={user} />}
-      {tab === 'devices' && <DeviceListTab user={user} />}
+      {tab === 'devices' && <DeviceListTab user={user} initialSearch={initialSearch} />}
       {tab === 'exportreq' && <ExportRequestPanel user={user} kind="POS" />}
       {tab === 'intake' && <IntakeTab canManage={canConfigManage} />}
       {tab === 'supplier' && <SupplierTab canManage={canConfigManage} />}
@@ -101,14 +101,14 @@ function IconAction({ label, tone, onClick, children }: { label: string; tone: '
 }
 
 /** Tab [Danh sách máy] — nguồn PosDevice. StatBar theo status + hành động vòng đời máy. */
-function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
+function DeviceListTab({ user, initialSearch }: { user: AuthUser; initialSearch?: string }): JSX.Element {
   const toast = useToast();
   const [rows, setRows] = useState<PosDto[]>([]);
   const [models, setModels] = useState<LiteRef[]>([]);
   const [warehouses, setWarehouses] = useState<WarehouseLite[]>([]); // Model 1 — lọc theo kho
   const [banks, setBanks] = useState<BankLite[]>([]); // Cài APP — lọc theo app ngân hàng
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(initialSearch ?? ''); // nhảy từ ô tìm kiếm topbar → lọc sẵn theo serial đã chọn
   const [statusFilter, setStatusFilter] = useState('');
   // LANE B (#24) — lọc "Chủng loại" phía client trên tập rows (posList trả full, không phân trang).
   const [modelFilter, setModelFilter] = useState('');
@@ -134,19 +134,25 @@ function DeviceListTab({ user }: { user: AuthUser }): JSX.Element {
 
   async function reload(): Promise<void> {
     setLoading(true);
-    const res = await window.api.posList({
-      search: search || undefined,
-      status: statusFilter || undefined,
-      warehouseId: warehouseFilter ? Number(warehouseFilter) : undefined,
-      bankBlank: bankFilter === 'BLANK' ? true : undefined,
-      bankId: bankFilter && bankFilter !== 'BLANK' ? Number(bankFilter) : undefined,
-      fromDate: fromDate || undefined,
-      toDate: toDate || undefined
-    });
-    if (res.ok && res.data) setRows(res.data);
-    else if (res.message) toast.alert(res.message);
     sel.clear();
-    setLoading(false);
+    try {
+      const res = await window.api.posList({
+        search: search || undefined,
+        status: statusFilter || undefined,
+        warehouseId: warehouseFilter ? Number(warehouseFilter) : undefined,
+        bankBlank: bankFilter === 'BLANK' ? true : undefined,
+        bankId: bankFilter && bankFilter !== 'BLANK' ? Number(bankFilter) : undefined,
+        fromDate: fromDate || undefined,
+        toDate: toDate || undefined
+      });
+      if (res.ok && res.data) setRows(res.data);
+      else if (res.message) toast.alert(res.message);
+    } catch (e) {
+      // FE-03 (Codex 15/7): IPC reject không được để spinner treo mãi.
+      toast.alert(e instanceof Error ? e.message : 'Không tải được dữ liệu (mất kết nối máy chủ?).', 'Lỗi tải dữ liệu');
+    } finally {
+      setLoading(false);
+    }
   }
   useEffect(() => {
     void reload();

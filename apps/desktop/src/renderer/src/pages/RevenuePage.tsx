@@ -142,24 +142,30 @@ export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
   async function reload(pg = page): Promise<void> {
     setLoading(true);
     const filter = buildFilter(pg);
-    // LOẠI GIAO MÁY — tôn trọng cùng khoảng ngày Từ/Đến đang lọc trên trang (fFrom/fTo, raw yyyy-mm-dd).
-    const [res, bf, bh, dh] = await Promise.all([
-      window.api.transactionList(filter),
-      window.api.revenueByFeeType(filter),
-      window.api.revenueByHandover({ from: fFrom || undefined, to: fTo || undefined }),
-      window.api.depositsHeld()
-    ]);
-    if (res.ok) {
-      setRows(res.data ?? []);
-      setSummary(res.summary ?? emptySummary);
-      setTotal(res.total ?? 0);
-      setPage(res.page ?? pg);
-    } else if (res.message) toast.alert(res.message);
-    setByFeeType(bf.ok && bf.data ? bf.data : []);
-    setByHandover(bh.ok && bh.data ? bh.data : []);
-    setDepositsHeldRows(dh.ok && dh.data ? dh.data : []);
-    sel.clear();
-    setLoading(false);
+    try {
+      // LOẠI GIAO MÁY — tôn trọng cùng khoảng ngày Từ/Đến đang lọc trên trang (fFrom/fTo, raw yyyy-mm-dd).
+      const [res, bf, bh, dh] = await Promise.all([
+        window.api.transactionList(filter),
+        window.api.revenueByFeeType(filter),
+        window.api.revenueByHandover({ from: fFrom || undefined, to: fTo || undefined }),
+        window.api.depositsHeld()
+      ]);
+      if (res.ok) {
+        setRows(res.data ?? []);
+        setSummary(res.summary ?? emptySummary);
+        setTotal(res.total ?? 0);
+        setPage(res.page ?? pg);
+      } else if (res.message) toast.alert(res.message);
+      setByFeeType(bf.ok && bf.data ? bf.data : []);
+      setByHandover(bh.ok && bh.data ? bh.data : []);
+      setDepositsHeldRows(dh.ok && dh.data ? dh.data : []);
+    } catch (e) {
+      // FE-03 (Codex 15/7): 1 IPC reject không được để spinner treo mãi.
+      toast.alert(e instanceof Error ? e.message : 'Không tải được dữ liệu (mất kết nối máy chủ?).', 'Lỗi tải dữ liệu');
+    } finally {
+      sel.clear();
+      setLoading(false);
+    }
   }
 
   useEffect(() => { void loadRefs(); }, []);

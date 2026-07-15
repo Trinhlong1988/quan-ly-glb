@@ -69,18 +69,24 @@ export function CustomersPage({ user }: { user: AuthUser }): JSX.Element {
   async function reload(): Promise<void> {
     setLoading(true);
     sel.clear(); // audit 15/7 — dọn lựa chọn cũ khi lọc/tải lại để không yêu-cầu-hủy nhầm hàng đã ẩn
-    const res = await window.api.customerList({
-      search: search || undefined,
-      status: statusFilter || undefined,
-      fromDate: fromDate || undefined,
-      toDate: toDate || undefined
-    });
-    if (res.ok && res.data) setRows(res.data);
-    else if (res.message) toast.alert(res.message);
-    // Bộ đếm TOÀN CỤC — nạp độc lập bộ lọc để "Đã khóa"/"Đã hủy"/đại lý luôn đúng số.
-    const cres = await window.api.customerCounts();
-    if (cres.ok && cres.data) setCounts(cres.data);
-    setLoading(false);
+    try {
+      const res = await window.api.customerList({
+        search: search || undefined,
+        status: statusFilter || undefined,
+        fromDate: fromDate || undefined,
+        toDate: toDate || undefined
+      });
+      if (res.ok && res.data) setRows(res.data);
+      else if (res.message) toast.alert(res.message);
+      // Bộ đếm TOÀN CỤC — nạp độc lập bộ lọc để "Đã khóa"/"Đã hủy"/đại lý luôn đúng số.
+      const cres = await window.api.customerCounts();
+      if (cres.ok && cres.data) setCounts(cres.data);
+    } catch (e) {
+      // FE-03 (Codex 15/7): IPC reject (mất kết nối Postgres LAN) không được để spinner treo mãi.
+      toast.alert(e instanceof Error ? e.message : 'Không tải được dữ liệu (mất kết nối máy chủ?).', 'Lỗi tải dữ liệu');
+    } finally {
+      setLoading(false);
+    }
   }
   useEffect(() => {
     void reload();

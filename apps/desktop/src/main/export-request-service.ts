@@ -432,6 +432,11 @@ async function processTidLineTx(tx: PrismaTx, req: ReqRow, tid: string, allocPai
   // #2 (Mr.Long "Bán TID có doanh thu") — money-model TÁI DÙNG: SALE → chứng từ bán TID (SALE_TID) + doanh thu
   // accrual + thu ngay (mirror sellTid); RENT → doanh thu cho thuê 1 lần = đơn giá (applyHandover RENT).
   if (req.handoverKind === 'SALE') {
+    // REL-07/DATA-01 (audit 15/7, Codex): bán TID qua DUYỆT XUẤT KHO PHẢI đưa TID về SOLD (spec POS_SALE_DEBT
+    // §29-31). Trước đây chỉ set deliveredAt/customer/agent, status GIỮ NGUYÊN (UNASSIGNED/ACTIVE) → sellTid
+    // vẫn cho bán LẠI cùng TID (double-sale). decideTidTransition = nguồn sự thật state machine (không đoán).
+    const td = decideTidTransition(row.status as TidStatus, 'sell');
+    if (!td.allowed) throw new ReqAbort({ ok: false, error: td.reason ?? 'INVALID_STATE', message: `Không thể bán TID "${tid}" ở trạng thái ${row.status}.` });
     const code = await nextCode('BS', tx);
     const sale = await tx.deviceSale.create({
       data: {
@@ -440,6 +445,11 @@ async function processTidLineTx(tx: PrismaTx, req: ReqRow, tid: string, allocPai
       }
     });
     await bookSaleCashEntries(tx, { saleId: sale.id, saleKind: 'TID', salePrice: req.unitPrice, paid: allocPaid, fundId: req.fundId ?? null, method: req.method, entryDate: occurredAt, customerId, userId: actorId });
+    // Đưa TID về SOLD (gỡ posSerial/agent) + ghi sự kiện TID_SELL → không thể bán lại.
+    await tx.tid.update({ where: { id: row.id }, data: { status: td.to ?? 'SOLD', posSerial: null, agentId: null } });
+    await tx.assetEvent.create({
+      data: { deviceSerial: row.posSerial, tid, eventType: 'TID_SELL', fromState: row.status, toState: td.to ?? 'SOLD', customerId, actorUserId: actorId, occurredAt, note: `Bán TID sang SOLD (duyệt xuất kho, ${code})` }
+    });
   } else {
     await applyHandoverTx(tx, { moneyKind: 'RENT', handoverTypeId: null, amount: req.unitPrice, fundId: req.fundId ?? null, method: req.method, deviceSerial: row.posSerial, tid, customerId, occurredAt, actorId });
   }

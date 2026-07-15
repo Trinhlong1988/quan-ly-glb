@@ -7,12 +7,10 @@ const fs = require('fs');
 const OUT = 'D:/TT HKD AI/tools/quan-ly-glb/apps/desktop/build';
 const BRAND = '#1657d0', BRAND2 = '#1247ae';
 
-// Chữ "G" kiểu Google (Mr.Long 14/7): vòng cung dày MỞ bên phải + crossbar, NGHIÊNG TRÁI 15°, nét béo.
-// Toạ độ viewBox 24 (tâm 12,12, r=7). Bọc rotate(-15) để cả logo nghiêng đồng nhất.
-const shieldPaths = (stroke, sw) =>
-  `<g transform="rotate(-15 12 12)">` +
-  `<path d="M18.58 14.39 A7 7 0 1 1 18.58 9.61" fill="none" stroke="${stroke}" stroke-width="${sw}" stroke-linecap="butt"/>` +
-  `<path d="M12 12 H18.7" fill="none" stroke="${stroke}" stroke-width="${sw}" stroke-linecap="butt"/></g>`;
+// Chữ "G" ĐẬM (Mr.Long 15/7) — glyph chữ G rõ ràng, nghiêng trái ~12°. Trước dùng nét vẽ cung+crossbar
+// nhưng đọc thành "C" (không đồng nhất logo đã chốt). Dùng cùng chữ G với GLogo.tsx (login/sidebar).
+const gLetter = (fill, cx, cy, fs) =>
+  `<text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central" font-family="Segoe UI, Arial, sans-serif" font-weight="700" font-size="${fs}" fill="${fill}" transform="rotate(-12 ${cx} ${cy})">G</text>`;
 
 // ---- ICON 256: nền TRẮNG bo góc + bo viền + NỔI 3D (gradient depth), chữ G XANH gradient béo to nghiêng ----
 const iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
@@ -22,7 +20,7 @@ const iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256
   </defs>
   <rect x="12" y="10" width="232" height="236" rx="56" fill="url(#bev)" stroke="#cbd5e8" stroke-width="4"/>
   <rect x="14" y="12" width="228" height="10" rx="5" fill="#ffffff" opacity="0.9"/>
-  <g transform="translate(42,40) scale(7.15)">${shieldPaths('url(#gG)', 3.8)}</g>
+  ${gLetter('url(#gG)', 128, 132, 172)}
 </svg>`;
 
 function buildIco(images) {
@@ -67,7 +65,7 @@ const svgToRgba = (svg, w, h) => sharp(Buffer.from(svg)).resize(w, h).ensureAlph
 const headerSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="150" height="57" viewBox="0 0 150 57">
   <rect width="150" height="57" fill="#ffffff"/>
   <rect x="10" y="12" width="33" height="33" rx="8" fill="${BRAND}"/>
-  <g transform="translate(15.5,17.5) scale(1.0)">${shieldPaths('#ffffff', 1.9)}</g>
+  ${gLetter('#ffffff', 26.5, 29.5, 25)}
   <text x="52" y="27" font-family="Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="${BRAND}">Quản Lý GLB</text>
   <text x="52" y="42" font-family="Segoe UI, Arial, sans-serif" font-size="8.5" fill="#64748b">Quản lý nội bộ GLOBEWAY</text>
 </svg>`;
@@ -77,7 +75,7 @@ const sidebarSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="164" height="
   <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
     <stop offset="0" stop-color="${BRAND}"/><stop offset="1" stop-color="${BRAND2}"/></linearGradient></defs>
   <rect width="164" height="314" fill="url(#g)"/>
-  <g transform="translate(52,70) scale(2.5)">${shieldPaths('#ffffff', 1.7)}</g>
+  ${gLetter('#ffffff', 82, 100, 82)}
   <text x="82" y="215" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="19" font-weight="700" fill="#ffffff">Quản Lý GLB</text>
   <text x="82" y="238" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#dbe6fb">Hệ thống quản lý</text>
   <text x="82" y="253" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#dbe6fb">nội bộ GLOBEWAY</text>

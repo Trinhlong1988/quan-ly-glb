@@ -72,10 +72,16 @@ export function StaffPage({ user, initialRole }: { user: AuthUser; initialRole?:
   async function reload(): Promise<void> {
     setLoading(true);
     sel.clear(); // audit 15/7 — dọn lựa chọn cũ khi lọc/tải lại để không hủy nhầm hàng đã ẩn
-    const res = await window.api.userList({ roleCode: roleFilter || undefined, status: statusFilter || undefined, search: search || undefined });
-    if (res.ok && res.data) setRows(res.data);
-    else if (res.message) toast.alert(res.message);
-    setLoading(false);
+    try {
+      const res = await window.api.userList({ roleCode: roleFilter || undefined, status: statusFilter || undefined, search: search || undefined });
+      if (res.ok && res.data) setRows(res.data);
+      else if (res.message) toast.alert(res.message);
+    } catch (e) {
+      // FE-03 (Codex 15/7): IPC reject không được để spinner treo mãi.
+      toast.alert(e instanceof Error ? e.message : 'Không tải được dữ liệu (mất kết nối máy chủ?).', 'Lỗi tải dữ liệu');
+    } finally {
+      setLoading(false);
+    }
   }
   useEffect(() => {
     void reload();

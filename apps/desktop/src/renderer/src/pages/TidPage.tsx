@@ -33,7 +33,7 @@ function money(n: number): string {
   return (neg ? '−' : '') + s + 'đ';
 }
 
-export function TidPage({ user }: { user: AuthUser }): JSX.Element {
+export function TidPage({ user, initialSearch }: { user: AuthUser; initialSearch?: string }): JSX.Element {
   const toast = useToast();
   const canView = hasPermission(user, 'TID_VIEW') || hasPermission(user, 'CONFIG_TID_VIEW');
   const canOps = hasPermission(user, 'TID_MANAGE'); // gán/đổi/thu hồi/giao (vận hành)
@@ -48,7 +48,7 @@ export function TidPage({ user }: { user: AuthUser }): JSX.Element {
   const [rows, setRows] = useState<TidDto[]>([]);
   const [undelivered, setUndelivered] = useState<UndeliveredTidDto[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(initialSearch ?? ''); // nhảy từ ô tìm kiếm topbar → lọc sẵn theo mã TID đã chọn
   const [statusFilter, setStatusFilter] = useState('');
   const [assignFilter, setAssignFilter] = useState(''); // '', 'yes', 'no'
   const [deliverFilter, setDeliverFilter] = useState('');

@@ -85,17 +85,23 @@ export function CashEntryPage({ user, kind }: { user: AuthUser; kind: 'THU' | 'C
   async function reload(): Promise<void> {
     setLoading(true);
     sel.clear(); // audit 15/7 — dọn lựa chọn cũ để không thao tác nhầm hàng đã bị lọc/ẩn
-    const res = await window.api.cashEntryList({
-      kind,
-      categoryId: fCategory ? Number(fCategory) : undefined,
-      fundId: fFund ? Number(fFund) : undefined,
-      status: fStatus || undefined,
-      fromDate: fFrom || undefined,
-      toDate: fTo || undefined
-    });
-    if (res.ok && res.data) { setRows(res.data); setSummary(res.summary ?? { count: 0, totalThu: 0, totalChi: 0, net: 0 }); }
-    else if (res.message) toast.alert(res.message);
-    setLoading(false);
+    try {
+      const res = await window.api.cashEntryList({
+        kind,
+        categoryId: fCategory ? Number(fCategory) : undefined,
+        fundId: fFund ? Number(fFund) : undefined,
+        status: fStatus || undefined,
+        fromDate: fFrom || undefined,
+        toDate: fTo || undefined
+      });
+      if (res.ok && res.data) { setRows(res.data); setSummary(res.summary ?? { count: 0, totalThu: 0, totalChi: 0, net: 0 }); }
+      else if (res.message) toast.alert(res.message);
+    } catch (e) {
+      // FE-03 (Codex 15/7): IPC reject không được để spinner treo mãi.
+      toast.alert(e instanceof Error ? e.message : 'Không tải được dữ liệu (mất kết nối máy chủ?).', 'Lỗi tải dữ liệu');
+    } finally {
+      setLoading(false);
+    }
   }
   useEffect(() => { void loadRefs(); }, []);
   useEffect(() => { void reload(); /* eslint-disable-next-line */ }, [kind, fCategory, fFund, fStatus]);

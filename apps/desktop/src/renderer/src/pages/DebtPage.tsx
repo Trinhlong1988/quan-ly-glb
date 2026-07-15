@@ -99,17 +99,23 @@ export function DebtPage({ user }: { user: AuthUser }): JSX.Element {
 
   async function reload(): Promise<void> {
     setLoading(true);
-    const [list, ds, bq] = await Promise.all([
-      window.api.debtOpenTransactions(baseFilter()),
-      window.api.debtSummary(baseFilter()),
-      window.api.debtByQuality(baseFilter())
-    ]);
-    if (list.ok) setRows(list.data ?? []);
-    else if (list.message) toast.alert(list.message);
-    if (ds.ok && ds.data) setDebt(ds.data);
-    else if (ds.message) toast.alert(ds.message);
-    if (bq.ok && bq.data) setByQuality(bq.data);
-    setLoading(false);
+    try {
+      const [list, ds, bq] = await Promise.all([
+        window.api.debtOpenTransactions(baseFilter()),
+        window.api.debtSummary(baseFilter()),
+        window.api.debtByQuality(baseFilter())
+      ]);
+      if (list.ok) setRows(list.data ?? []);
+      else if (list.message) toast.alert(list.message);
+      if (ds.ok && ds.data) setDebt(ds.data);
+      else if (ds.message) toast.alert(ds.message);
+      if (bq.ok && bq.data) setByQuality(bq.data);
+    } catch (e) {
+      // FE-03 (Codex 15/7): 1 IPC reject không được để spinner treo mãi.
+      toast.alert(e instanceof Error ? e.message : 'Không tải được dữ liệu (mất kết nối máy chủ?).', 'Lỗi tải dữ liệu');
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => { void loadRefs(); }, []);
