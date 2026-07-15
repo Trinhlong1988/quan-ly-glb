@@ -47,6 +47,9 @@ export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
   const [approvedBills, setApprovedBills] = useState<CancelRequestDto[]>([]);
   const [approvedEntities, setApprovedEntities] = useState<EntityCancelRequestDto[]>([]);
   const [showApproved, setShowApproved] = useState(false);
+  // Mr.Long 15/7 — xem thêm yêu cầu ĐÃ TỪ CHỐI.
+  const [rejectedBills, setRejectedBills] = useState<CancelRequestDto[]>([]);
+  const [rejectedEntities, setRejectedEntities] = useState<EntityCancelRequestDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialog, setDialog] = useState<Dialog>(null);
   const sel = useRowSelection();
@@ -70,16 +73,19 @@ export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
       const rc = rej.ok && rej.data ? rej.data.length : 0;
       setStats({ total: pc + ac + rc, pending: pc, approved: ac, rejected: rc });
       setApprovedBills(appr.ok && appr.data ? appr.data : []);
+      setRejectedBills(rej.ok && rej.data ? rej.data : []);
     }
     // R34 — yêu cầu hủy dữ liệu (TID/POS/Khách/Nhân sự) đang chờ bạn duyệt.
     if (canEntity) {
-      const [ent, entAppr] = await Promise.all([
+      const [ent, entAppr, entRej] = await Promise.all([
         window.api.entityCancelList('PENDING'),
-        window.api.entityCancelList('APPROVED')
+        window.api.entityCancelList('APPROVED'),
+        window.api.entityCancelList('REJECTED')
       ]);
       if (ent.ok && ent.data) setEntityRows(ent.data.filter((r) => r.canApprove || r.isSelf));
       else if (ent.message) toast.alert(ent.message);
       setApprovedEntities(entAppr.ok && entAppr.data ? entAppr.data : []);
+      setRejectedEntities(entRej.ok && entRej.data ? entRej.data : []);
     }
     sel.clear();
     selEnt.clear();
@@ -175,52 +181,60 @@ export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
         </div>
       </div>
 
-      {/* Mr.Long 14/7 — nút xem "danh sách lệnh duyệt đã xóa" (yêu cầu ĐÃ DUYỆT → bill hủy / dữ liệu đã xóa mềm). */}
+      {/* Mr.Long 14-15/7 — lịch sử yêu cầu ĐÃ XỬ LÝ: đã duyệt (bill hủy / dữ liệu xóa mềm) + đã TỪ CHỐI. */}
       <div className="mb-3 flex items-center gap-2">
         <Button variant={showApproved ? 'confirm' : 'neutral'} onClick={() => setShowApproved((v) => !v)}>
-          {showApproved ? 'Ẩn danh sách đã duyệt/đã xóa' : `Xem đã duyệt / đã xóa (${approvedBills.length + approvedEntities.length})`}
+          {showApproved ? 'Ẩn lịch sử đã xử lý' : `Xem lịch sử đã duyệt / từ chối (${approvedBills.length + approvedEntities.length + rejectedBills.length + rejectedEntities.length})`}
         </Button>
       </div>
 
       {showApproved && (
         <div className="mb-5 overflow-x-auto rounded-xl border border-line bg-white shadow-sm list-scroll">
           <div className="border-b border-line px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Lệnh duyệt đã xóa — {approvedBills.length + approvedEntities.length} bản ghi (chỉ xem)
+            Lịch sử đã xử lý — {approvedBills.length + approvedEntities.length + rejectedBills.length + rejectedEntities.length} bản ghi (chỉ xem)
           </div>
           <table className="w-full text-sm">
             <thead className="bg-appbg text-xs uppercase text-slate-500">
               <tr>
+                <th className="px-3 py-2 text-left">Kết quả</th>
                 <th className="px-3 py-2 text-left">Loại</th>
                 <th className="px-3 py-2 text-left">Đối tượng</th>
                 <th className="px-3 py-2 text-left">Lý do</th>
                 <th className="px-3 py-2 text-left">Người yêu cầu</th>
-                <th className="px-3 py-2 text-left">Người duyệt</th>
-                <th className="px-3 py-2 text-left">Thời điểm duyệt</th>
+                <th className="px-3 py-2 text-left">Người xử lý</th>
+                <th className="px-3 py-2 text-left">Thời điểm</th>
               </tr>
             </thead>
             <tbody>
-              {approvedBills.map((r) => (
-                <tr key={`b-${r.id}`} className="border-t border-line hover:bg-appbg/60">
-                  <td className="px-3 py-2"><span className="rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-600">Bill hủy</span></td>
-                  <td className="px-3 py-2 font-mono text-xs font-semibold text-slate-700">{r.billCode ?? `#${r.transactionId}`}</td>
+              {[
+                ...approvedBills.map((r) => ({ r, kind: 'bill' as const, ok: true })),
+                ...rejectedBills.map((r) => ({ r, kind: 'bill' as const, ok: false })),
+                ...approvedEntities.map((r) => ({ r, kind: 'entity' as const, ok: true })),
+                ...rejectedEntities.map((r) => ({ r, kind: 'entity' as const, ok: false }))
+              ].map(({ r, kind, ok }) => (
+                <tr key={`${kind}-${ok ? 'a' : 'r'}-${(r as { id: number }).id}`} className="border-t border-line hover:bg-appbg/60">
+                  <td className="px-3 py-2">
+                    <span className={'rounded-full px-2 py-0.5 text-xs font-medium ' + (ok ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-700')}>{ok ? 'Đã duyệt' : 'Đã từ chối'}</span>
+                  </td>
+                  {kind === 'bill' ? (
+                    <>
+                      <td className="px-3 py-2"><span className="rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-600">Bill hủy</span></td>
+                      <td className="px-3 py-2 font-mono text-xs font-semibold text-slate-700">{(r as CancelRequestDto).billCode ?? `#${(r as CancelRequestDto).transactionId}`}</td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="px-3 py-2"><span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">{(r as EntityCancelRequestDto).entityTypeLabel}</span></td>
+                      <td className="px-3 py-2 font-medium text-slate-700">{(r as EntityCancelRequestDto).entityLabel ?? `#${(r as EntityCancelRequestDto).entityId}`}</td>
+                    </>
+                  )}
                   <td className="px-3 py-2 text-slate-600">{r.reason}</td>
                   <td className="px-3 py-2 text-slate-600">{r.requestedByName ?? '—'}</td>
                   <td className="px-3 py-2 text-slate-600">{r.decidedByName ?? '—'}</td>
                   <td className="px-3 py-2 whitespace-nowrap text-slate-500">{r.decidedAt ? new Date(r.decidedAt).toLocaleString('vi-VN') : '—'}</td>
                 </tr>
               ))}
-              {approvedEntities.map((r) => (
-                <tr key={`e-${r.id}`} className="border-t border-line hover:bg-appbg/60">
-                  <td className="px-3 py-2"><span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">{r.entityTypeLabel}</span></td>
-                  <td className="px-3 py-2 font-medium text-slate-700">{r.entityLabel ?? `#${r.entityId}`}</td>
-                  <td className="px-3 py-2 text-slate-600">{r.reason}</td>
-                  <td className="px-3 py-2 text-slate-600">{r.requestedByName ?? '—'}</td>
-                  <td className="px-3 py-2 text-slate-600">{r.decidedByName ?? '—'}</td>
-                  <td className="px-3 py-2 whitespace-nowrap text-slate-500">{r.decidedAt ? new Date(r.decidedAt).toLocaleString('vi-VN') : '—'}</td>
-                </tr>
-              ))}
-              {approvedBills.length + approvedEntities.length === 0 && (
-                <tr><td colSpan={6} className="px-3 py-4 text-center text-sm text-slate-400">Chưa có lệnh duyệt xóa nào.</td></tr>
+              {approvedBills.length + approvedEntities.length + rejectedBills.length + rejectedEntities.length === 0 && (
+                <tr><td colSpan={7} className="px-3 py-4 text-center text-sm text-slate-400">Chưa có yêu cầu nào được xử lý.</td></tr>
               )}
             </tbody>
           </table>
