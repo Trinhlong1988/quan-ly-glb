@@ -161,7 +161,7 @@ export function registerIpc(): void {
 
   // ---- Customers (G-POS.1 §A/§D) ----------------------------------------
   ipcMain.handle('search:global', async (_e, q: string) => globalSearch(q));
-  ipcMain.handle('capture:region', async () => captureRegion());
+  ipcMain.handle('capture:region', async (_e, opts?: { hideApp?: boolean }) => captureRegion(opts));
   ipcMain.handle('capture:openDir', async () => openScreenshotDir());
   ipcMain.handle('customer:list', async (_e, filter: customerSvc.CustomerFilter) => customerSvc.listCustomers(filter));
   ipcMain.handle('customer:counts', async () => customerSvc.countCustomers());

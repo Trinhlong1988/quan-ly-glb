@@ -402,11 +402,19 @@ export async function restoreBackup(filePath: string, password: string): Promise
     const dumpEntry = entries.find((e) => e.name === DUMP_ENTRY);
     const manEntry = entries.find((e) => e.name === MANIFEST_NAME);
     if (!dumpEntry) return { ok: false, error: 'INVALID_ARCHIVE', message: 'Archive không chứa bản dump cơ sở dữ liệu.' };
-    if (manEntry) {
-      const manifest = JSON.parse(manEntry.data.toString('utf8')) as { checksum?: string };
-      if (manifest.checksum && !verifyChecksum(dumpEntry.data, manifest.checksum)) {
-        return { ok: false, error: 'CHECKSUM_MISMATCH', message: 'Checksum không khớp — archive có thể đã hỏng.' };
-      }
+    // SEC-02 (audit 15/7, Codex) — manifest + checksum BẮT BUỘC: trước đây thiếu manifest / thiếu checksum
+    // thì BỎ QUA kiểm tra → archive bị thay ruột (đổi glb.dump) vẫn restore được. Mọi backup app tạo đều kèm
+    // manifest+checksum (createBackup) nên bắt buộc chỉ chặn file lạ/hỏng/bị sửa, không chặn backup hợp lệ.
+    if (!manEntry) return { ok: false, error: 'INVALID_ARCHIVE', message: 'Archive thiếu manifest — từ chối phục hồi (không xác thực được tính toàn vẹn).' };
+    let manifest: { checksum?: string };
+    try {
+      manifest = JSON.parse(manEntry.data.toString('utf8')) as { checksum?: string };
+    } catch {
+      return { ok: false, error: 'INVALID_ARCHIVE', message: 'Manifest hỏng — từ chối phục hồi.' };
+    }
+    if (!manifest.checksum) return { ok: false, error: 'INVALID_ARCHIVE', message: 'Manifest thiếu checksum — từ chối phục hồi.' };
+    if (!verifyChecksum(dumpEntry.data, manifest.checksum)) {
+      return { ok: false, error: 'CHECKSUM_MISMATCH', message: 'Checksum không khớp — archive có thể đã hỏng hoặc bị sửa.' };
     }
 
     // R_BACKUP_003: snapshot current state BEFORE overwriting.

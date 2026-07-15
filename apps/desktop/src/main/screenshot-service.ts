@@ -42,7 +42,17 @@ export function screenshotDir(): string {
   return dir;
 }
 
-export async function captureRegion(): Promise<CaptureResult> {
+export async function captureRegion(opts?: { hideApp?: boolean }): Promise<CaptureResult> {
+  const hideApp = opts?.hideApp === true;
+  // Chế độ "ẩn app": giấu mọi cửa sổ GLB đang hiện rồi đợi compositor vẽ lại → ảnh chỉ còn màn hình/ứng dụng
+  // phía sau (giống Zalo "thu nhỏ rồi chụp"). Khôi phục lại sau khi chụp xong (mọi nhánh return).
+  const hidden = hideApp ? BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed() && w.isVisible() && !w.isMinimized()) : [];
+  const restoreApp = (): void => { for (const w of hidden) { if (!w.isDestroyed()) w.show(); } };
+  if (hidden.length) {
+    for (const w of hidden) w.hide();
+    await new Promise((r) => setTimeout(r, 280)); // đợi màn hình vẽ lại (app đã ẩn) trước khi phủ overlay + chụp
+  }
+
   const display = screen.getPrimaryDisplay();
   const { x: dx, y: dy, width, height } = display.bounds;
   const scale = display.scaleFactor || 1;
@@ -74,7 +84,7 @@ export async function captureRegion(): Promise<CaptureResult> {
     void overlay.loadURL(overlayHtml());
   });
   if (overlay && !overlay.isDestroyed()) overlay.close();
-  if (!region) return { ok: false, error: 'CANCELLED', message: 'Đã hủy chụp màn hình.' };
+  if (!region) { restoreApp(); return { ok: false, error: 'CANCELLED', message: 'Đã hủy chụp màn hình.' }; }
 
   try {
     // Chụp TOÀN màn hình ở độ phân giải vật lý rồi cắt vùng đã chọn (nhân scaleFactor).
@@ -99,6 +109,8 @@ export async function captureRegion(): Promise<CaptureResult> {
     return { ok: true, path: file, dir };
   } catch (err) {
     return { ok: false, error: 'CAPTURE_FAILED', message: err instanceof Error ? err.message : String(err) };
+  } finally {
+    restoreApp(); // hiện lại app sau khi đã chụp xong (chế độ ẩn app)
   }
 }
 

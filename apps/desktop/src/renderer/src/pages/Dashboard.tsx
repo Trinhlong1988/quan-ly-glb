@@ -24,7 +24,8 @@ import {
   PiggyBank,
   Clock,
   Search as SearchIcon,
-  Camera
+  Camera,
+  Monitor
 } from 'lucide-react';
 
 const SEARCH_KIND_LABEL: Record<string, string> = { customer: 'Khách hàng', tid: 'TID', pos: 'Máy POS', transaction: 'Giao dịch' };
@@ -108,6 +109,42 @@ function TopbarClock(): JSX.Element {
     </div>
   );
 }
+/** Nút chụp vùng màn hình 2 chế độ (Mr.Long 15/7, như Zalo): "Chụp cả app" (giữ cửa sổ GLB trong ảnh) và
+ *  "Chụp màn hình (ẩn app)" (thu nhỏ GLB rồi chụp — chỉ còn màn hình/ứng dụng phía sau). Lưu Pictures/GLB-Screenshots. */
+function ScreenshotButton(): JSX.Element {
+  const toast = useToast();
+  const [open, setOpen] = useState(false);
+  async function shoot(hideApp: boolean): Promise<void> {
+    setOpen(false);
+    const res = await window.api.captureRegion({ hideApp });
+    if (res.ok && res.path) toast.success('Đã lưu ảnh: ' + res.path);
+    else if (res.error !== 'CANCELLED') toast.alert(res.message ?? 'Chụp màn hình thất bại.', 'Lỗi chụp');
+  }
+  return (
+    <div className="relative" onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setOpen(false); }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        title="Chụp vùng màn hình (kéo chọn vùng, lưu vào Pictures/GLB-Screenshots)"
+        className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-appbg hover:text-brand"
+      >
+        <Camera className="h-[19px] w-[19px]" />
+      </button>
+      {open && (
+        <div className="absolute right-0 z-40 mt-1 w-64 overflow-hidden rounded-lg border border-line bg-white py-1 shadow-xl">
+          <button onMouseDown={(e) => e.preventDefault()} onClick={() => void shoot(false)} className="flex w-full items-start gap-2.5 px-3 py-2 text-left hover:bg-appbg">
+            <Camera className="mt-0.5 h-4 w-4 shrink-0 text-brand" />
+            <span><span className="block text-sm font-medium text-slate-700">Chụp cả app</span><span className="block text-xs text-slate-400">Giữ nguyên cửa sổ GLB trong ảnh</span></span>
+          </button>
+          <button onMouseDown={(e) => e.preventDefault()} onClick={() => void shoot(true)} className="flex w-full items-start gap-2.5 px-3 py-2 text-left hover:bg-appbg">
+            <Monitor className="mt-0.5 h-4 w-4 shrink-0 text-brand" />
+            <span><span className="block text-sm font-medium text-slate-700">Chụp màn hình (ẩn app)</span><span className="block text-xs text-slate-400">Thu nhỏ GLB, chỉ chụp màn hình phía sau</span></span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 import type { DashboardStats, OnlineUserDto, SearchHitDto } from '../../../preload/index.d';
 import { GLogo } from '../components/GLogo.js';
 import { useToast } from '../lib/toast.js';
@@ -243,7 +280,7 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
           </div>
           <span className="text-[15px] font-semibold tracking-wide">Quản Lý GLB</span>
         </div>
-        <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3 py-3">
+        <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-3">
           {visible.map((m) => {
             const isActive = m.key === activeItem?.key;
             return (
@@ -251,11 +288,11 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
                 key={m.key}
                 onClick={() => setActive(m.key)}
                 className={
-                  'group relative flex items-center gap-3 rounded-xl py-2 text-sm transition-all duration-150 ' +
+                  'group relative flex items-center gap-3 rounded-xl py-2 text-sm transition-[transform,box-shadow] duration-150 ' +
                   (m.indent ? 'pl-8 pr-2.5 ' : 'px-2.5 ') +
                   // Mr.Long 14/7 — nút menu ĐANG CHỌN nổi 3D rõ: gradient sáng + bóng đậm + viền sáng + nhấc nhẹ.
                   (isActive
-                    ? 'bg-gradient-to-br from-[#2a72ef] to-brand-hover font-semibold text-white shadow-xl shadow-brand/50 ring-1 ring-white/40 -translate-y-0.5 scale-[1.03]'
+                    ? 'relative z-10 bg-gradient-to-br from-[#2a72ef] to-brand-hover font-semibold text-white shadow-md shadow-brand/25 ring-1 ring-white/40 -translate-y-0.5 scale-[1.02]'
                     : 'font-medium text-sidebar-text hover:-translate-y-px hover:bg-black/5 hover:text-brand hover:shadow-sm')
                 }
               >
@@ -312,17 +349,7 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
           </div>
           <div className="flex items-center gap-2">
             <TopbarClock />
-            <button
-              onClick={async () => {
-                const res = await window.api.captureRegion();
-                if (res.ok && res.path) toast.success('Đã lưu ảnh: ' + res.path);
-                else if (res.error !== 'CANCELLED') toast.alert(res.message ?? 'Chụp màn hình thất bại.', 'Lỗi chụp');
-              }}
-              title="Chụp vùng màn hình (kéo chọn vùng, lưu vào Pictures/GLB-Screenshots)"
-              className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-appbg hover:text-brand"
-            >
-              <Camera className="h-[19px] w-[19px]" />
-            </button>
+            <ScreenshotButton />
             {canInbox && (
               <button
                 onClick={() => setShowInbox(true)}
