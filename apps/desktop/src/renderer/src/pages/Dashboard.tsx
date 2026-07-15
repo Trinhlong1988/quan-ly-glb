@@ -381,7 +381,8 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
               <ChevronDown className="h-4 w-4 text-slate-400" />
             </button>
             {menuOpen && (
-              <div className="absolute right-0 mt-1 w-48 rounded-lg border border-line bg-white py-1 shadow-lg">
+              <div className="absolute right-0 z-50 mt-1 w-48 rounded-lg border border-line bg-white py-1 shadow-lg">
+                {/* z-50 (Mr.Long 15/7): trước thiếu z-index → menu bị nội dung phía dưới che. */}
                 <div className="px-3 py-2 text-xs text-slate-400">@{user.username}</div>
                 <button
                   onClick={() => {
@@ -483,6 +484,12 @@ function fmtNum(n: number): string {
 function Home({ user }: { user: AuthUser; visibleCount: number }): JSX.Element {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  // Mr.Long 15/7 — banner "Xin chào" chỉ hiện ~10s khi vào trang chủ rồi tự ẩn (kiểu thông báo push).
+  const [showWelcome, setShowWelcome] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => setShowWelcome(false), 10000);
+    return () => clearTimeout(t);
+  }, []);
 
   // Tải lại thủ công (nút "Làm mới" trang chủ) — bổ sung cho poll 15s realtime.
   const refresh = (): void => {
@@ -520,15 +527,16 @@ function Home({ user }: { user: AuthUser; visibleCount: number }): JSX.Element {
 
   return (
     <div className="space-y-6">
-      {/* Lời chào */}
-      {/* Mr.Long 15/7 — banner nhỏ gọn (~50%), nền xám nhẹ đồng màu sidebar, chữ đậm cho nền sáng. */}
-      <div className="rounded-xl border border-line bg-sidebar px-4 py-2.5 shadow-sm">
-        <h2 className="text-base font-bold text-slate-800">Xin chào {user.fullName} 👋</h2>
-        <p className="text-xs text-slate-500">
-          Tổng quan hệ thống Quản Lý GLB — vai trò{' '}
-          <span className="font-semibold text-slate-700">{user.roles.join(', ') || 'chưa gán'}</span>. Dữ liệu cập nhật thời gian thực.
-        </p>
-      </div>
+      {/* Lời chào — nhỏ gọn nền xám, chỉ hiện ~10s khi vào rồi tự ẩn (Mr.Long 15/7). */}
+      {showWelcome && (
+        <div className="page-enter rounded-xl border border-line bg-sidebar px-4 py-2.5 shadow-sm">
+          <h2 className="text-base font-bold text-slate-800">Xin chào {user.fullName} 👋</h2>
+          <p className="text-xs text-slate-500">
+            Tổng quan hệ thống Quản Lý GLB — vai trò{' '}
+            <span className="font-semibold text-slate-700">{user.roles.join(', ') || 'chưa gán'}</span>. Dữ liệu cập nhật thời gian thực.
+          </p>
+        </div>
+      )}
 
       {/* R41 — user đang đăng nhập (realtime ~15s). Chỉ vai có quyền xem nhân sự. */}
       {hasPermission(user, 'USER_READ') && <OnlineUsersPanel />}
