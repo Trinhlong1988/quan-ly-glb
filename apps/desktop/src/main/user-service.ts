@@ -113,8 +113,11 @@ export async function listUsers(
   return { ok: true, data: rows.map(toDto) };
 }
 
+// Kiểu client dùng chung cho cả PrismaClient lẫn transaction client (AUTH-05 advisory-lock tx).
+type TxClient = Omit<Db, '$connect' | '$disconnect' | '$on' | '$use' | '$transaction' | '$extends'>;
+
 /** How many ACTIVE admins remain (for R004/R005). */
-async function countActiveAdmins(db: Db, excludeUserId?: number): Promise<number> {
+async function countActiveAdmins(db: TxClient, excludeUserId?: number): Promise<number> {
   return db.user.count({
     where: {
       deletedAt: null,
@@ -125,7 +128,7 @@ async function countActiveAdmins(db: Db, excludeUserId?: number): Promise<number
   });
 }
 
-async function targetIsAdmin(db: Db, userId: number): Promise<boolean> {
+async function targetIsAdmin(db: TxClient, userId: number): Promise<boolean> {
   const n = await db.userRole.count({ where: { userId, role: { code: ADMIN_ROLE_CODE } } });
   return n > 0;
 }
@@ -375,32 +378,43 @@ async function setUserLock(id: number, lock: boolean): Promise<MutationResult> {
   if (!g.ok) return g;
   const { db, user } = g;
 
-  const row = await db.user.findUnique({ where: { id } });
-  if (!row || row.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Nhân sự không tồn tại.' };
+  // AUTH-05 (audit 15/7, Codex) — serialize kiểm-và-ghi invariant "Admin cuối" bằng advisory xact lock
+  // CHUNG (748301, cùng entity-cancel-service) trong 1 transaction → chống TOCTOU: 2 client khóa 2 Admin
+  // đồng thời cùng vượt kiểm tra last-admin rồi cùng ghi → 0 Admin.
+  return await db.$transaction(async (txc) => {
+    await txc.$executeRawUnsafe('SELECT pg_advisory_xact_lock(748301)');
+    const row = await txc.user.findUnique({ where: { id } });
+    if (!row || row.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Nhân sự không tồn tại.' };
 
-  if (lock) {
-    const isAdmin = await targetIsAdmin(db, id);
-    const remaining = await countActiveAdmins(db, id); // admins remaining if we lock this one
-    if (!canRemoveOrLockAdmin(isAdmin, remaining + (isAdmin && row.status === 'ACTIVE' ? 1 : 0))) {
-      return { ok: false, error: 'LAST_ADMIN', message: 'Không thể khóa Admin cuối cùng.' };
+    if (lock) {
+      const isAdmin = await targetIsAdmin(txc, id);
+      const remaining = await countActiveAdmins(txc, id); // admins remaining if we lock this one
+      if (!canRemoveOrLockAdmin(isAdmin, remaining + (isAdmin && row.status === 'ACTIVE' ? 1 : 0))) {
+        return { ok: false, error: 'LAST_ADMIN', message: 'Không thể khóa Admin cuối cùng.' };
+      }
     }
-  }
+    return await applyUserLock(txc, id, lock, row.status, user.id, action);
+  });
+}
+
+/** Ghi trạng thái khóa/mở + audit trong CÙNG transaction (đã cầm advisory lock). */
+async function applyUserLock(txc: TxClient, id: number, lock: boolean, prevStatus: string, actorId: number, action: 'USER_LOCKED' | 'USER_UNLOCKED'): Promise<MutationResult> {
   // P0-01: `lockedAt` LÀ MỎ NEO tự-mở-khóa của khóa-TẠM (auth failure). Khóa/mở TAY của Admin PHẢI
   // đặt lockedAt=null → login (auth-service #1) chỉ tự mở khi lockedAt!=null → khóa tay KHÔNG BAO GIỜ tự mở.
   // Nếu không clear, một lần auto-lock cũ để lại lockedAt=T1; admin mở rồi khóa lại → login thấy lockedAt cũ
   // >15′ → tự mở khóa tay của admin (bug lệch chính sách khóa). Mở tay cũng reset bộ đếm sai.
-  await db.user.update({
+  await txc.user.update({
     where: { id },
     data: lock
       ? { status: 'LOCKED', lockedAt: null, lockReason: 'ADMIN_LOCK' } // khóa TAY → không có mỏ neo tự-mở
       : { status: 'ACTIVE', lockedAt: null, lockReason: null, failedAttempts: 0 }
   });
-  await writeAudit(db, {
-    actorUserId: user.id,
+  await writeAudit(txc, {
+    actorUserId: actorId,
     action,
     targetType: 'User',
     targetId: String(id),
-    before: { status: row.status },
+    before: { status: prevStatus },
     after: { status: lock ? 'LOCKED' : 'ACTIVE', manual: true }
   });
   return { ok: true, id };
@@ -420,29 +434,34 @@ export async function deleteUser(id: number, password: string): Promise<Mutation
     return { ok: false, error: 'WRONG_PASSWORD', message: 'Mật khẩu xác nhận không đúng.' };
   }
 
-  const row = await db.user.findUnique({ where: { id } });
-  if (!row || row.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Nhân sự không tồn tại.' };
+  // AUTH-05 (audit 15/7, Codex) — serialize invariant "Admin cuối" bằng advisory xact lock CHUNG (748301)
+  // trong transaction → chống 2 client xóa 2 Admin đồng thời cùng vượt kiểm tra.
+  return await db.$transaction(async (txc) => {
+    await txc.$executeRawUnsafe('SELECT pg_advisory_xact_lock(748301)');
+    const row = await txc.user.findUnique({ where: { id } });
+    if (!row || row.deletedAt) return { ok: false, error: 'NOT_FOUND', message: 'Nhân sự không tồn tại.' };
 
-  const isAdmin = await targetIsAdmin(db, id);
-  const remaining = await countActiveAdmins(db, id);
-  if (!canRemoveOrLockAdmin(isAdmin, remaining + (isAdmin && row.status === 'ACTIVE' ? 1 : 0))) {
-    return { ok: false, error: 'LAST_ADMIN', message: 'Không thể xóa Admin cuối cùng.' };
-  }
-  // R_MANAGER_005: manager cannot delete an Admin.
-  if (isAdmin && !user.roles.includes(ADMIN_ROLE_CODE)) {
-    await auditDenied(db, user, 'USER_DELETED', 'MANAGER_SCOPE', String(id));
-    return { ok: false, error: 'MANAGER_SCOPE', message: 'Bạn không được xóa tài khoản Admin.' };
-  }
+    const isAdmin = await targetIsAdmin(txc, id);
+    const remaining = await countActiveAdmins(txc, id);
+    if (!canRemoveOrLockAdmin(isAdmin, remaining + (isAdmin && row.status === 'ACTIVE' ? 1 : 0))) {
+      return { ok: false, error: 'LAST_ADMIN', message: 'Không thể xóa Admin cuối cùng.' };
+    }
+    // R_MANAGER_005: manager cannot delete an Admin.
+    if (isAdmin && !user.roles.includes(ADMIN_ROLE_CODE)) {
+      await auditDenied(txc, user, 'USER_DELETED', 'MANAGER_SCOPE', String(id));
+      return { ok: false, error: 'MANAGER_SCOPE', message: 'Bạn không được xóa tài khoản Admin.' };
+    }
 
-  await db.user.update({ where: { id }, data: { status: 'DELETED', deletedAt: new Date() } });
-  await writeAudit(db, {
-    actorUserId: user.id,
-    action: 'USER_DELETED',
-    targetType: 'User',
-    targetId: String(id),
-    before: auditSnapshot({ username: row.username, fullName: row.fullName })
+    await txc.user.update({ where: { id }, data: { status: 'DELETED', deletedAt: new Date() } });
+    await writeAudit(txc, {
+      actorUserId: user.id,
+      action: 'USER_DELETED',
+      targetType: 'User',
+      targetId: String(id),
+      before: auditSnapshot({ username: row.username, fullName: row.fullName })
+    });
+    return { ok: true, id };
   });
-  return { ok: true, id };
 }
 
 export interface BulkDeleteUsersResult {
@@ -471,48 +490,55 @@ export async function deleteUsers(ids: number[], password: string): Promise<Bulk
     return { ok: false, error: 'WRONG_PASSWORD', message: 'Mật khẩu xác nhận không đúng.' };
   }
 
-  let deleted = 0;
+  // AUTH-05 (audit 15/7, Codex) — cả loạt xóa chạy trong 1 transaction cầm advisory lock CHUNG (748301):
+  // đếm-Admin làm mới mỗi vòng dưới lock → không có 2 client song song cùng xóa Admin cuối. Skip-per-id giữ
+  // nguyên (chỉ `continue`, không throw → không rollback cả loạt); mọi xóa thành công commit ở cuối tx.
   const skipped: { id: number; reason: string; message?: string }[] = [];
-  for (const id of [...new Set(ids)]) {
-    // KHÔNG tự xóa tài khoản của chính mình.
-    if (id === user.id) {
-      await auditDenied(db, user, 'USER_DELETED', 'SELF_DELETE', String(id));
-      skipped.push({ id, reason: 'SELF_DELETE', message: 'Không thể tự xóa tài khoản của chính mình.' });
-      continue;
+  const deleted = await db.$transaction(async (txc) => {
+    await txc.$executeRawUnsafe('SELECT pg_advisory_xact_lock(748301)');
+    let n = 0;
+    for (const id of [...new Set(ids)]) {
+      // KHÔNG tự xóa tài khoản của chính mình.
+      if (id === user.id) {
+        await auditDenied(txc, user, 'USER_DELETED', 'SELF_DELETE', String(id));
+        skipped.push({ id, reason: 'SELF_DELETE', message: 'Không thể tự xóa tài khoản của chính mình.' });
+        continue;
+      }
+      const row = await txc.user.findUnique({ where: { id } });
+      if (!row || row.deletedAt) {
+        skipped.push({ id, reason: 'NOT_FOUND', message: 'Nhân sự không tồn tại hoặc đã bị xóa.' });
+        continue;
+      }
+      const isAdmin = await targetIsAdmin(txc, id);
+      const remaining = await countActiveAdmins(txc, id);
+      if (!canRemoveOrLockAdmin(isAdmin, remaining + (isAdmin && row.status === 'ACTIVE' ? 1 : 0))) {
+        skipped.push({ id, reason: 'LAST_ADMIN', message: `Không thể xóa Admin cuối cùng (${row.username}).` });
+        continue;
+      }
+      // R_MANAGER_005: manager không được xóa Admin.
+      if (isAdmin && !user.roles.includes(ADMIN_ROLE_CODE)) {
+        await auditDenied(txc, user, 'USER_DELETED', 'MANAGER_SCOPE', String(id));
+        skipped.push({ id, reason: 'MANAGER_SCOPE', message: `Bạn không được xóa tài khoản Admin (${row.username}).` });
+        continue;
+      }
+      await txc.user.update({ where: { id }, data: { status: 'DELETED', deletedAt: new Date() } });
+      await writeAudit(txc, {
+        actorUserId: user.id,
+        action: 'USER_DELETED',
+        targetType: 'User',
+        targetId: String(id),
+        before: auditSnapshot({ username: row.username, fullName: row.fullName })
+      });
+      n++;
     }
-    const row = await db.user.findUnique({ where: { id } });
-    if (!row || row.deletedAt) {
-      skipped.push({ id, reason: 'NOT_FOUND', message: 'Nhân sự không tồn tại hoặc đã bị xóa.' });
-      continue;
-    }
-    const isAdmin = await targetIsAdmin(db, id);
-    const remaining = await countActiveAdmins(db, id);
-    if (!canRemoveOrLockAdmin(isAdmin, remaining + (isAdmin && row.status === 'ACTIVE' ? 1 : 0))) {
-      skipped.push({ id, reason: 'LAST_ADMIN', message: `Không thể xóa Admin cuối cùng (${row.username}).` });
-      continue;
-    }
-    // R_MANAGER_005: manager không được xóa Admin.
-    if (isAdmin && !user.roles.includes(ADMIN_ROLE_CODE)) {
-      await auditDenied(db, user, 'USER_DELETED', 'MANAGER_SCOPE', String(id));
-      skipped.push({ id, reason: 'MANAGER_SCOPE', message: `Bạn không được xóa tài khoản Admin (${row.username}).` });
-      continue;
-    }
-    await db.user.update({ where: { id }, data: { status: 'DELETED', deletedAt: new Date() } });
-    await writeAudit(db, {
-      actorUserId: user.id,
-      action: 'USER_DELETED',
-      targetType: 'User',
-      targetId: String(id),
-      before: auditSnapshot({ username: row.username, fullName: row.fullName })
-    });
-    deleted++;
-  }
+    return n;
+  });
   return { ok: true, deleted, skipped };
 }
 
 // --- helpers -------------------------------------------------------------
 
-async function auditDenied(db: Db, user: AuthUser, action: 'USER_CREATED' | 'USER_UPDATED' | 'USER_DELETED', reason: string, targetId?: string): Promise<void> {
+async function auditDenied(db: TxClient, user: AuthUser, action: 'USER_CREATED' | 'USER_UPDATED' | 'USER_DELETED', reason: string, targetId?: string): Promise<void> {
   await writeAudit(db, {
     actorUserId: user.id,
     action: 'PERMISSION_DENIED',
