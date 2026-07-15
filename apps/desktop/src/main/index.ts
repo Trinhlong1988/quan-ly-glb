@@ -2,7 +2,7 @@
 // (sandbox must be off so the preload can use ipcRenderer via require in electron-vite CJS preload).
 import './bigint-json.js'; // R48 — PHẢI import ĐẦU TIÊN: dạy JSON.stringify serialize BigInt (cột tiền int8).
 import { join } from 'node:path';
-import { app, BrowserWindow, screen, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, screen, shell } from 'electron';
 import { initDb } from './db.js';
 import { registerIpc } from './ipc.js';
 import * as auth from './auth-service.js';
@@ -30,6 +30,9 @@ async function createWindow(): Promise<void> {
     minHeight: Math.min(720, wa.height - 48),
     show: false,
     autoHideMenuBar: true,
+    // Mr.Long 15/7 — ẩn khung/nút cửa sổ gốc để tự vẽ 3 nút tròn kiểu Mac (đỏ/vàng/lục). Windows vẫn
+    // giữ viền kéo giãn (khác frame:false), thanh tiêu đề tự vẽ có vùng kéo -webkit-app-region:drag.
+    titleBarStyle: 'hidden',
     backgroundColor: '#F4F6FA',
     title: 'Quản Lý GLB',
     webPreferences: {
@@ -44,6 +47,10 @@ async function createWindow(): Promise<void> {
   win.on('closed', () => {
     if (mainWindow === win) mainWindow = null;
   });
+
+  // Nút cửa sổ tự vẽ (Mac traffic-light) → phát trạng thái phóng to để renderer đổi icon.
+  win.on('maximize', () => win.webContents.send('window:maximized', true));
+  win.on('unmaximize', () => win.webContents.send('window:maximized', false));
 
   win.once('ready-to-show', () => win.show());
   // Zoom chữ +15% đồng đều (áp sau mỗi lần tải xong để dính chắc, kể cả reload SPA).
@@ -102,6 +109,17 @@ app.whenReady().then(async () => {
     console.error('[main] DB init failed:', err);
   }
   registerIpc();
+
+  // Điều khiển cửa sổ tự vẽ (Mac traffic-light). Thao tác trên đúng cửa sổ gửi lệnh (fromWebContents).
+  ipcMain.handle('window:minimize', (e) => { BrowserWindow.fromWebContents(e.sender)?.minimize(); });
+  ipcMain.handle('window:toggle-maximize', (e) => {
+    const w = BrowserWindow.fromWebContents(e.sender);
+    if (!w) return false;
+    if (w.isMaximized()) w.unmaximize(); else w.maximize();
+    return w.isMaximized();
+  });
+  ipcMain.handle('window:close', (e) => { BrowserWindow.fromWebContents(e.sender)?.close(); });
+  ipcMain.handle('window:is-maximized', (e) => BrowserWindow.fromWebContents(e.sender)?.isMaximized() ?? false);
 
   // R48 Pha 2 — SELFTEST: coi admin đã "đổi mật khẩu lần đầu" (bỏ forceChangePassword) để test thao tác;
   // nếu không, guard mới (R48 #4) sẽ CHẶN mọi thao tác của adminroot khi cờ còn bật. Chỉ DB throwaway.

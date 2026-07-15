@@ -234,10 +234,10 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
   const activeItem = visible.find((m) => m.key === active) ?? visible[0];
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-appbg">
+    <div className="flex h-full w-full overflow-hidden bg-appbg">
       {/* Sidebar */}
       <aside className="flex w-64 shrink-0 flex-col bg-sidebar text-sidebar-text">
-        <div className="flex h-14 items-center gap-2 px-5 text-white">
+        <div className="flex h-14 items-center gap-2 px-5 text-slate-700">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/20 bg-white shadow-md">
             <GLogo className="h-6 w-6" />
           </div>
@@ -255,8 +255,8 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
                   (m.indent ? 'pl-8 pr-2.5 ' : 'px-2.5 ') +
                   // Mr.Long 14/7 — nút menu ĐANG CHỌN nổi 3D rõ: gradient sáng + bóng đậm + viền sáng + nhấc nhẹ.
                   (isActive
-                    ? 'bg-gradient-to-br from-[#2a72ef] to-brand-hover font-semibold text-white shadow-xl shadow-brand/60 ring-1 ring-white/30 -translate-y-0.5 scale-[1.02]'
-                    : 'font-medium text-sidebar-text hover:-translate-y-px hover:bg-white/5 hover:text-white hover:shadow-md hover:shadow-black/20')
+                    ? 'bg-gradient-to-br from-[#2a72ef] to-brand-hover font-semibold text-white shadow-xl shadow-brand/50 ring-1 ring-white/40 -translate-y-0.5 scale-[1.03]'
+                    : 'font-medium text-sidebar-text hover:-translate-y-px hover:bg-black/5 hover:text-brand hover:shadow-sm')
                 }
               >
                 {/* Thanh nhấn bên trái khi đang chọn */}
@@ -267,7 +267,7 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
                     'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-all ' +
                     (isActive
                       ? 'bg-white/20 text-white'
-                      : 'bg-white/5 text-sidebar-text group-hover:bg-brand/30 group-hover:text-white')
+                      : 'bg-black/5 text-slate-500 group-hover:bg-brand/15 group-hover:text-brand')
                   }
                 >
                   {m.icon}

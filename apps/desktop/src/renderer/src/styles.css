@@ -13,8 +13,8 @@
   --color-brand: #1657d0;
   --color-brand-hover: #1247ae;
   --color-brand-tint: #eaf1fc;
-  --color-sidebar: #0a1830; /* xanh navy ĐẬM hơn (Mr.Long 14/7) */
-  --color-sidebar-text: #c7d2e1;
+  --color-sidebar: #eceef3; /* xám nhẹ (Mr.Long 15/7) — nút menu active giữ nguyên gradient xanh nổi */
+  --color-sidebar-text: #4b5563; /* chữ slate đậm cho nền sáng */
   --color-appbg: #f4f6fa;
   --color-line: #e5e9f0;
   --color-success: #16a34a;
@@ -28,12 +28,14 @@ body,
   height: 100%;
 }
 
-/* Mr.Long 15/7 — chuyển menu kiểu web hiện đại: content nổi lên + mờ dần (3D pop). */
+/* Mr.Long 15/7 — chuyển menu 3D RÕ: content ngả nhẹ trong không gian (perspective + rotateX) rồi
+ * dựng thẳng + nổi lên, mờ dần. Cảm giác "trang lật lên" rõ hơn khi bấm đổi menu. */
 @keyframes pageIn {
-  from { opacity: 0; transform: translateY(12px) scale(0.985); }
-  to { opacity: 1; transform: none; }
+  0%   { opacity: 0; transform: perspective(1200px) translateY(26px) rotateX(7deg) scale(0.965); }
+  60%  { opacity: 1; }
+  100% { opacity: 1; transform: perspective(1200px) translateY(0) rotateX(0) scale(1); }
 }
-.page-enter { animation: pageIn 0.3s cubic-bezier(0.22, 0.61, 0.36, 1); }
+.page-enter { animation: pageIn 0.42s cubic-bezier(0.22, 0.61, 0.36, 1); transform-origin: top center; will-change: transform, opacity; }
 
 /* Mr.Long 15/7 — GHIM thanh cuộn NGANG của bảng danh sách ở đáy khung nhìn: giới hạn chiều cao khung
  * bảng theo viewport rồi cho cuộn TRONG khung. thead đã sticky top-0 nên tiêu đề luôn hiện; thanh cuộn
@@ -77,15 +79,15 @@ body {
   background: transparent;
 }
 
-/* Trong sidebar tối: thumb sáng-mờ cho hợp nền #10233f. */
+/* Sidebar nền xám sáng: thumb tối-mờ cho hợp nền #eceef3. */
 .bg-sidebar {
-  scrollbar-color: rgba(199, 210, 225, 0.35) transparent;
+  scrollbar-color: rgba(71, 85, 105, 0.28) transparent;
 }
 .bg-sidebar ::-webkit-scrollbar-thumb {
-  background: rgba(199, 210, 225, 0.35);
+  background: rgba(71, 85, 105, 0.28);
   border: 3px solid transparent;
   background-clip: padding-box;
 }
 .bg-sidebar ::-webkit-scrollbar-thumb:hover {
-  background: rgba(199, 210, 225, 0.55);
+  background: rgba(71, 85, 105, 0.45);
 }

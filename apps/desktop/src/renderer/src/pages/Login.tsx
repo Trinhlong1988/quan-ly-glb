@@ -103,7 +103,7 @@ export function Login({ onLoggedIn }: { onLoggedIn: (u: AuthUser, mustChange: bo
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#eaf1fc] via-appbg to-[#dfe7f6] p-4">
+    <div className="flex h-full items-center justify-center bg-gradient-to-br from-[#eaf1fc] via-appbg to-[#dfe7f6] p-4">
       <div className="w-full max-w-[420px] rounded-2xl border border-line bg-white p-8 shadow-xl">
         <div className="mb-7 flex flex-col items-center text-center">
           <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-2xl border border-line bg-white shadow-md">

@@ -1827,6 +1827,11 @@ export interface GlbApi {
   onDownloadProgress(cb: (p: { percent: number }) => void): () => void;
   onUpdateDownloaded(cb: (p: { version: string }) => void): () => void;
   onUpdateError(cb: (p: { message: string }) => void): () => void;
+  windowMinimize(): Promise<void>;
+  windowToggleMaximize(): Promise<boolean>;
+  windowClose(): Promise<void>;
+  windowIsMaximized(): Promise<boolean>;
+  onWindowMaximized(cb: (max: boolean) => void): () => void;
 }
 
 // ── G11 DTO — kết quả cập nhật lúc khởi động (đọc từ marker userData/update-result.json) ──

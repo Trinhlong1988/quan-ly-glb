@@ -6,6 +6,7 @@ import { ServerConfig } from './pages/ServerConfig.js';
 import { ForceChangePassword } from './pages/ForceChangePassword.js';
 import { Dashboard } from './pages/Dashboard.js';
 import { RealtimeProvider } from './lib/realtime.js';
+import { TitleBar } from './components/TitleBar.js';
 import { useToast } from './lib/toast.js';
 
 type Screen = 'loading' | 'server-config' | 'login' | 'force-change' | 'dashboard';
@@ -71,20 +72,33 @@ export function App(): JSX.Element {
     setScreen('login');
   }, []);
 
+  let content: JSX.Element;
   if (screen === 'loading') {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-appbg text-slate-500">
+    content = (
+      <div className="flex h-full items-center justify-center bg-appbg text-slate-500">
         <Loader2 className="h-8 w-8 animate-spin text-brand" />
       </div>
     );
+  } else if (screen === 'server-config') {
+    content = <ServerConfig onConfigured={() => setScreen('login')} />;
+  } else if (screen === 'login' || !user) {
+    content = <Login onLoggedIn={onLoggedIn} />;
+  } else if (screen === 'force-change') {
+    content = <ForceChangePassword user={user} onChanged={onChanged} onLogout={onLogout} />;
+  } else {
+    // R48 Pha 4 — provider realtime chỉ chạy khi đã đăng nhập (poll cần phiên hợp lệ); logout → Dashboard unmount → dừng poll.
+    content = (
+      <RealtimeProvider>
+        <Dashboard user={user} onLogout={onLogout} />
+      </RealtimeProvider>
+    );
   }
-  if (screen === 'server-config') return <ServerConfig onConfigured={() => setScreen('login')} />;
-  if (screen === 'login' || !user) return <Login onLoggedIn={onLoggedIn} />;
-  if (screen === 'force-change') return <ForceChangePassword user={user} onChanged={onChanged} onLogout={onLogout} />;
-  // R48 Pha 4 — provider realtime chỉ chạy khi đã đăng nhập (poll cần phiên hợp lệ); logout → Dashboard unmount → dừng poll.
+
+  // Thanh tiêu đề Mac luôn hiện trên cùng; nội dung màn hình lấp phần còn lại của cửa sổ.
   return (
-    <RealtimeProvider>
-      <Dashboard user={user} onLogout={onLogout} />
-    </RealtimeProvider>
+    <div className="flex h-screen flex-col overflow-hidden">
+      <TitleBar />
+      <div className="min-h-0 flex-1 overflow-hidden">{content}</div>
+    </div>
   );
 }

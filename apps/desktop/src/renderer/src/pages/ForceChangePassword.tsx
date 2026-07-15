@@ -49,7 +49,7 @@ export function ForceChangePassword({
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#eaf1fc] via-appbg to-[#dfe7f6] p-4">
+    <div className="flex h-full items-center justify-center bg-gradient-to-br from-[#eaf1fc] via-appbg to-[#dfe7f6] p-4">
       <div className="w-full max-w-[440px] rounded-2xl border border-line bg-white p-8 shadow-xl">
         <div className="mb-6 flex flex-col items-center text-center">
           <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-warning text-white shadow-md">

@@ -342,6 +342,17 @@ const api = {
     const h = (_e: unknown, p: { message: string }): void => cb(p);
     ipcRenderer.on('update-error', h);
     return () => ipcRenderer.removeListener('update-error', h);
+  },
+
+  // ── Điều khiển cửa sổ tự vẽ (nút Mac đỏ/vàng/lục) ──
+  windowMinimize: () => ipcRenderer.invoke('window:minimize'),
+  windowToggleMaximize: (): Promise<boolean> => ipcRenderer.invoke('window:toggle-maximize'),
+  windowClose: () => ipcRenderer.invoke('window:close'),
+  windowIsMaximized: (): Promise<boolean> => ipcRenderer.invoke('window:is-maximized'),
+  onWindowMaximized: (cb: (max: boolean) => void) => {
+    const h = (_e: unknown, max: boolean): void => cb(max);
+    ipcRenderer.on('window:maximized', h);
+    return () => ipcRenderer.removeListener('window:maximized', h);
   }
 };
 
