@@ -3,6 +3,15 @@
 > Phần mềm quản lý nội bộ GLOBEWAY (doanh thu / kho / thu chi). Desktop-first, chạy local, đóng gói `.exe`, backup local → sau này sync VPS/PostgreSQL.
 > Giai đoạn hiện tại: **G1 = Local Desktop + Admin + Role + User + Audit + Backup**.
 
+> ⚙️ **LUÔN ÁP MỖI PHIÊN — nạp skill `glb-playbook` (toàn bộ bài học/kỷ luật) + `glb-ship` (quy trình ship).**
+> Mọi task chạm code/QA GLB, hoặc khi Mr.Long nói "check sâu / đối kháng / audit / đào bug / ship" → **gọi skill tương ứng trước khi làm**. 5 luật cốt lõi luôn nhớ:
+> 1. **CẤM báo cáo láo** — "xong/PASS" phải có bằng chứng chạy thật (exit-code/số đếm/screenshot), không claim từ log.
+> 2. **CẤM suy luận** value/spec — không chắc → TENTATIVE + hỏi Mr.Long.
+> 3. **Rebuild TRƯỚC selftest**; đổi hạ tầng/DB → rerun FULL suite sạch; KHÔNG test trên DB sản xuất `glb`.
+> 4. **Bug = lỗi quy trình test** → thêm regression + BUGS_FIXED + đề xuất đổi quy trình; ưu tiên mở-rộng bug-class.
+> 5. **Engineering PASS ≠ Production PASS (R196)** — chưa cài thật + Mr.Long nghiệm thu thì CHƯA "done"; UI đổi phải screenshot verify.
+> (Chi tiết đầy đủ + checklist bug-class trong skill `glb-playbook`.)
+
 ## Nguồn sự thật (đọc trước mọi task)
 1. `docs/IMS_SPEC_v1_0.md` — **SPEC CHÍNH THỨC** (Mr.Long, v1.0). Mọi feature/rule/schema/PASS gốc ở đây.
 2. `bible/00_constitution.md` — hiến pháp governance + phân vai + gate.
