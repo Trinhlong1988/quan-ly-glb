@@ -104,30 +104,22 @@ export async function seedBillExplainLibrary(db: Db): Promise<{ industries: numb
   try { seed = JSON.parse(readFileSync(p, 'utf8')) as BillExplainSeed; } catch { return { industries: 0, products: 0 }; }
 
   let indCount = 0, prodCount = 0;
-  const nameToId = new Map<string, number>();
-  for (const name of seed.industries ?? []) {
-    const existing = await db.industry.findFirst({ where: { name, deletedAt: null }, select: { id: true } });
-    if (existing) { nameToId.set(name, existing.id); continue; }
-    const code = await nextCode('NGH', db);
-    const created = await db.industry.create({ data: { code, name, active: true } });
-    nameToId.set(name, created.id);
-    indCount++;
-  }
+  // B71 FIX: CHỈ seed ngành CÓ sản phẩm (KHÔNG tạo ngành rỗng — tránh trùng danh mục ngành sẵn có của user).
+  // Khớp ngành THEO TÊN chuẩn hóa (case-INSENSITIVE) → tái dùng "Siêu Thị"/"Siêu thị" sẵn có, KHÔNG đẻ bản
+  // trùng hoa/thường. Bỏ hoàn toàn `seed.industries` (danh sách ngành rỗng) — người dùng tự quản danh mục ngành.
   for (const [indName, prods] of Object.entries(seed.products ?? {})) {
-    let indId = nameToId.get(indName);
-    if (indId === undefined) {
-      const found = await db.industry.findFirst({ where: { name: indName, deletedAt: null }, select: { id: true } });
-      if (!found) continue;
-      indId = found.id;
+    const list = (prods ?? []).filter((pr) => pr.name && pr.unit && Number.isFinite(pr.price) && pr.price > 0);
+    if (!list.length) continue;
+    let ind = await db.industry.findFirst({ where: { name: { equals: indName, mode: 'insensitive' }, deletedAt: null }, select: { id: true } });
+    if (!ind) {
+      const code = await nextCode('NGH', db);
+      ind = await db.industry.create({ data: { code, name: indName, active: true }, select: { id: true } });
+      indCount++;
     }
-    const have = await db.product.count({ where: { industryId: indId, deletedAt: null } });
+    const have = await db.product.count({ where: { industryId: ind.id, deletedAt: null } });
     if (have > 0) continue; // ngành đã có SP → KHÔNG seed đè
-    const data = (prods ?? [])
-      .filter((pr) => pr.name && pr.unit && Number.isFinite(pr.price) && pr.price > 0)
-      .map((pr) => ({ industryId: indId!, name: pr.name, unit: pr.unit, price: Math.round(pr.price), status: 'ACTIVE' }));
-    if (!data.length) continue;
-    await db.product.createMany({ data });
-    prodCount += data.length;
+    await db.product.createMany({ data: list.map((pr) => ({ industryId: ind!.id, name: pr.name, unit: pr.unit, price: Math.round(pr.price), status: 'ACTIVE' })) });
+    prodCount += list.length;
   }
   return { industries: indCount, products: prodCount };
 }
@@ -1019,6 +1011,7 @@ export async function ensureCriticalSchema(db: Db): Promise<void> {
       "name" TEXT NOT NULL,
       "unit" TEXT NOT NULL,
       "price" INTEGER NOT NULL,
+      "priority" INTEGER NOT NULL DEFAULT 0,
       "status" TEXT NOT NULL DEFAULT 'ACTIVE',
       "created_by" INTEGER,
       "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1028,6 +1021,8 @@ export async function ensureCriticalSchema(db: Db): Promise<void> {
       "deleted_by" INTEGER,
       CONSTRAINT "products_pkey" PRIMARY KEY ("id")
     )`,
+    // Bill giải trình (Mr.Long 16/7): cột priority ADDITIVE cho DB đã có bảng products từ 0.2.5x cũ (self-heal).
+    `ALTER TABLE "products" ADD COLUMN IF NOT EXISTS "priority" INTEGER NOT NULL DEFAULT 0`,
     `CREATE INDEX IF NOT EXISTS "products_industry_id_idx" ON "products" ("industry_id")`,
     `CREATE TABLE IF NOT EXISTS "bill_explains" (
       "id" SERIAL NOT NULL,

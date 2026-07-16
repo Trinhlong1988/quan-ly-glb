@@ -7,7 +7,7 @@
 import { app, dialog, BrowserWindow } from 'electron';
 import path from 'node:path';
 import { existsSync } from 'node:fs';
-import { copyFile, readFile, writeFile, mkdir } from 'node:fs/promises';
+import { copyFile, readFile, writeFile, mkdir, unlink } from 'node:fs/promises';
 import { auditSnapshot } from '@glb/business-rules';
 import type { Db } from '@glb/database';
 import { requirePermission, verifyActorPassword } from './guard.js';
@@ -66,6 +66,7 @@ export interface ProductDto {
   name: string;
   unit: string;
   price: number;
+  priority: number;
   status: string;
   createdAt: string;
   updatedAt: string;
@@ -82,6 +83,7 @@ export interface CreateProductInput {
   name: string;
   unit: string;
   price: number;
+  priority?: number;
   status?: string;
 }
 export interface UpdateProductInput {
@@ -89,6 +91,7 @@ export interface UpdateProductInput {
   name?: string;
   unit?: string;
   price?: number;
+  priority?: number;
   status?: string;
   expectedUpdatedAt?: string | null;
 }
@@ -120,6 +123,14 @@ function validPrice(v: unknown): number | null {
   if (b <= 0n || b > BigInt(Number.MAX_SAFE_INTEGER)) return null;
   return Number(b);
 }
+/** Ưu tiên SP: số nguyên 0..1000 (cao = hữu dụng hơn). Không hợp lệ/thiếu → 0 (trung tính, không đổi hành vi cũ). */
+function validPriority(v: unknown): number {
+  let n: number | null = null;
+  if (typeof v === 'number' && Number.isInteger(v)) n = v;
+  else if (typeof v === 'string' && /^\d+$/.test(v.trim())) n = Number(v.trim());
+  if (n === null || n < 0) return 0;
+  return Math.min(n, 1000);
+}
 
 export async function listProducts(filter: ProductFilter = {}): Promise<{ ok: boolean; data?: ProductDto[]; error?: string; message?: string }> {
   const g = await requirePermission('BILLEXPLAIN_VIEW', { action: 'BILLEXPLAIN_VIEW' });
@@ -139,7 +150,7 @@ export async function listProducts(filter: ProductFilter = {}): Promise<{ ok: bo
     ok: true,
     data: rows.map((r) => ({
       id: r.id, industryId: r.industryId, industryName: names.get(r.industryId) ?? null,
-      name: r.name, unit: r.unit, price: r.price, status: r.status,
+      name: r.name, unit: r.unit, price: r.price, priority: r.priority, status: r.status,
       createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString()
     }))
   };
@@ -159,12 +170,13 @@ export async function createProduct(input: CreateProductInput): Promise<Mutation
   const price = validPrice(input.price);
   if (price === null) return { ok: false, error: 'VALIDATION', message: 'Đơn giá phải là số nguyên dương (VND).' };
 
+  const priority = validPriority(input.priority);
   const created = await db.product.create({
-    data: { industryId: input.industryId, name, unit, price, status: input.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE', createdBy: user.id }
+    data: { industryId: input.industryId, name, unit, price, priority, status: input.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE', createdBy: user.id }
   });
   await writeAudit(db, {
     actorUserId: user.id, action: 'PRODUCT_CREATED', targetType: 'Product', targetId: String(created.id),
-    after: auditSnapshot({ industryId: created.industryId, name: created.name, unit: created.unit, price: created.price, status: created.status })
+    after: auditSnapshot({ industryId: created.industryId, name: created.name, unit: created.unit, price: created.price, priority: created.priority, status: created.status })
   });
   return { ok: true, id: created.id };
 }
@@ -193,19 +205,20 @@ export async function updateProduct(id: number, input: UpdateProductInput): Prom
     if (!ind || ind.deletedAt) return { ok: false, error: 'VALIDATION', message: 'Ngành nghề không tồn tại.' };
   }
 
-  const before = auditSnapshot({ industryId: row.industryId, name: row.name, unit: row.unit, price: row.price, status: row.status });
+  const priority = input.priority !== undefined ? validPriority(input.priority) : row.priority;
+  const before = auditSnapshot({ industryId: row.industryId, name: row.name, unit: row.unit, price: row.price, priority: row.priority, status: row.status });
   const updated = await db.product.update({
     where: { id },
     data: {
       industryId: input.industryId ?? row.industryId,
-      name, unit, price,
+      name, unit, price, priority,
       status: input.status !== undefined ? (input.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE') : row.status,
       updatedBy: user.id
     }
   });
   await writeAudit(db, {
     actorUserId: user.id, action: 'PRODUCT_UPDATED', targetType: 'Product', targetId: String(id), before,
-    after: auditSnapshot({ industryId: updated.industryId, name: updated.name, unit: updated.unit, price: updated.price, status: updated.status })
+    after: auditSnapshot({ industryId: updated.industryId, name: updated.name, unit: updated.unit, price: updated.price, priority: updated.priority, status: updated.status })
   });
   return { ok: true, id };
 }
@@ -231,7 +244,7 @@ export async function deleteProducts(ids: number[], password: string): Promise<M
 }
 
 /** Import danh sách SP cho 1 ngành (rows đã parse ở renderer: {name,unit,price}). Bỏ dòng thiếu/không hợp lệ. */
-export async function importProducts(industryId: number, rows: { name?: string; unit?: string; price?: unknown }[]): Promise<MutationResult & { imported?: number; skipped?: number }> {
+export async function importProducts(industryId: number, rows: { name?: string; unit?: string; price?: unknown; priority?: unknown }[]): Promise<MutationResult & { imported?: number; skipped?: number }> {
   const g = await requirePermission('PRODUCT_MANAGE', { action: 'PRODUCT_IMPORTED', targetType: 'Product' });
   if (!g.ok) return g;
   const { db, user } = g;
@@ -246,7 +259,7 @@ export async function importProducts(industryId: number, rows: { name?: string; 
     const unit = String(r.unit ?? '').trim();
     const price = validPrice(r.price);
     if (!name || !unit || price === null) { skipped++; continue; }
-    await db.product.create({ data: { industryId, name, unit, price, status: 'ACTIVE', createdBy: user.id } });
+    await db.product.create({ data: { industryId, name, unit, price, priority: validPriority(r.priority), status: 'ACTIVE', createdBy: user.id } });
     imported++;
   }
   await writeAudit(db, { actorUserId: user.id, action: 'PRODUCT_IMPORTED', targetType: 'Product', after: { industryId, imported, skipped } });
@@ -365,8 +378,8 @@ export async function generateBills(input: GenerateBillsInput): Promise<Generate
   }
   if (!targets.length) return { ok: false, error: 'VALIDATION', message: 'Chưa có số tiền hợp lệ nào để sinh bill.' };
 
-  const products = await db.product.findMany({ where: { industryId: input.industryId, status: 'ACTIVE', deletedAt: null }, select: { name: true, unit: true, price: true } });
-  const productLites: ProductLite[] = products.map((p) => ({ name: p.name, unit: p.unit, price: p.price }));
+  const products = await db.product.findMany({ where: { industryId: input.industryId, status: 'ACTIVE', deletedAt: null }, select: { name: true, unit: true, price: true, priority: true } });
+  const productLites: ProductLite[] = products.map((p) => ({ name: p.name, unit: p.unit, price: p.price, priority: p.priority }));
   if (!productLites.length) return { ok: false, error: 'NO_PRODUCTS', message: 'Thư viện sản phẩm của ngành nghề này đang trống — thêm sản phẩm trước khi sinh bill.' };
 
   const templatePath = await resolveTemplatePath(db);
@@ -404,16 +417,24 @@ export async function generateBills(input: GenerateBillsInput): Promise<Generate
 
   // BILL-05: tổng = Σ BigInt (KHÔNG qua Number → không mất chữ số dù nhiều số lớn).
   const totalAmount = targets.reduce((s, t) => s + BigInt(t), 0n);
-  const rec = await db.$transaction(async (tx) => {
-    const code = await nextCode(BILL_CODE_PREFIX, tx);
-    return tx.billExplain.create({
-      data: {
-        code, dossierId: input.dossierId, tidId: input.tidId ?? null, industryId: input.industryId,
-        billDate: new Date(Date.UTC(dd.y, dd.m - 1, dd.d)), totalAmount,
-        billCount: result.totalBills, filePath: result.file, createdBy: user.id
-      }
+  let rec;
+  try {
+    rec = await db.$transaction(async (tx) => {
+      const code = await nextCode(BILL_CODE_PREFIX, tx);
+      return tx.billExplain.create({
+        data: {
+          code, dossierId: input.dossierId, tidId: input.tidId ?? null, industryId: input.industryId,
+          billDate: new Date(Date.UTC(dd.y, dd.m - 1, dd.d)), totalAmount,
+          billCount: result.totalBills, filePath: result.file, createdBy: user.id
+        }
+      });
     });
-  });
+  } catch (e) {
+    // BILL-07 (B1, Mr.Long 16/7 "cấm nợ kỹ thuật"): render tạo file TRƯỚC khi lưu DB. Nếu lưu DB thất bại →
+    // DỌN file mồ côi (không để rác + không claim đã lưu). Số HĐ đã cấp atomic (BILL-06) — dôi số vô hại.
+    await unlink(result.file).catch(() => {});
+    return { ok: false, error: 'DB_FAILED', message: e instanceof Error ? e.message : 'Lưu bill vào cơ sở dữ liệu thất bại.' };
+  }
   await writeAudit(db, {
     actorUserId: user.id, action: 'BILLEXPLAIN_CREATED', targetType: 'BillExplain', targetId: String(rec.id),
     after: auditSnapshot({ code: rec.code, dossierId: input.dossierId, tidCode, industryId: input.industryId, billCount: result.totalBills, totalAmount: totalAmount.toString(), file: result.file })

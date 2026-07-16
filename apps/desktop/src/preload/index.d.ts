@@ -1524,6 +1524,7 @@ export interface ProductDto {
   name: string;
   unit: string;
   price: number;
+  priority: number;
   status: string;
   createdAt: string;
   updatedAt: string;
@@ -1540,6 +1541,7 @@ export interface CreateProductInput {
   name: string;
   unit: string;
   price: number;
+  priority?: number;
   status?: string;
 }
 export interface UpdateProductInput {
@@ -1547,6 +1549,7 @@ export interface UpdateProductInput {
   name?: string;
   unit?: string;
   price?: number;
+  priority?: number;
   status?: string;
   expectedUpdatedAt?: string | null;
 }
@@ -1820,7 +1823,7 @@ export interface GlbApi {
   productCreate(input: CreateProductInput): Promise<MutationOutcome>;
   productUpdate(id: number, input: UpdateProductInput): Promise<MutationOutcome>;
   productDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
-  productImport(industryId: number, rows: { name?: string; unit?: string; price?: unknown }[]): Promise<MutationOutcome & { imported?: number; skipped?: number }>;
+  productImport(industryId: number, rows: { name?: string; unit?: string; price?: unknown; priority?: unknown }[]): Promise<MutationOutcome & { imported?: number; skipped?: number }>;
   billExplainGenerate(input: GenerateBillsInput): Promise<GenerateBillsResult>;
   billExplainList(filter: BillExplainFilter): Promise<ListResult<BillExplainDto>>;
   billExplainDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;

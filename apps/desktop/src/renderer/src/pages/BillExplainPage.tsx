@@ -399,7 +399,8 @@ function LibraryTab({ canManage }: { canManage: boolean }): JSX.Element {
       const kName = keys.find((k) => /tên mặt hàng|tên hàng|tên sp|tên sản phẩm|tên/i.test(k));
       const kUnit = keys.find((k) => /đvt|đơn vị/i.test(k));
       const kPrice = keys.find((k) => /đơn giá|giá bán|giá/i.test(k));
-      return { name: kName ? String(r[kName]) : '', unit: kUnit ? String(r[kUnit]) : '', price: kPrice ? r[kPrice] : '' };
+      const kPrio = keys.find((k) => /ưu tiên|priority/i.test(k));
+      return { name: kName ? String(r[kName]) : '', unit: kUnit ? String(r[kUnit]) : '', price: kPrice ? r[kPrice] : '', priority: kPrio ? r[kPrio] : '' };
     });
     try {
       const res = await window.api.productImport(Number(fIndustry), rowsMapped);
@@ -415,7 +416,8 @@ function LibraryTab({ canManage }: { canManage: boolean }): JSX.Element {
       { header: 'Nhóm', required: false, kind: 'text', hint: 'Tên ngành nghề (tham khảo — import theo ngành đang lọc)' },
       { header: 'Tên mặt hàng', required: true, kind: 'text' },
       { header: 'ĐVT', required: true, kind: 'text' },
-      { header: 'Đơn giá', required: true, kind: 'money' }
+      { header: 'Đơn giá', required: true, kind: 'money' },
+      { header: 'Ưu tiên', required: false, kind: 'int', hint: '0–1000, cao = SP hữu dụng, ưu tiên chọn (để trống = 0)' }
     ], 'Mẫu nhập sản phẩm');
   }
   async function doBulkDelete(password?: string): Promise<void> {
@@ -462,13 +464,14 @@ function LibraryTab({ canManage }: { canManage: boolean }): JSX.Element {
               <th className="px-4 py-3">Tên sản phẩm</th>
               <th className="px-4 py-3">ĐVT</th>
               <th className="px-4 py-3 text-right">Đơn giá</th>
+              <th className="px-4 py-3 text-right">Ưu tiên</th>
               <th className="px-4 py-3">Trạng thái</th>
               {canManage && <th className="px-4 py-3 text-right">Thao tác</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {loading && <tr><td colSpan={canManage ? 7 : 5} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
-            {!loading && rows.length === 0 && <tr><td colSpan={canManage ? 7 : 5} className="px-4 py-10 text-center text-slate-400"><FolderKanban className="mx-auto mb-2 h-6 w-6" /> Chưa có sản phẩm. Thêm hoặc import để dùng khi sinh bill.</td></tr>}
+            {loading && <tr><td colSpan={canManage ? 8 : 6} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+            {!loading && rows.length === 0 && <tr><td colSpan={canManage ? 8 : 6} className="px-4 py-10 text-center text-slate-400"><FolderKanban className="mx-auto mb-2 h-6 w-6" /> Chưa có sản phẩm. Thêm hoặc import để dùng khi sinh bill.</td></tr>}
             {!loading && rows.map((r) => (
               <tr key={r.id} className={'hover:bg-appbg/60 ' + (sel.isSelected(r.id) ? 'bg-brand-tint/40' : '')}>
                 {canManage && <SelectCell id={r.id} sel={sel} />}
@@ -476,6 +479,7 @@ function LibraryTab({ canManage }: { canManage: boolean }): JSX.Element {
                 <td className="px-4 py-3 font-medium text-slate-800">{r.name}</td>
                 <td className="px-4 py-3 text-slate-600">{r.unit}</td>
                 <td className="px-4 py-3 text-right font-semibold text-slate-700 tabular-nums whitespace-nowrap">{money(r.price)}</td>
+                <td className="px-4 py-3 text-right tabular-nums text-slate-500">{r.priority > 0 ? r.priority : '—'}</td>
                 <td className="px-4 py-3">
                   <span className={'inline-flex rounded-full px-2 py-0.5 text-xs font-medium ' + (r.status === 'ACTIVE' ? 'bg-success/10 text-success' : 'bg-slate-200 text-slate-500')}>{r.status === 'ACTIVE' ? 'Đang dùng' : 'Ngừng dùng'}</span>
                 </td>
@@ -503,6 +507,7 @@ function ProductForm({ mode, row, industries, defaultIndustryId, onClose, onSave
   const [name, setName] = useState(row?.name ?? '');
   const [unit, setUnit] = useState(row?.unit ?? '');
   const [price, setPrice] = useState(row ? String(row.price) : '');
+  const [priority, setPriority] = useState(row ? String(row.priority) : '0');
   const [status, setStatus] = useState(row?.status ?? 'ACTIVE');
   const [saving, setSaving] = useState(false);
 
@@ -514,7 +519,7 @@ function ProductForm({ mode, row, industries, defaultIndustryId, onClose, onSave
     if (!Number.isFinite(p) || p <= 0) { toast.alert('Đơn giá phải là số nguyên dương.', 'Đơn giá sai'); return; }
     setSaving(true);
     try {
-      const payload = { industryId: Number(industryId), name: name.trim(), unit: unit.trim(), price: p, status };
+      const payload = { industryId: Number(industryId), name: name.trim(), unit: unit.trim(), price: p, priority: Number(priority.replace(/[^\d]/g, '')) || 0, status };
       const res = mode === 'create'
         ? await window.api.productCreate(payload)
         : await window.api.productUpdate(row!.id, { ...payload, expectedUpdatedAt: row!.updatedAt });
@@ -539,6 +544,9 @@ function ProductForm({ mode, row, industries, defaultIndustryId, onClose, onSave
           <Field label="Đơn vị tính" required><input className={inputCls} value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="vé / kg / cái…" /></Field>
           <Field label="Đơn giá (VND)" required><input className={inputCls + ' text-right tabular-nums'} inputMode="numeric" value={groupDigits(price)} onChange={(e) => setPrice(e.target.value.replace(/[^\d]/g, ''))} placeholder="0" /></Field>
         </div>
+        <Field label="Ưu tiên khi sinh bill (0–1000, cao = SP hữu dụng, ưu tiên chọn)">
+          <input className={inputCls + ' text-right tabular-nums'} inputMode="numeric" value={priority} onChange={(e) => setPriority(e.target.value.replace(/[^\d]/g, ''))} placeholder="0" />
+        </Field>
         <Field label="Trạng thái">
           <select className={inputCls} value={status} onChange={(e) => setStatus(e.target.value)}>
             <option value="ACTIVE">Đang dùng</option>

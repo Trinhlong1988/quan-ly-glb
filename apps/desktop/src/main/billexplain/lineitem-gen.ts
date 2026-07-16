@@ -5,6 +5,7 @@ export interface ProductLite {
   name: string;
   unit: string;
   price: number;
+  priority?: number; // cao = SP hữu dụng, ưu tiên chọn khi sinh dòng (mặc định 0 = trung tính → xếp theo giá)
 }
 export interface BillLine extends ProductLite {
   qty: number;
@@ -26,6 +27,18 @@ export function isDecimalUnit(unit: string): boolean {
   return DECIMAL_UNITS.has(String(unit || '').toLowerCase().normalize('NFC').trim());
 }
 
+// ── Số lượng THỰC TẾ (Mr.Long 16/7): 1 dòng HĐ không được phi lý (40 nồi cơm / 100kg hành). ──────────
+// Trần theo ĐVT + trần theo TIỀN của 1 dòng. Đồ cân/đong (kg, lít…) ≤ WEIGHT_CAP; đồ đếm ≤ DISCRETE_CAP;
+// và mọi dòng ≤ floor(SPEND_CAP / đơn giá) → giá càng cao số lượng càng ít (nồi cơm 1.5tr → tối đa 3 cái).
+const WEIGHT_CAP = 15; // kg/lít/mét… mỗi dòng
+const DISCRETE_CAP = 12; // cái/hộp/chai… mỗi dòng
+const SPEND_CAP = 5_000_000; // trần tiền 1 dòng (relax=1) → chặn số lượng phi lý cho SP đắt
+export function realisticMaxQty(unit: string, price: number, relax = 1): number {
+  const base = isDecimalUnit(unit) ? WEIGHT_CAP : DISCRETE_CAP;
+  const bySpend = Math.max(1, Math.floor(SPEND_CAP / Math.max(1, price)));
+  return Math.max(1, Math.floor(Math.min(base, bySpend) * relax));
+}
+
 function pickQtyForUnit(unit: string, cap: number): number {
   const max = Math.max(1, Math.floor(cap));
   if (isDecimalUnit(unit)) {
@@ -35,10 +48,10 @@ function pickQtyForUnit(unit: string, cap: number): number {
   return randInt(1, max);
 }
 
-// Tìm qty hợp lệ cho line cuối: price × qty = remain (qty hợp lệ theo unit + cap).
-function findValidLastQty(remain: number, price: number, unit: string, cap: number): number | null {
+// Tìm qty hợp lệ cho line cuối: price × qty = remain (qty hợp lệ theo unit + trần thực tế theo relax).
+function findValidLastQty(remain: number, price: number, unit: string, relax: number): number | null {
   if (price <= 0 || remain <= 0) return null;
-  const maxAllowed = cap !== undefined ? cap : 99;
+  const maxAllowed = realisticMaxQty(unit, price, relax);
   if (isDecimalUnit(unit)) {
     if ((remain * 10) % price !== 0) return null;
     const q = remain / price;
@@ -52,18 +65,26 @@ function findValidLastQty(remain: number, price: number, unit: string, cap: numb
   return q;
 }
 
-// Ưu tiên SP giá cao (top 30%) để số lượng không phồng, mix 1 SP middle 40% cho đa dạng.
+// Ưu tiên SP hữu dụng (priority cao) trước, rồi giá cao (top 30%) để số lượng không phồng, mix 1 SP mid 40%.
+// priority mặc định 0 → khi cả ngành chưa gán ưu tiên, thoái về xếp theo giá y như trước (không đổi hành vi).
 function pickProductsBalanced(products: ProductLite[], M: number): ProductLite[] {
-  const sorted = [...products].sort((a, b) => b.price - a.price);
+  const sorted = [...products].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0) || b.price - a.price);
   const top30 = sorted.slice(0, Math.max(15, Math.ceil(sorted.length * 0.3)));
   const mid40 = sorted.slice(top30.length, top30.length + Math.max(15, Math.ceil(sorted.length * 0.4)));
 
   const picks: ProductLite[] = [];
   const usedIds = new Set<string>();
+  // Chọn có TRỌNG SỐ theo (1 + priority): SP hữu dụng (priority cao) được ưu tiên mạnh, SP thường (priority 0)
+  // vẫn có cơ hội (trọng số 1). Khi cả ngành priority=0 → mọi trọng số =1 → random ĐỀU y như trước (không đổi
+  // hành vi). Tác dụng cho MỌI cỡ thư viện (kể cả nhỏ), không phụ thuộc phân tầng pool.
   const pickFrom = (pool: ProductLite[]): ProductLite | null => {
     const cands = pool.filter((p) => !usedIds.has(p.name + '#' + p.price));
     if (!cands.length) return null;
-    const c = cands[Math.floor(Math.random() * cands.length)];
+    const weights = cands.map((p) => 1 + Math.max(0, p.priority ?? 0));
+    let r = Math.random() * weights.reduce((a, b) => a + b, 0);
+    let idx = 0;
+    for (; idx < cands.length - 1; idx++) { r -= weights[idx]; if (r <= 0) break; }
+    const c = cands[idx];
     usedIds.add(c.name + '#' + c.price);
     return c;
   };
@@ -79,11 +100,11 @@ function pickProductsBalanced(products: ProductLite[], M: number): ProductLite[]
   return picks;
 }
 
-function tryFindLinesWithM(target: number, products: ProductLite[], M: number, qtyCap: number, retries: number): BillLine[] | null {
+function tryFindLinesWithM(target: number, products: ProductLite[], M: number, relax: number, retries: number): BillLine[] | null {
   if (M === 1) {
     const cands: BillLine[] = [];
     for (const p of products) {
-      const q = findValidLastQty(target, p.price, p.unit, qtyCap);
+      const q = findValidLastQty(target, p.price, p.unit, relax);
       if (q !== null) cands.push({ ...p, qty: q });
     }
     if (!cands.length) return null;
@@ -103,7 +124,7 @@ function tryFindLinesWithM(target: number, products: ProductLite[], M: number, q
       const remainAfter = target - partial;
       const slotsLeft = M - 1 - i;
       const safetyMax = Math.floor((remainAfter - slotsLeft) / p.price);
-      const max = Math.min(qtyCap, safetyMax);
+      const max = Math.min(realisticMaxQty(p.unit, p.price, relax), safetyMax);
       if (max < 1) { ok = false; break; }
       const qty = pickQtyForUnit(p.unit, max);
       lines.push({ ...p, qty });
@@ -118,7 +139,7 @@ function tryFindLinesWithM(target: number, products: ProductLite[], M: number, q
     const cands: BillLine[] = [];
     for (const p of products) {
       if (usedNames.has(p.name)) continue;
-      const q = findValidLastQty(remain, p.price, p.unit, qtyCap);
+      const q = findValidLastQty(remain, p.price, p.unit, relax);
       if (q !== null) cands.push({ ...p, qty: q });
     }
     if (!cands.length) continue;
@@ -146,25 +167,37 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
+// Trần tuyệt đối 1 hóa đơn = tổng 5 dòng có GIÁ TRỊ lớn nhất (đơn giá × trần thực tế relax=3). Target vượt
+// trần này KHÔNG THỂ ghép bằng ≤5 dòng số lượng hợp lý → chặn NGAY (khỏi spin hết retry làm treo UI).
+export function maxComposable(products: ProductLite[]): number {
+  const lineMax = products.map((p) => p.price * realisticMaxQty(p.unit, p.price, 3)).sort((a, b) => b - a);
+  return lineMax.slice(0, 5).reduce((s, v) => s + v, 0);
+}
+
 export function tryFindLines(target: number, products: ProductLite[]): BillLine[] | null {
   if (target <= 0 || !products.length) return null;
+  if (target > maxComposable(products)) return null; // guard nhanh: vượt trần 5 dòng thực tế → bỏ (degrade)
 
   const preferred = mCandidatesFor(target);
   const fallback = [5, 4, 3, 2, 1].filter((m) => !preferred.includes(m));
 
-  for (const cap of [25, 50, 99]) {
-    for (const M of shuffle(preferred)) {
-      if (M > products.length) continue;
-      const lines = tryFindLinesWithM(target, products, M, cap, 1500);
-      if (lines) return lines;
-    }
+  // Tier 1+2: SỐ LƯỢNG THỰC TẾ (relax=1) — ưu tiên tuyệt đối. Số dòng theo giá trị HĐ rồi mọi M.
+  for (const M of shuffle(preferred)) {
+    if (M > products.length) continue;
+    const lines = tryFindLinesWithM(target, products, M, 1, 2000);
+    if (lines) return lines;
   }
-  for (const cap of [50, 99]) {
-    for (const M of fallback) {
-      if (M > products.length) continue;
-      const lines = tryFindLinesWithM(target, products, M, cap, 800);
-      if (lines) return lines;
-    }
+  for (const M of fallback) {
+    if (M > products.length) continue;
+    const lines = tryFindLinesWithM(target, products, M, 1, 1200);
+    if (lines) return lines;
+  }
+  // Tier 3 (cuối cùng): nới trần ×3 để không fail target hợp lệ. SPEND_CAP vẫn chặn số lượng phi lý
+  // cho SP đắt (nồi cơm 1.5tr: floor(5tr/1.5tr)×3 = 9, không thể ra 40). Ưu tiên ít dòng trước.
+  for (const M of [5, 4, 3, 2, 1]) {
+    if (M > products.length) continue;
+    const lines = tryFindLinesWithM(target, products, M, 3, 1500);
+    if (lines) return lines;
   }
   return null;
 }

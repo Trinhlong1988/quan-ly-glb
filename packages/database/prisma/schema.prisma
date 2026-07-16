@@ -1015,6 +1015,7 @@ model Product {
   name       String
   unit       String // đơn vị tính (cái/kg/lít/vé…)
   price      Int // đơn giá VND nguyên
+  priority   Int       @default(0) // ưu tiên khi sinh dòng bill (Mr.Long 16/7): cao = SP hữu dụng, ưu tiên chọn. 0 = trung tính
   status     String    @default("ACTIVE") // ACTIVE | INACTIVE
   createdBy  Int?      @map("created_by")
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)

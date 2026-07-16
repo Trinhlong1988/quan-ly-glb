@@ -10,7 +10,7 @@ import * as dsr from './dossier-service.js';
 import * as tidSvc from './tid-service.js';
 import * as userSvc from './user-service.js';
 import * as be from './bill-explain-service.js';
-import { generateLineItems, type ProductLite } from './billexplain/lineitem-gen.js';
+import { generateLineItems, realisticMaxQty, type ProductLite } from './billexplain/lineitem-gen.js';
 
 let failures = 0;
 function assert(name: string, cond: boolean, extra?: unknown): void {
@@ -91,6 +91,20 @@ export async function runBillExplainSelfTest(): Promise<number> {
   assert('xóa 3 SP nhập ok', del.ok === true && del.deleted === 3, { del });
   assert('sau xóa còn 6 SP gốc', (await be.listProducts({ industryId: indMain.id! })).data?.length === 6);
 
+  // (A') Ưu tiên (priority, B3 Mr.Long 16/7): round-trip qua DB — tạo với priority, đọc, sửa, clamp, mặc định 0.
+  const prCreate = await be.createProduct({ industryId: indMain.id!, name: 'SP Ưu Tiên', unit: 'vé', price: 100_000, priority: 50 });
+  assert('tạo SP có priority ok', prCreate.ok === true, prCreate.error);
+  const prRow = (await be.listProducts({ industryId: indMain.id!, search: 'SP Ưu Tiên' })).data?.[0];
+  assert('priority lưu + đọc lại đúng (50)', prRow?.priority === 50, { p: prRow?.priority });
+  assert('SP thường mặc định priority 0', (await be.listProducts({ industryId: indMain.id!, search: 'SP Vé loại 1' })).data?.[0]?.priority === 0);
+  const prUp = await be.updateProduct(prRow!.id, { priority: 999, expectedUpdatedAt: prRow!.updatedAt });
+  assert('cập nhật priority ok', prUp.ok === true, prUp.error);
+  const prClamp = await be.createProduct({ industryId: indMain.id!, name: 'SP Clamp', unit: 'vé', price: 100_000, priority: (99999 as unknown as number) });
+  assert('priority > 1000 bị clamp về 1000', prClamp.ok === true && (await be.listProducts({ industryId: indMain.id!, search: 'SP Clamp' })).data?.[0]?.priority === 1000);
+  // dọn 2 SP phụ để giữ tổ hợp 6 SP gốc sạch cho section B.
+  await be.deleteProducts([prRow!.id, ...((await be.listProducts({ industryId: indMain.id!, search: 'SP Clamp' })).data ?? []).map((x) => x.id)], PW);
+  assert('dọn SP priority → còn 6 SP gốc', (await be.listProducts({ industryId: indMain.id! })).data?.length === 6);
+
   // ══ (B) ENGINE money-EXACT (assert trực tiếp, không parse xlsx) ═════════════════
   // Targets bội 10.000 → khớp CHÍNH XÁC được với bộ giá toàn bội 10.000.
   const lites: ProductLite[] = prices.map((pr, i) => ({ name: `SP Vé loại ${i + 1}`, unit: 'vé', price: pr }));
@@ -104,6 +118,44 @@ export async function runBillExplainSelfTest(): Promise<number> {
     } catch { okGen = false; }
     assert(`engine sinh dòng khớp CHÍNH XÁC target ${t}`, okGen && exact, { t });
   }
+
+  // ══ (B-realistic) SỐ LƯỢNG HỢP LÝ (Mr.Long 16/7): chống 40 nồi cơm / 100kg hành ══════════════════
+  // Thư viện lẫn SP đắt (nồi cơm 1.5tr, tivi 8tr) + đồ cân (hành 30k/kg) + đồ rẻ. Sinh nhiều lần,
+  // KHÔNG dòng nào vượt realisticMaxQty(ĐVT, giá, relax=3) và tiền vẫn khớp CHÍNH XÁC.
+  const realyLib: ProductLite[] = [
+    { name: 'Nồi cơm điện', unit: 'cái', price: 1_500_000 },
+    { name: 'Tivi 43 inch', unit: 'cái', price: 8_000_000 },
+    { name: 'Hành tây', unit: 'kg', price: 30_000 },
+    { name: 'Gạo ST25', unit: 'kg', price: 40_000 },
+    { name: 'Nước mắm', unit: 'chai', price: 60_000 },
+    { name: 'Bột giặt', unit: 'hộp', price: 120_000 },
+    { name: 'Dầu ăn', unit: 'lít', price: 50_000 },
+    { name: 'Bàn chải', unit: 'cái', price: 20_000 },
+  ];
+  // 1 hóa đơn ≤ 5 dòng + trần ~5tr/dòng → miền thực tế 1 bill ≤ ~20tr (số lớn hơn tách nhiều bill).
+  let qtyOk = true, qtyExact = true, genCount = 0, worstNoiCom = 0, worstHanh = 0;
+  for (const t of [1_230_000, 3_450_000, 7_770_000, 11_100_000, 15_000_000]) {
+    for (let rep = 0; rep < 8; rep++) {
+      const g = generateLineItems(t, realyLib); // KHÔNG bọc try — target thực tế PHẢI ghép được (nếu throw = lỗi thật)
+      genCount++;
+      const sum = g.lines.reduce((s, l) => s + l.price * l.qty, 0);
+      if (sum !== g.subtotal || g.subtotal - g.discount_amount !== t) qtyExact = false;
+      for (const l of g.lines) {
+        if (l.qty > realisticMaxQty(l.unit, l.price, 3)) qtyOk = false;
+        if (l.name === 'Nồi cơm điện') worstNoiCom = Math.max(worstNoiCom, l.qty);
+        if (l.name === 'Hành tây') worstHanh = Math.max(worstHanh, l.qty);
+      }
+    }
+  }
+  assert('B-realistic: sinh được mọi target thực tế (không throw)', genCount === 40, { genCount });
+  assert('B-realistic: mọi dòng ≤ trần thực tế theo ĐVT+giá (relax≤3)', qtyOk, { worstNoiCom, worstHanh });
+  assert('B-realistic: tiền vẫn khớp CHÍNH XÁC khi giới hạn số lượng', qtyExact);
+  assert('B-realistic: nồi cơm 1.5tr KHÔNG bao giờ ra 40 cái (≤9)', worstNoiCom <= 9, { worstNoiCom });
+  assert('B-realistic: hành tây KHÔNG bao giờ ra 100kg (≤45)', worstHanh <= 45, { worstHanh });
+  // degrade tường minh: target quá lớn cho 1 hóa đơn (5 dòng) → throw (service đẩy vào errors[], không ép khớp phi lý).
+  let threw = false;
+  try { generateLineItems(500_000_000, realyLib); } catch { threw = true; }
+  assert('B-realistic: target 500tr cho 1 bill → throw (degrade, không sinh SL phi lý)', threw);
 
   // ══ (B) SINH BILL end-to-end (xuất file thật) ══════════════════════════════════
   // ngành trống → NO_PRODUCTS.
@@ -188,15 +240,20 @@ export async function runBillExplainSelfTest(): Promise<number> {
   assert('BILL-06: số HĐ cấp ATOMIC — tăng đúng tổng dải 6 (không cấp trùng)', after === before + 6, { before, after });
   for (const r of conc) if (r.id) await be.deleteBillExplains([r.id], PW);
 
-  // ══ (D) SEED THƯ VIỆN GỐC RENBILL (Mr.Long 16/7) — 5 ngành + 199 SP Siêu thị thật ══════════════
-  // seedIfEmpty ĐÃ seed lúc boot máy chủ (cờ AppSetting) → verify TRẠNG THÁI + idempotency (gọi lại = no-op).
-  const seedNames = ['Vận tải', 'Thu hộ', 'Gas', 'Siêu thị', 'Cà phê'];
-  const seededInds = await db.industry.findMany({ where: { name: { in: seedNames }, deletedAt: null }, select: { name: true } });
-  assert('seed thư viện: đủ 5 ngành renbill tồn tại', new Set(seededInds.map((x) => x.name)).size === 5, seededInds.map((x) => x.name));
+  // ══ (D) SEED THƯ VIỆN GỐC RENBILL — CHỈ ngành CÓ sản phẩm (Siêu thị), khớp case-insensitive (B71) ══
+  // seedIfEmpty ĐÃ seed lúc boot (cờ AppSetting). B71: KHÔNG tạo ngành rỗng dư + khớp tên hoa/thường.
+  const sieuThi = await db.industry.findFirst({ where: { name: { equals: 'Siêu thị', mode: 'insensitive' }, deletedAt: null }, select: { id: true } });
+  assert('seed: ngành Siêu thị tồn tại', sieuThi != null);
+  assert('seed: Siêu thị có 199 SP ACTIVE (giá/ĐVT thật)', (await be.listProducts({ industryId: sieuThi!.id })).data?.length === 199);
   const reseed = await seedBillExplainLibrary(db);
-  assert('seed idempotent (đã seed lúc boot → gọi lại no-op)', reseed.industries === 0 && reseed.products === 0, reseed);
-  const sieuThi = await db.industry.findFirst({ where: { name: 'Siêu thị', deletedAt: null }, select: { id: true } });
-  assert('ngành Siêu thị có 199 SP ACTIVE (giá/ĐVT thật)', (await be.listProducts({ industryId: sieuThi!.id })).data?.length === 199);
+  assert('seed idempotent (gọi lại no-op)', reseed.industries === 0 && reseed.products === 0, reseed);
+  assert('B71: chỉ 1 ngành Siêu thị (không trùng hoa/thường)', (await db.industry.findMany({ where: { name: { equals: 'Siêu thị', mode: 'insensitive' }, deletedAt: null } })).length === 1);
+  // B71 regression trực tiếp: đổi tên thành HOA "Siêu Thị" rồi seed lại → PHẢI tái dùng (không đẻ bản mới).
+  await db.industry.update({ where: { id: sieuThi!.id }, data: { name: 'Siêu Thị' } });
+  const reseed2 = await seedBillExplainLibrary(db);
+  assert('B71: seed khớp case-insensitive "Siêu Thị" → KHÔNG tạo ngành mới', reseed2.industries === 0, reseed2);
+  assert('B71: vẫn chỉ 1 ngành Siêu thị sau seed lại (hoa/thường)', (await db.industry.findMany({ where: { name: { equals: 'Siêu thị', mode: 'insensitive' }, deletedAt: null } })).length === 1);
+  await db.industry.update({ where: { id: sieuThi!.id }, data: { name: 'Siêu thị' } });
   // engine khớp CHÍNH XÁC với thư viện SIÊU THỊ THẬT (giá lẻ 464..850k) — chọn target cấu trúc từ chính SP.
   const realLites = (await be.listProducts({ industryId: sieuThi!.id })).data!.map((p) => ({ name: p.name, unit: p.unit, price: p.price }));
   const t0 = realLites[0].price * 3 + realLites[5].price * 2 + realLites[10].price; // tồn tại nghiệm
