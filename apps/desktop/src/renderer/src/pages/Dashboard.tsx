@@ -32,7 +32,7 @@ const SEARCH_KIND_LABEL: Record<string, string> = { customer: 'Khách hàng', ti
 
 /** Tìm kiếm toàn cục trên topbar — debounce 250ms, chỉ trả bản ghi có quyền (backend), nhóm theo loại, điều hướng khi chọn.
  *  Không phát request cho chuỗi < 2 ký tự; hủy kết quả cũ (token) chống race; Esc đóng. */
-function TopbarSearch({ onNavigate }: { onNavigate: (page: string, term?: string) => void }): JSX.Element {
+function TopbarSearch({ onNavigate }: { onNavigate: (page: string, term?: string, kind?: string, id?: number) => void }): JSX.Element {
   const [q, setQ] = useState('');
   const [hits, setHits] = useState<SearchHitDto[]>([]);
   const [open, setOpen] = useState(false);
@@ -71,7 +71,7 @@ function TopbarSearch({ onNavigate }: { onNavigate: (page: string, term?: string
             <button
               key={`${h.kind}-${h.id}`}
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => { onNavigate(h.page, h.code); setOpen(false); setQ(''); }}
+              onClick={() => { onNavigate(h.page, h.code, h.kind, h.id); setOpen(false); setQ(''); }}
               className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-appbg"
             >
               <span className="rounded bg-brand-tint px-1.5 py-0.5 text-[10px] font-semibold text-brand">{SEARCH_KIND_LABEL[h.kind] ?? h.kind}</span>
@@ -209,7 +209,7 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
   const visible = MENU.filter((m) => !m.perms || hasAnyPermission(user, m.perms));
   const [active, setActive] = useState(visible[0]?.key ?? 'dashboard');
   // Nhảy từ ô tìm kiếm topbar: mở trang đích + lọc sẵn theo mã bản ghi đã chọn (để "thấy ngay" thay vì lạc trong list).
-  const [jump, setJump] = useState<{ page: string; term: string } | null>(null);
+  const [jump, setJump] = useState<{ page: string; term: string; kind?: string; id?: number } | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [undeliveredCount, setUndeliveredCount] = useState(0);
   const { pendingCancels } = useRealtime(); // R48 Pha 4 — badge số yêu cầu hủy đang chờ duyệt (realtime poll)
@@ -354,7 +354,7 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
               <span className="mx-2 text-slate-300">/</span>
               <span className="font-medium text-slate-700">{activeItem?.label}</span>
             </div>
-            <TopbarSearch onNavigate={(page, term) => { setJump(term ? { page, term } : null); setActive(page); }} />
+            <TopbarSearch onNavigate={(page, term, kind, id) => { setJump(term ? { page, term, kind, id } : null); setActive(page); }} />
           </div>
           <div className="flex items-center gap-2">
             <TopbarClock />
@@ -433,9 +433,9 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
           {activeItem?.key === 'tid' && <TidPage user={user} initialSearch={jump?.page === 'tid' ? jump.term : undefined} />}
           {activeItem?.key === 'staff' && <StaffManagementPage user={user} />}
           {activeItem?.key === 'bankcfg' && <BankConfigPage user={user} />}
-          {activeItem?.key === 'dossier' && <DossierPage user={user} />}
+          {activeItem?.key === 'dossier' && <DossierPage user={user} initialSearch={jump?.page === 'dossier' ? jump.term : undefined} />}
           {activeItem?.key === 'finance' && <FinancePage user={user} />}
-          {activeItem?.key === 'revdebt' && <RevenueDebtPage user={user} />}
+          {activeItem?.key === 'revdebt' && <RevenueDebtPage user={user} initialJump={jump?.page === 'revdebt' ? { kind: jump.kind, id: jump.id, term: jump.term } : undefined} />}
           {activeItem?.key === 'approval' && <ApprovalPage user={user} />}
           {activeItem?.key === 'exportapproval' && <ExportApprovalPage user={user} />}
           {activeItem?.key === 'system' && <SystemConfigPage user={user} />}

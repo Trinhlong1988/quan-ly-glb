@@ -64,7 +64,7 @@ interface TxnFormInitial {
   note?: string;
 }
 
-export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
+export function RevenuePage({ user, initialCustomerId, initialCode }: { user: AuthUser; initialCustomerId?: number; initialCode?: string }): JSX.Element {
   const toast = useToast();
   const canManage = hasPermission(user, 'REVENUE_MANAGE');
   const canRequestCancel = hasPermission(user, 'BILL_CANCEL_REQUEST');
@@ -80,7 +80,8 @@ export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
   const [fHkd, setFHkd] = useState('');
   const [fBank, setFBank] = useState('');
   const [fPartner, setFPartner] = useState('');
-  const [fCustomer, setFCustomer] = useState('');
+  const [fCustomer, setFCustomer] = useState(initialCustomerId ? String(initialCustomerId) : ''); // Bug #1 — nhảy từ ô tìm topbar chọn khách → lọc sẵn
+  const [fCode, setFCode] = useState(initialCode ?? ''); // Bug #1 — nhảy từ ô tìm topbar chọn giao dịch → lọc sẵn theo mã GD
   const [fTid, setFTid] = useState('');
   const [fFeeType, setFFeeType] = useState('');
   const [fSettled, setFSettled] = useState(''); // '' | 'yes' | 'no'
@@ -110,6 +111,7 @@ export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
   function buildFilter(pg: number): Record<string, unknown> {
     return {
       mid: fMid.trim() || undefined,
+      code: fCode.trim() || undefined,
       hkdName: fHkd.trim() || undefined,
       bankId: fBank ? Number(fBank) : undefined,
       partnerId: fPartner ? Number(fPartner) : undefined,
@@ -173,7 +175,7 @@ export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
 
   function applyFilter(): void { void reload(1); }
   function resetFilter(): void {
-    setFMid(''); setFHkd(''); setFBank(''); setFPartner(''); setFCustomer(''); setFTid(''); setFFeeType(''); setFSettled(''); setFFrom(''); setFTo('');
+    setFMid(''); setFHkd(''); setFBank(''); setFPartner(''); setFCustomer(''); setFCode(''); setFTid(''); setFFeeType(''); setFSettled(''); setFFrom(''); setFTo('');
     setTimeout(() => void reload(1), 0);
   }
 
@@ -336,6 +338,9 @@ export function RevenuePage({ user }: { user: AuthUser }): JSX.Element {
       {/* Bộ lọc đa chiều — mỗi chiều một ô riêng */}
       <div className="mb-3 rounded-xl border border-line bg-white p-3 shadow-sm">
         <div className="flex flex-wrap items-end gap-2">
+          <label className="flex flex-col text-xs text-slate-500">Mã GD
+            <input className={inputCls + ' w-32'} value={fCode} onChange={(e) => setFCode(e.target.value)} placeholder="GD00001…" onKeyDown={(e) => e.key === 'Enter' && applyFilter()} />
+          </label>
           <label className="flex flex-col text-xs text-slate-500">Mã MID
             <input className={inputCls + ' w-36'} value={fMid} onChange={(e) => setFMid(e.target.value)} placeholder="Chứa…" onKeyDown={(e) => e.key === 'Enter' && applyFilter()} />
           </label>

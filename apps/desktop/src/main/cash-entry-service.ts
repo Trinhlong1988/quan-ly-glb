@@ -46,6 +46,7 @@ export interface CashEntryDto {
   categoryId: number;
   categoryName: string | null;
   sourceKind: string | null;
+  sourceType: string | null; // L-5 (audit 16/7): nguồn sinh phiếu (null=thủ công | SALE_COLLECT | DEVICE_* …) — renderer lọc phiếu hệ thống khỏi hủy/tích-chọn hàng loạt
   fundId: number | null; // H2b: null cho bút toán phi tiền mặt (write-off nợ xấu — không gắn quỹ)
   fundCode: string | null;
   fundName: string | null;

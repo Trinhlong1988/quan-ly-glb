@@ -1,6 +1,6 @@
 {
   "name": "@glb/desktop",
-  "version": "0.2.51",
+  "version": "0.2.52",
   "private": true,
   "description": "Quản Lý GLB — Electron desktop app (G1 Phase A: login → force change password → dashboard).",
   "main": "./out/main/index.js",

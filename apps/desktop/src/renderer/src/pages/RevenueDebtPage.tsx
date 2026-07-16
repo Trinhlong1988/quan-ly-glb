@@ -8,11 +8,15 @@ import { RevenuePage } from './RevenuePage.js';
 import { DebtPage } from './DebtPage.js';
 import { DeviceReceivablePage } from './DeviceReceivablePage.js';
 
-export function RevenueDebtPage({ user }: { user: AuthUser }): JSX.Element {
+export function RevenueDebtPage({ user, initialJump }: { user: AuthUser; initialJump?: { kind?: string; id?: number; term?: string } }): JSX.Element {
   const canRev = hasPermission(user, 'REVENUE_VIEW');
   const canDebt = hasPermission(user, 'DEBT_VIEW');
   const canDevRcv = hasPermission(user, 'DEVICE_SALE_VIEW'); // Công nợ mua thiết bị (nhóm quyền tiền riêng)
   const [tab, setTab] = useState<'revenue' | 'debt' | 'devrcv'>(canRev ? 'revenue' : canDebt ? 'debt' : 'devrcv');
+  // Bug #1 (audit 16/7) — nhảy từ ô tìm topbar: khách/giao dịch đều về trang này → lọc sẵn ở tab Doanh thu
+  // (khách theo customerId, giao dịch theo mã GD). Trước đây chỉ POS/TID lọc sẵn, khách/GD/hồ sơ rơi vào list đầy.
+  const jumpCustomerId = initialJump?.kind === 'customer' ? initialJump.id : undefined;
+  const jumpTxnCode = initialJump?.kind === 'transaction' ? initialJump.term : undefined;
   return (
     <div>
       <div className="mb-4">
@@ -24,7 +28,7 @@ export function RevenueDebtPage({ user }: { user: AuthUser }): JSX.Element {
         {canDebt && <TabButton active={tab === 'debt'} onClick={() => setTab('debt')} icon={<Coins className="h-4 w-4" />}>Công nợ</TabButton>}
         {canDevRcv && <TabButton active={tab === 'devrcv'} onClick={() => setTab('devrcv')} icon={<Banknote className="h-4 w-4" />}>Công nợ mua thiết bị</TabButton>}
       </TabBar>
-      {tab === 'revenue' && canRev && <RevenuePage user={user} />}
+      {tab === 'revenue' && canRev && <RevenuePage user={user} initialCustomerId={jumpCustomerId} initialCode={jumpTxnCode} />}
       {tab === 'debt' && canDebt && <DebtPage user={user} />}
       {tab === 'devrcv' && canDevRcv && <DeviceReceivablePage user={user} />}
     </div>

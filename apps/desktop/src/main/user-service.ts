@@ -13,7 +13,7 @@ import { hasPermission, validateUsername, validatePassword, isValidEmail, ADMIN_
 import type { AuthUser } from '@glb/shared';
 import type { Db } from '@glb/database';
 import { requirePermission, verifyActorPassword } from './guard.js';
-import { validateCurrentSession } from './auth-service.js';
+import { validateCurrentSession, invalidateAuthSnapshot } from './auth-service.js';
 import { getDb } from './db.js';
 import { writeAudit } from './audit.js';
 import { nextCode } from './code-service.js';
@@ -267,28 +267,23 @@ export async function updateUser(id: number, input: UpdateUserInput): Promise<Mu
   const stale = staleGuard(row.updatedAt, input.expectedUpdatedAt);
   if (stale) return stale;
 
+  // Cờ đổi trạng thái / đổi vai trò — tính trước để gộp kiểm-bất-biến "Admin cuối" vào 1 transaction có lock.
+  const changingStatus = input.status !== undefined && input.status !== row.status;
+  const toInactive = changingStatus && input.status !== 'ACTIVE';
+  const changingRoles = Array.isArray(input.roleCodes);
+  const currentRoleCodes = row.roles.map((r) => r.role.code);
+  const nextRoleCodes = changingRoles ? [...new Set(input.roleCodes!)] : currentRoleCodes;
+
   // AUTH-02 (audit 15/7, Codex) — đổi TRẠNG THÁI qua form update phải chịu ĐÚNG guard như khóa/mở chuyên:
-  // cần quyền USER_LOCK (→ không-hoạt-động) / USER_UNLOCK (→ ACTIVE) + chặn Admin cuối. Không có guard này
-  // thì actor chỉ có USER_UPDATE có thể khóa/vô-hiệu Admin cuối, bỏ qua setUserLock.
-  if (input.status !== undefined && input.status !== row.status) {
-    const toInactive = input.status !== 'ACTIVE';
+  // cần quyền USER_LOCK (→ không-hoạt-động) / USER_UNLOCK (→ ACTIVE). Không có guard này thì actor chỉ có
+  // USER_UPDATE có thể khóa/vô-hiệu Admin, bỏ qua setUserLock. (Kiểm Admin-cuối gộp xuống transaction bên dưới.)
+  if (changingStatus) {
     const needPerm = toInactive ? 'USER_LOCK' : 'USER_UNLOCK';
     if (!hasPermission(user, needPerm)) {
       await auditDenied(db, user, 'USER_UPDATED', 'STATUS_PERM_DENIED', String(id));
       return { ok: false, error: 'FORBIDDEN', message: `Đổi trạng thái nhân sự cần quyền ${needPerm}.` };
     }
-    if (toInactive) {
-      const isAdmin = await targetIsAdmin(db, id);
-      const remaining = await countActiveAdmins(db, id);
-      if (!canRemoveOrLockAdmin(isAdmin, remaining + (isAdmin && row.status === 'ACTIVE' ? 1 : 0))) {
-        return { ok: false, error: 'LAST_ADMIN', message: 'Không thể khóa/vô hiệu Admin cuối cùng.' };
-      }
-    }
   }
-
-  const changingRoles = Array.isArray(input.roleCodes);
-  const currentRoleCodes = row.roles.map((r) => r.role.code);
-  const nextRoleCodes = changingRoles ? [...new Set(input.roleCodes!)] : currentRoleCodes;
 
   // R006: a user cannot change their OWN roles (privilege escalation vector).
   if (
@@ -299,8 +294,11 @@ export async function updateUser(id: number, input: UpdateUserInput): Promise<Mu
     return { ok: false, error: 'SELF_ESCALATION', message: 'Bạn không thể tự thay đổi vai trò của chính mình.' };
   }
 
-  // Manager scope on any role change.
+  // Manager scope on any role change + KHÔNG cho về rỗng vai trò (giống createUser, R_USER §).
   if (changingRoles) {
+    if (nextRoleCodes.length === 0) {
+      return { ok: false, error: 'VALIDATION', message: 'Nhân sự phải giữ ít nhất 1 vai trò.' };
+    }
     if (!canCreateUserWithRoles(user, nextRoleCodes)) {
       await auditDenied(db, user, 'USER_UPDATED', 'MANAGER_SCOPE', String(id));
       return { ok: false, error: 'MANAGER_SCOPE', message: 'Bạn không được gán vai trò này.' };
@@ -320,6 +318,13 @@ export async function updateUser(id: number, input: UpdateUserInput): Promise<Mu
     if (dup) return { ok: false, error: 'DUPLICATE', message: `Email "${input.email}" đã được sử dụng.` };
   }
 
+  // H-1 + M-2 (audit 16/7, agent phản biện) — MỞ RỘNG bất biến "Admin cuối" (AUTH-05) sang updateUser:
+  // gỡ vai trò ADMIN của Admin ACTIVE cuối (roleCodes bỏ ADMIN) mất toàn bộ khả năng quản trị — trước đây
+  // nhánh đổi-role KHÔNG hề kiểm last-admin. Nay kiểm cả (đổi status→inactive) VÀ (gỡ role ADMIN), và
+  // kiểm-CÙNG-ghi dưới CÙNG advisory lock 748301 (chống TOCTOU song song với lock/xóa Admin khác).
+  const removingAdmin = changingRoles && row.status === 'ACTIVE'
+    && currentRoleCodes.includes(ADMIN_ROLE_CODE) && !nextRoleCodes.includes(ADMIN_ROLE_CODE);
+
   const before = auditSnapshot({
     fullName: row.fullName,
     phone: row.phone,
@@ -330,26 +335,44 @@ export async function updateUser(id: number, input: UpdateUserInput): Promise<Mu
     roles: currentRoleCodes
   });
 
-  await db.user.update({
-    where: { id },
-    data: {
-      fullName: input.fullName?.trim() ?? row.fullName,
-      birthDate: input.birthDate !== undefined ? (input.birthDate ? new Date(input.birthDate) : null) : row.birthDate,
-      gender: input.gender !== undefined ? input.gender : row.gender,
-      phone: input.phone !== undefined ? input.phone : row.phone,
-      email: input.email !== undefined ? input.email || null : row.email,
-      address: input.address !== undefined ? input.address : row.address,
-      joinDate: input.joinDate !== undefined ? (input.joinDate ? new Date(input.joinDate) : null) : row.joinDate,
-      status: input.status ?? row.status
+  const guarded = await db.$transaction(async (txc) => {
+    if (toInactive || removingAdmin) {
+      await txc.$executeRawUnsafe('SELECT pg_advisory_xact_lock(748301)');
+      const isAdmin = await targetIsAdmin(txc, id);
+      const remaining = await countActiveAdmins(txc, id);
+      if (!canRemoveOrLockAdmin(isAdmin, remaining + (isAdmin && row.status === 'ACTIVE' ? 1 : 0))) {
+        return {
+          ok: false as const,
+          error: 'LAST_ADMIN',
+          message: toInactive ? 'Không thể khóa/vô hiệu Admin cuối cùng.' : 'Không thể gỡ vai trò Admin của Admin cuối cùng.'
+        };
+      }
     }
+    await txc.user.update({
+      where: { id },
+      data: {
+        fullName: input.fullName?.trim() ?? row.fullName,
+        birthDate: input.birthDate !== undefined ? (input.birthDate ? new Date(input.birthDate) : null) : row.birthDate,
+        gender: input.gender !== undefined ? input.gender : row.gender,
+        phone: input.phone !== undefined ? input.phone : row.phone,
+        email: input.email !== undefined ? input.email || null : row.email,
+        address: input.address !== undefined ? input.address : row.address,
+        joinDate: input.joinDate !== undefined ? (input.joinDate ? new Date(input.joinDate) : null) : row.joinDate,
+        status: input.status ?? row.status
+      }
+    });
+    if (changingRoles) {
+      const roles = await txc.role.findMany({ where: { code: { in: nextRoleCodes } } });
+      await txc.userRole.deleteMany({ where: { userId: id } });
+      await txc.userRole.createMany({ data: roles.map((r) => ({ userId: id, roleId: r.id })) });
+    }
+    return { ok: true as const };
   });
-  if (changingRoles) {
-    const roles = await db.role.findMany({ where: { code: { in: nextRoleCodes } } });
-    await db.$transaction([
-      db.userRole.deleteMany({ where: { userId: id } }),
-      db.userRole.createMany({ data: roles.map((r) => ({ userId: id, roleId: r.id })) })
-    ]);
-  }
+  if (!guarded.ok) return guarded;
+  // L-4 (audit 16/7) — đổi vai trò làm quyền hiệu lực thay đổi: buộc rebuild snapshot phiên hiện tại ngay
+  // (thay vì chờ TTL 8s) nếu actor sửa chính mình / role mình đang giữ. invalidateAuthSnapshot trước đây là
+  // dead code (chỉ selftest gọi) → nay wire vào đúng mutation quyền.
+  if (changingRoles) invalidateAuthSnapshot();
 
   const after = auditSnapshot({
     fullName: input.fullName?.trim() ?? row.fullName,

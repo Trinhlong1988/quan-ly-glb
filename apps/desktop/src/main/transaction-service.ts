@@ -99,6 +99,7 @@ export interface TransactionDto {
 
 export interface TransactionFilter {
   tidId?: number;
+  code?: string; // chứa mã GD (Bug #1 audit 16/7 — nhảy từ ô tìm topbar chọn 1 giao dịch → lọc theo mã)
   mid?: string; // chứa
   hkdName?: string; // chứa
   partnerId?: number;
@@ -393,6 +394,7 @@ async function buildWhere(db: Db, filter: TransactionFilter): Promise<Record<str
     where.tidId = { in: tids.map((t) => t.id) };
   }
   if (filter.customerId) where.customerId = filter.customerId;
+  if (filter.code?.trim()) where.code = { contains: filter.code.trim() };
   if (filter.cardTypeId) where.cardTypeId = filter.cardTypeId;
   if (filter.feeTypeId) where.feeTypeId = filter.feeTypeId;
   if (filter.settled !== undefined) where.settled = filter.settled;

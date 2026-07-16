@@ -4,6 +4,7 @@
 //   delete role-with-users blocked (R_ROLE_005), delete protected ADMIN role blocked (R_ROLE_006),
 //   last-admin delete blocked (R004), backup produces file + checksum + audit (R_BACKUP).
 import { login, logout, validateCurrentSession, invalidateAuthSnapshot } from './auth-service.js';
+import { ADMIN_ROLE_CODE } from '@glb/shared';
 import { getDb } from './db.js';
 import * as roleSvc from './role-service.js';
 import * as userSvc from './user-service.js';
@@ -221,6 +222,36 @@ export async function runServiceSelfTest(): Promise<number> {
     hadRead && liveAfter !== null && !liveAfter.user.permissions.includes('USER_READ'), { hadRead, after: liveAfter?.user.permissions });
   await logout();
   await login(ADMIN.u, ADMIN.p); // trả về admin cho phần audit-summary phía dưới nếu có
+  await logout();
+
+  // ═══ REGRESSION 16/7 — H-1/M-2 (agent phản biện): bất biến "Admin cuối" MỞ RỘNG sang updateUser ═══
+  // Trước đây nhánh đổi VAI TRÒ của updateUser KHÔNG kiểm last-admin → actor có USER_UPDATE gỡ role ADMIN
+  // khỏi Admin ACTIVE cuối (roleCodes bỏ ADMIN) làm hệ thống còn 0 admin. Nay chặn LAST_ADMIN, kiểm dưới
+  // advisory lock 748301, và cấm về rỗng vai trò (VALIDATION). M-2: đổi status→inactive cũng kiểm dưới lock.
+  await login(ADMIN.u, ADMIN.p);
+  await roleSvc.createRole({ name: 'Vai tro phang', code: 'PLAINROLE', permissionCodes: ['DASHBOARD_VIEW'] });
+  // Actor KHÔNG phải admin nhưng đủ quyền tạo/sửa/khóa user + có DASHBOARD_VIEW (gán PLAINROLE không leo thang quyền).
+  await roleSvc.createRole({ name: 'HR Actor', code: 'HRACTOR', permissionCodes: ['USER_READ', 'USER_UPDATE', 'USER_CREATE', 'USER_LOCK', 'DASHBOARD_VIEW'] });
+  await userSvc.createUser({ fullName: 'HR Actor', username: 'hractor01x', password: 'Passw0rd@1', roleCodes: ['HRACTOR'] });
+  const admin2 = await userSvc.createUser({ fullName: 'Admin Hai', username: 'adminhai01', password: 'Passw0rd@1', roleCodes: [ADMIN_ROLE_CODE] });
+  await logout();
+
+  await login('hractor01x', 'Passw0rd@1');
+  // CONTROL (2 admin ACTIVE: adminroot + adminhai01) → gỡ ADMIN khỏi admin2 CHO PHÉP (adminroot còn lại).
+  const h1control = await userSvc.updateUser(admin2.id!, { roleCodes: ['PLAINROLE'] });
+  assert('H-1 control: gỡ role ADMIN khi CÒN admin khác → CHO PHÉP', h1control.ok === true, h1control);
+  // adminroot giờ là Admin ACTIVE CUỐI → gỡ role ADMIN khỏi adminroot phải CHẶN.
+  const h1block = await userSvc.updateUser(adminUserId, { roleCodes: ['PLAINROLE'] });
+  assert('H-1: gỡ role ADMIN khỏi Admin cuối qua updateUser → LAST_ADMIN', h1block.ok === false && h1block.error === 'LAST_ADMIN', h1block);
+  const h1empty = await userSvc.updateUser(adminUserId, { roleCodes: [] });
+  assert('H-1b: updateUser về RỖNG vai trò → VALIDATION', h1empty.ok === false && h1empty.error === 'VALIDATION', h1empty);
+  // M-2: đổi status Admin cuối → inactive qua updateUser cũng CHẶN LAST_ADMIN (actor có USER_LOCK nên qua perm-gate).
+  const m2block = await userSvc.updateUser(adminUserId, { status: 'DISABLED' });
+  assert('M-2: đổi status Admin cuối → inactive qua updateUser → LAST_ADMIN', m2block.ok === false && m2block.error === 'LAST_ADMIN', m2block);
+  await logout();
+  // Khôi phục admin2 về ADMIN (adminroot chưa hề đổi vì các guard đã chặn) → trạng thái sạch cho test sau.
+  await login(ADMIN.u, ADMIN.p);
+  await userSvc.updateUser(admin2.id!, { roleCodes: [ADMIN_ROLE_CODE] });
   await logout();
 
   // eslint-disable-next-line no-console

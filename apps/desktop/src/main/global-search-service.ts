@@ -38,6 +38,10 @@ export async function globalSearch(rawQuery: string): Promise<GlobalSearchResult
   const hits: SearchHit[] = [];
   const like = `%${q}%`; // dùng cho cột số (SĐT) — không unaccent
 
+  // M-3 (audit 16/7, agent phản biện) — nếu tiện ích `unaccent` chưa cài (user Postgres thiếu quyền
+  // CREATE EXTENSION và extension chưa pre-install), mọi truy vấn lower(unaccent(...)) sẽ ném. Handler
+  // search:global không có wrapper → lỗi DB thô lọt thẳng renderer. Bọc try/catch → báo lỗi mềm {ok:false}.
+  try {
   if (hasPermission(actor, 'CUSTOMER_VIEW')) {
     const rows = await db.$queryRaw<{ id: number; code: string | null; full_name: string; phone: string | null }[]>`
       SELECT id, code, full_name, phone FROM customers
@@ -85,4 +89,14 @@ export async function globalSearch(rawQuery: string): Promise<GlobalSearchResult
     for (const r of rows) hits.push({ kind: 'transaction', id: r.id, code: r.code ?? `#${r.id}`, label: `Giao dịch ${r.code ?? '#' + r.id}`, sub: undefined, page: 'revdebt' });
   }
   return { ok: true, data: hits };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return {
+      ok: false,
+      error: 'SEARCH_FAILED',
+      message: /unaccent/i.test(msg)
+        ? 'Tìm kiếm tạm thời không khả dụng (máy chủ thiếu tiện ích unaccent — liên hệ quản trị).'
+        : 'Tìm kiếm tạm thời không khả dụng.'
+    };
+  }
 }

@@ -32,7 +32,7 @@ function fmtPct(v: number): string {
   return `${Number(v.toFixed(3))}%`;
 }
 
-export function DossierPage({ user }: { user: AuthUser }): JSX.Element {
+export function DossierPage({ user, initialSearch }: { user: AuthUser; initialSearch?: string }): JSX.Element {
   const [tab, setTab] = useState<Tab>('dossier');
   const canManage = hasPermission(user, 'CONFIG_DOSSIER_MANAGE');
   return (
@@ -46,7 +46,7 @@ export function DossierPage({ user }: { user: AuthUser }): JSX.Element {
         <TabButton active={tab === 'cccd'} onClick={() => setTab('cccd')} icon={<IdCard className="h-4 w-4" />}>Danh sách CCCD</TabButton>
         <TabButton active={tab === 'source'} onClick={() => setTab('source')} icon={<Tag className="h-4 w-4" />}>Nguồn hồ sơ</TabButton>
       </TabBar>
-      {tab === 'dossier' && <DossierTab canManage={canManage} view="hkd" />}
+      {tab === 'dossier' && <DossierTab canManage={canManage} view="hkd" initialSearch={initialSearch} />}
       {tab === 'cccd' && <DossierTab canManage={canManage} view="cccd" />}
       {tab === 'source' && <SourceTab canManage={canManage} />}
     </div>
@@ -169,13 +169,13 @@ function SourceForm({ mode, row, onClose, onSaved }: { mode: 'create' | 'edit'; 
 }
 
 // ── §10c/d HỒ SƠ HKD ─────────────────────────────────────────────────────────
-function DossierTab({ canManage, view = 'hkd' }: { canManage: boolean; view?: 'hkd' | 'cccd' }): JSX.Element {
+function DossierTab({ canManage, view = 'hkd', initialSearch }: { canManage: boolean; view?: 'hkd' | 'cccd'; initialSearch?: string }): JSX.Element {
   const isCccd = view === 'cccd';
   const toast = useToast();
   const [rows, setRows] = useState<DossierDto[]>([]);
   const [sources, setSources] = useState<DossierSourceDto[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(initialSearch ?? ''); // nhảy từ ô tìm kiếm topbar → lọc sẵn theo MST/tên HKD đã chọn
   const [fSource, setFSource] = useState('');
   const [fMstStatus, setFMstStatus] = useState('');
   const [form, setForm] = useState<{ mode: 'create' | 'edit'; row?: DossierDto } | null>(null);
