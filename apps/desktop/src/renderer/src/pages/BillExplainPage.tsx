@@ -17,9 +17,10 @@ import { StatBar } from '../components/StatBar.js';
 import { useRowSelection, SelectionBar, SelectAllCell, SelectCell } from '../components/Selection.js';
 import { parseWorkbook, downloadTemplate } from '../lib/excelImport.js';
 
-/** VND, nhóm 3 số bằng dấu chấm. */
-function money(n: number): string {
-  return Math.abs(Math.round(n)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') + 'đ';
+/** VND, nhóm 3 số bằng dấu chấm. Nhận number hoặc bigint (số tiền có thể lớn — không ép Number mất chữ số). */
+function money(n: number | bigint): string {
+  const v = typeof n === 'bigint' ? (n < 0n ? -n : n) : Math.abs(Math.round(n));
+  return v.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') + 'đ';
 }
 function todayISO(): string {
   const d = new Date();
@@ -69,16 +70,22 @@ function CreateBillTab(): JSX.Element {
 
   useEffect(() => {
     void (async () => {
-      const [d, t, i, c] = await Promise.all([window.api.dossierList({}), window.api.tidConfigList({}), window.api.industryList({ active: true }), window.api.billExplainConfig()]);
-      if (d.ok && d.data) setDossiers(d.data);
-      if (t.ok && t.data) setTids(t.data);
-      if (i.ok && i.data) setIndustries(i.data);
-      if (c.ok && c.data) setCfg(c.data);
+      try { // FE53-05: 1 IPC reject KHÔNG được để unhandled + selector trống câm lặng.
+        const [d, t, i, c] = await Promise.all([window.api.dossierList({}), window.api.tidConfigList({}), window.api.industryList({ active: true }), window.api.billExplainConfig()]);
+        if (d.ok && d.data) setDossiers(d.data);
+        if (t.ok && t.data) setTids(t.data);
+        if (i.ok && i.data) setIndustries(i.data);
+        if (c.ok && c.data) setCfg(c.data);
+      } catch (err) {
+        toast.alert(err instanceof Error ? err.message : 'Không tải được dữ liệu cho trang.', 'Lỗi tải');
+      }
     })();
-  }, []);
+  }, [toast]);
 
-  const validAmounts = useMemo(() => amounts.map((a) => Number(a.replace(/[^\d]/g, ''))).filter((n) => Number.isFinite(n) && n > 0), [amounts]);
-  const total = validAmounts.reduce((s, n) => s + n, 0);
+  // FE53-04: GỬI chuỗi chữ số RAW (không qua Number ở FE → không mất chữ số); backend parse STRICT.
+  const validRawAmounts = useMemo(() => amounts.map((a) => a.replace(/[^\d]/g, '').replace(/^0+/, '')).filter((s) => s !== ''), [amounts]);
+  const validAmounts = validRawAmounts; // dùng cho đếm; tổng tính bằng BigInt bên dưới
+  const total = validRawAmounts.reduce((s, n) => s + BigInt(n), 0n);
   const dossier = dossiers.find((d) => String(d.id) === dossierId);
   const industry = industries.find((i) => String(i.id) === industryId);
 
@@ -119,7 +126,7 @@ function CreateBillTab(): JSX.Element {
     setBusy(true);
     setResult(null);
     try {
-      const res = await window.api.billExplainGenerate({ dossierId: Number(dossierId), tidId: tidId ? Number(tidId) : null, industryId: Number(industryId), billDate, targets: validAmounts });
+      const res = await window.api.billExplainGenerate({ dossierId: Number(dossierId), tidId: tidId ? Number(tidId) : null, industryId: Number(industryId), billDate, targets: validRawAmounts });
       if (res.ok && res.file) {
         setResult({ id: res.id!, file: res.file, totalBills: res.totalBills ?? 0, errors: res.errors });
         toast.success(`Đã sinh ${res.totalBills} bill.`);
@@ -370,6 +377,8 @@ function LibraryTab({ canManage }: { canManage: boolean }): JSX.Element {
       const res = await window.api.productList({ industryId: fIndustry ? Number(fIndustry) : undefined, search: search.trim() || undefined });
       if (res.ok && res.data) setRows(res.data);
       else if (res.message) toast.alert(res.message);
+    } catch (e) {
+      toast.alert(e instanceof Error ? e.message : 'Không tải được danh sách sản phẩm.', 'Lỗi tải');
     } finally {
       sel.clear();
       setLoading(false);
@@ -392,9 +401,13 @@ function LibraryTab({ canManage }: { canManage: boolean }): JSX.Element {
       const kPrice = keys.find((k) => /đơn giá|giá bán|giá/i.test(k));
       return { name: kName ? String(r[kName]) : '', unit: kUnit ? String(r[kUnit]) : '', price: kPrice ? r[kPrice] : '' };
     });
-    const res = await window.api.productImport(Number(fIndustry), rowsMapped);
-    if (res.ok) { toast.success(`Đã import ${res.imported ?? 0} SP (bỏ ${res.skipped ?? 0}).`); await reload(); }
-    else toast.alert(res.message ?? 'Import thất bại.', 'Lỗi import');
+    try {
+      const res = await window.api.productImport(Number(fIndustry), rowsMapped);
+      if (res.ok) { toast.success(`Đã import ${res.imported ?? 0} SP (bỏ ${res.skipped ?? 0}).`); await reload(); }
+      else toast.alert(res.message ?? 'Import thất bại.', 'Lỗi import');
+    } catch (err) {
+      toast.alert(err instanceof Error ? err.message : 'Import sản phẩm thất bại.', 'Lỗi import');
+    }
   }
   function exportEmpty(): void {
     void downloadTemplate([

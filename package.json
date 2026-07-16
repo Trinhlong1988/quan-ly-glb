@@ -1,6 +1,6 @@
 {
   "name": "quan-ly-glb",
-  "version": "0.1.0-phaseA",
+  "version": "0.2.54",
   "private": true,
   "description": "Quản Lý GLB — Internal Management System (IMS). G1 Phase A foundation + auth slice.",
   "workspaces": [
@@ -18,6 +18,9 @@
     "audit:protected": "node tools/audit/protected_artifacts_guard.mjs",
     "audit:deferred": "node tools/audit/deferred_guard.mjs",
     "verify": "npm run typecheck && npm run audit:protected && npm run audit:deferred && npm run test",
+    "selftest": "node tools/selftest/run-selftest-pg.mjs",
+    "selftest:bill": "node tools/selftest/run-selftest-pg.mjs 44",
+    "selftest:core": "node tools/selftest/run-selftest-pg.mjs 2 15 44",
     "db:generate": "npm run generate --workspace @glb/database",
     "db:migrate": "npm run migrate --workspace @glb/database",
     "db:seed": "npm run seed --workspace @glb/database",

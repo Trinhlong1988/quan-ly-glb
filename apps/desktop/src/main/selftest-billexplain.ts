@@ -49,6 +49,9 @@ export async function runBillExplainSelfTest(): Promise<number> {
   assert('SAI giá 0 → VALIDATION', (await be.createProduct({ industryId: indMain.id!, name: 'X', unit: 'vé', price: 0 })).error === 'VALIDATION');
   assert('SAI giá âm → VALIDATION', (await be.createProduct({ industryId: indMain.id!, name: 'X', unit: 'vé', price: -5 })).error === 'VALIDATION');
   assert('SAI giá thập phân → VALIDATION', (await be.createProduct({ industryId: indMain.id!, name: 'X', unit: 'vé', price: 1000.5 })).error === 'VALIDATION');
+  assert('BILL-04(SP): giá "-100" → VALIDATION (không đổi dấu ngầm →100)', (await be.createProduct({ industryId: indMain.id!, name: 'X', unit: 'vé', price: ('-100' as unknown as number) })).error === 'VALIDATION');
+  assert('BILL-04(SP): giá "1e3" → VALIDATION (không thành 13)', (await be.createProduct({ industryId: indMain.id!, name: 'X', unit: 'vé', price: ('1e3' as unknown as number) })).error === 'VALIDATION');
+  assert('SP giá > MAX_SAFE → VALIDATION', (await be.createProduct({ industryId: indMain.id!, name: 'X', unit: 'vé', price: ('9007199254740993' as unknown as number) })).error === 'VALIDATION');
   assert('SAI thiếu tên → VALIDATION', (await be.createProduct({ industryId: indMain.id!, name: '  ', unit: 'vé', price: 10000 })).error === 'VALIDATION');
   assert('SAI thiếu ĐVT → VALIDATION', (await be.createProduct({ industryId: indMain.id!, name: 'Y', unit: ' ', price: 10000 })).error === 'VALIDATION');
   assert('SAI ngành không tồn tại → VALIDATION', (await be.createProduct({ industryId: 999044, name: 'Z', unit: 'vé', price: 10000 })).error === 'VALIDATION');
@@ -72,17 +75,20 @@ export async function runBillExplainSelfTest(): Promise<number> {
   const imp = await be.importProducts(indMain.id!, [
     { name: 'SP Nhập A', unit: 'vé', price: 30_000 },
     { name: 'SP Nhập B', unit: 'vé', price: '40000' },
-    { name: '', unit: 'vé', price: 50_000 },
-    { name: 'SP Lỗi', unit: 'vé', price: 'abc' },
-    { name: 'SP Lỗi 2', unit: 'vé', price: 0 }
+    { name: 'SP Nhập C', unit: 'vé', price: '45.000' }, // VN-format → 45000 (import phải nhận)
+    { name: '', unit: 'vé', price: 50_000 },             // thiếu tên
+    { name: 'SP Lỗi', unit: 'vé', price: 'abc' },        // chữ
+    { name: 'SP Lỗi 2', unit: 'vé', price: 0 },          // 0
+    { name: 'SP Lỗi 3', unit: 'vé', price: '-100' }      // âm (không được thành 100)
   ]);
-  assert('import SP: imported=2 skipped=3', imp.ok === true && imp.imported === 2 && imp.skipped === 3, { imp });
+  assert('import SP: imported=3 skipped=4 (VN "45.000" nhận, "-100" loại)', imp.ok === true && imp.imported === 3 && imp.skipped === 4, { imp });
+  assert('import VN "45.000" lưu đúng 45000 (không mất/đổi số)', (await be.listProducts({ industryId: indMain.id!, search: 'SP Nhập C' })).data?.[0]?.price === 45_000);
 
   // xóa: sai mật khẩu → WRONG_PASSWORD; đúng → deleted (xóa 2 SP nhập, còn 6 SP gốc).
   const impIds = (await be.listProducts({ industryId: indMain.id!, search: 'SP Nhập' })).data!.map((x) => x.id);
   assert('sai mật khẩu xóa SP → WRONG_PASSWORD', (await be.deleteProducts(impIds, 'sai-mat-khau')).error === 'WRONG_PASSWORD');
   const del = await be.deleteProducts(impIds, PW);
-  assert('xóa 2 SP nhập ok', del.ok === true && del.deleted === 2, { del });
+  assert('xóa 3 SP nhập ok', del.ok === true && del.deleted === 3, { del });
   assert('sau xóa còn 6 SP gốc', (await be.listProducts({ industryId: indMain.id! })).data?.length === 6);
 
   // ══ (B) ENGINE money-EXACT (assert trực tiếp, không parse xlsx) ═════════════════
@@ -138,6 +144,49 @@ export async function runBillExplainSelfTest(): Promise<number> {
   assert('mix (1 khớp + 1 bất khả thi): vẫn ok, sinh 1 bill', mix.ok === true && mix.totalBills === 1, { mix });
   assert('số tiền bất khả thi vào errors[] (không crash, không sinh sai)', (mix.errors?.length ?? 0) === 1 && mix.errors?.[0]?.target === 7_777_777, { errs: mix.errors });
   if (mix.id) await be.deleteBillExplains([mix.id], PW); // dọn
+
+  // ══ (B2) ĐỐI KHÁNG audit 0.2.53 (Codex) — REPRODUCE→FIX từng mã ═══════════════════════════════
+  const baseGen = { dossierId: dos.id!, industryId: indMain.id!, billDate: '2026-07-16' };
+  // BILL-01: ngành XÓA MỀM mà còn SP → VALIDATION (trước lọt vì chỉ dựa NO_PRODUCTS).
+  const indDel = await ind.createIndustry({ name: 'BE Ngành Xóa' });
+  await be.createProduct({ industryId: indDel.id!, name: 'SP tạm', unit: 'cái', price: 10_000 });
+  await ind.deleteIndustries([indDel.id!], PW);
+  assert('BILL-01: ngành xóa mềm (còn SP) → VALIDATION', (await be.generateBills({ ...baseGen, industryId: indDel.id!, targets: [500_000] })).error === 'VALIDATION');
+  assert('BILL-01: ngành không tồn tại → VALIDATION', (await be.generateBills({ ...baseGen, industryId: 999044, targets: [500_000] })).error === 'VALIDATION');
+  // BILL-02: TID thuộc HKD KHÁC → VALIDATION.
+  const dos2 = await dsr.createDossier({ sourceId: src.id, hkdName: 'BE HKD 2', ownerName: 'Người Hai' });
+  await tidSvc.createTid({ tid: 'BE-TID-2', bank: 'VCB' });
+  const tid2 = await db.tid.findUnique({ where: { tid: 'BE-TID-2' }, select: { id: true } });
+  await db.tid.update({ where: { id: tid2!.id }, data: { dossierId: dos2.id! } });
+  assert('BILL-02: TID thuộc HKD khác → VALIDATION', (await be.generateBills({ ...baseGen, tidId: tid2!.id, targets: [500_000] })).error === 'VALIDATION');
+  // BILL-03: ngày sai → VALIDATION (không cuộn ngầm / không về hôm nay).
+  for (const bad of ['', '2026-02-31', '2026-13-01', '2026-2-3', '2026/07/16', 'hôm nay']) {
+    assert(`BILL-03: ngày "${bad}" → VALIDATION`, (await be.generateBills({ ...baseGen, billDate: bad, targets: [500_000] })).error === 'VALIDATION');
+  }
+  assert('BILL-03: ngày nhuận thật 2028-02-29 → hợp lệ', (await be.generateBills({ ...baseGen, billDate: '2028-02-29', targets: [500_000] })).ok === true);
+  // BILL-04: tiền dị dạng → VALIDATION (KHÔNG strip/mutate; cũ '-100'→100 đổi dấu ngầm).
+  for (const bad of ['-100', '1.5', '1e3', '1,000', 'abc', '  ', '0']) {
+    assert(`BILL-04: số tiền "${bad}" → VALIDATION`, (await be.generateBills({ ...baseGen, targets: [bad] })).error === 'VALIDATION');
+  }
+  // BILL-05: > MAX_SAFE (mất chữ số khi qua Number) → VALIDATION.
+  assert('BILL-05: 9007199254740993 (>2^53) → VALIDATION', (await be.generateBills({ ...baseGen, targets: ['9007199254740993'] })).error === 'VALIDATION');
+  // BILL-09: IPC dị dạng → VALIDATION, KHÔNG TypeError.
+  assert('BILL-09: targets object → VALIDATION', (await be.generateBills({ ...baseGen, targets: ({} as unknown as (number | string)[]) })).error === 'VALIDATION');
+  assert('BILL-09: targets null → VALIDATION', (await be.generateBills({ ...baseGen, targets: (null as unknown as (number | string)[]) })).error === 'VALIDATION');
+  assert('BILL-09: dossierId chuỗi → VALIDATION', (await be.generateBills({ ...baseGen, dossierId: ('1' as unknown as number), targets: [500_000] })).error === 'VALIDATION');
+
+  // ══ (B3) BILL-06 CONCURRENCY THẬT (PostgreSQL đồng thời) — số HĐ dải KHÔNG chồng ═════════════════
+  const sieuThiIdC = (await db.industry.findFirst({ where: { name: 'Siêu thị', deletedAt: null }, select: { id: true } }))!.id;
+  const K_NO = 'billexplain.billNoStart';
+  const before = Number((await db.appSetting.findUnique({ where: { key: K_NO } }))?.value) || 1;
+  const conc = await Promise.all([
+    be.generateBills({ dossierId: dos.id!, industryId: sieuThiIdC, billDate: '2026-07-16', targets: [500_000, 1_000_000, 1_500_000] }),
+    be.generateBills({ dossierId: dos.id!, industryId: sieuThiIdC, billDate: '2026-07-16', targets: [600_000, 1_100_000, 1_600_000] })
+  ]);
+  assert('BILL-06: 2 generate đồng thời đều ok (không crash)', conc.every((r) => r.ok === true), conc.map((r) => r.error));
+  const after = Number((await db.appSetting.findUnique({ where: { key: K_NO } }))?.value) || 1;
+  assert('BILL-06: số HĐ cấp ATOMIC — tăng đúng tổng dải 6 (không cấp trùng)', after === before + 6, { before, after });
+  for (const r of conc) if (r.id) await be.deleteBillExplains([r.id], PW);
 
   // ══ (D) SEED THƯ VIỆN GỐC RENBILL (Mr.Long 16/7) — 5 ngành + 199 SP Siêu thị thật ══════════════
   // seedIfEmpty ĐÃ seed lúc boot máy chủ (cờ AppSetting) → verify TRẠNG THÁI + idempotency (gọi lại = no-op).

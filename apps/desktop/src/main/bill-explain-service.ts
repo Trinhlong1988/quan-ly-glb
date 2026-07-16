@@ -104,11 +104,21 @@ async function industryNameMap(db: Db, ids: number[]): Promise<Map<number, strin
 function normName(s: string): string {
   return s.trim().replace(/\s+/g, ' ').toLowerCase();
 }
-/** Đơn giá hợp lệ: số nguyên dương (đồng VND). */
+/** Đơn giá SP hợp lệ (VND, số nguyên dương ≤ MAX_SAFE). VN-format cho phép dấu nhóm nghìn `. , ` khoảng
+ *  trắng (import "45.000"→45000) NHƯNG chặn dấu âm/mũ/chữ (`-100`/`1e3`/`abc`→null) — không đổi giá trị ngầm
+ *  (FE53-06 / lớp B62). Số truyền vào phải nguyên dương. */
 function validPrice(v: unknown): number | null {
-  const n = typeof v === 'number' ? v : Number(String(v).replace(/[^\d]/g, ''));
-  if (!Number.isFinite(n) || n <= 0 || Math.floor(n) !== n) return null;
-  return n;
+  if (typeof v === 'number') {
+    return Number.isInteger(v) && v > 0 && v <= Number.MAX_SAFE_INTEGER ? v : null;
+  }
+  if (typeof v !== 'string') return null;
+  const s = v.trim();
+  if (!s || !/^[\d.,\s]+$/.test(s)) return null; // chỉ chữ số + dấu nhóm; loại '-'/'e'/chữ
+  const digits = s.replace(/[.,\s]/g, '');
+  if (!/^\d+$/.test(digits)) return null;
+  const b = BigInt(digits);
+  if (b <= 0n || b > BigInt(Number.MAX_SAFE_INTEGER)) return null;
+  return Number(b);
 }
 
 export async function listProducts(filter: ProductFilter = {}): Promise<{ ok: boolean; data?: ProductDto[]; error?: string; message?: string }> {
@@ -281,19 +291,40 @@ export interface GenerateBillsResult {
   errors?: { index: number; target: number; error: string }[];
 }
 
-function parseTargets(list: (number | string)[]): number[] {
+const MAX_TARGET = Number.MAX_SAFE_INTEGER; // engine sinh dòng dùng Number → chặn tại MAX_SAFE để KHÔNG mất chữ số
+const BILLNO_LOCK = 561053; // pg advisory lock cấp DẢI số hóa đơn Bill giải trình (BILL-06 chống race/TOCTOU)
+
+/** Parse danh sách số tiền STRICT — KHÔNG strip/mutate (BILL-04/05/09):
+ *  - number: nguyên, >0, ≤ MAX_SAFE. - string: `^\d+$` (chỉ chữ số, không dấu/mũ/chữ), >0, ≤ MAX_SAFE.
+ *  Trả `{targets, invalid}`. `invalid < 0` = input KHÔNG phải mảng (IPC dị dạng). `invalid > 0` = số phần tử sai. */
+function parseTargets(list: unknown): { targets: number[]; invalid: number } {
+  if (!Array.isArray(list)) return { targets: [], invalid: -1 };
   const out: number[] = [];
+  let invalid = 0;
+  const MAX = BigInt(MAX_TARGET);
   for (const raw of list) {
-    const n = typeof raw === 'number' ? raw : Number(String(raw).replace(/[^\d]/g, ''));
-    if (Number.isFinite(n) && n > 0 && Math.floor(n) === n) out.push(n);
+    let b: bigint | null = null;
+    if (typeof raw === 'number') {
+      if (Number.isInteger(raw) && raw > 0 && raw <= MAX_TARGET) b = BigInt(raw);
+    } else if (typeof raw === 'string') {
+      const s = raw.trim();
+      if (/^\d+$/.test(s)) { const v = BigInt(s); if (v > 0n && v <= MAX) b = v; }
+    }
+    if (b === null) { invalid++; continue; }
+    out.push(Number(b));
   }
-  return out;
+  return { targets: out, invalid };
 }
-function parseISODate(s: string): { year: number; month: number; day: number } {
-  const m = String(s || '').match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-  if (m) return { year: +m[1], month: +m[2], day: +m[3] };
-  const d = new Date();
-  return { year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate() };
+/** Ngày STRICT `yyyy-mm-dd` CÓ THẬT (round-trip UTC) — `2026-02-31`/`2026-13-01`/rỗng/dị dạng → null (lớp B65,
+ *  chống cuộn ngầm sang tháng khác / rơi về hôm nay). KHÔNG bao giờ trả ngày mặc định. */
+function parseStrictYmd(s: unknown): { y: number; m: number; d: number } | null {
+  if (typeof s !== 'string') return null;
+  const mm = s.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!mm) return null;
+  const y = +mm[1], m = +mm[2], d = +mm[3];
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) return null;
+  return { y, m, d };
 }
 
 export async function generateBills(input: GenerateBillsInput): Promise<GenerateBillsResult> {
@@ -301,16 +332,37 @@ export async function generateBills(input: GenerateBillsInput): Promise<Generate
   if (!g.ok) return g;
   const { db, user } = g;
 
+  // BILL-09: guard runtime input (IPC dị dạng → VALIDATION, KHÔNG TypeError).
+  if (!input || typeof input !== 'object') return { ok: false, error: 'VALIDATION', message: 'Dữ liệu không hợp lệ.' };
+  if (typeof input.dossierId !== 'number' || !Number.isInteger(input.dossierId)) return { ok: false, error: 'VALIDATION', message: 'Chọn Hộ Kinh Doanh.' };
+  if (typeof input.industryId !== 'number' || !Number.isInteger(input.industryId)) return { ok: false, error: 'VALIDATION', message: 'Chọn nhóm ngành nghề.' };
+
   const dossier = await db.dossier.findUnique({ where: { id: input.dossierId } });
   if (!dossier || dossier.deletedAt) return { ok: false, error: 'VALIDATION', message: 'Hồ sơ HKD không tồn tại.' };
-  if (!input.industryId) return { ok: false, error: 'VALIDATION', message: 'Chọn nhóm ngành nghề.' };
+
+  // BILL-01: ngành PHẢI tồn tại + còn sống (trước đây chỉ dựa NO_PRODUCTS → ngành xóa mềm còn SP vẫn lọt).
+  const industry = await db.industry.findUnique({ where: { id: input.industryId }, select: { id: true, deletedAt: true } });
+  if (!industry || industry.deletedAt) return { ok: false, error: 'VALIDATION', message: 'Nhóm ngành nghề không tồn tại.' };
+
+  // BILL-02: TID (nếu chọn) tồn tại + KHÔNG thuộc HKD khác (tracking nhất quán; cho phép TID chưa gắn HKD).
   let tidCode: string | null = null;
   if (input.tidId != null) {
-    const tid = await db.tid.findUnique({ where: { id: input.tidId }, select: { id: true, tid: true, deletedAt: true } });
+    if (typeof input.tidId !== 'number' || !Number.isInteger(input.tidId)) return { ok: false, error: 'VALIDATION', message: 'TID không hợp lệ.' };
+    const tid = await db.tid.findUnique({ where: { id: input.tidId }, select: { id: true, tid: true, deletedAt: true, dossierId: true } });
     if (!tid || tid.deletedAt) return { ok: false, error: 'VALIDATION', message: 'TID không tồn tại.' };
+    if (tid.dossierId != null && tid.dossierId !== input.dossierId) return { ok: false, error: 'VALIDATION', message: 'TID không thuộc Hộ Kinh Doanh đã chọn.' };
     tidCode = tid.tid;
   }
-  const targets = parseTargets(input.targets);
+
+  // BILL-03: ngày STRICT (không cuộn ngầm / không rơi về hôm nay).
+  const dd = parseStrictYmd(input.billDate);
+  if (!dd) return { ok: false, error: 'VALIDATION', message: 'Ngày hóa đơn không hợp lệ (yyyy-mm-dd, ngày có thật).' };
+
+  // BILL-04/05/09: số tiền STRICT — không strip/mutate, không mảng → VALIDATION.
+  const { targets, invalid } = parseTargets(input.targets);
+  if (invalid !== 0) {
+    return { ok: false, error: 'VALIDATION', message: invalid < 0 ? 'Danh sách số tiền không hợp lệ.' : `${invalid} số tiền không hợp lệ (số nguyên dương ≤ ${MAX_TARGET}, không âm/thập phân/chữ).` };
+  }
   if (!targets.length) return { ok: false, error: 'VALIDATION', message: 'Chưa có số tiền hợp lệ nào để sinh bill.' };
 
   const products = await db.product.findMany({ where: { industryId: input.industryId, status: 'ACTIVE', deletedAt: null }, select: { name: true, unit: true, price: true } });
@@ -319,9 +371,20 @@ export async function generateBills(input: GenerateBillsInput): Promise<Generate
 
   const templatePath = await resolveTemplatePath(db);
   const outputDir = await resolveOutputDir(db);
-  const d = parseISODate(input.billDate);
-  const billNoStart = Number(await getSetting(db, K_BILL_NO)) || 1;
-  const billNoYear = Number(await getSetting(db, K_BILL_YEAR)) || d.year;
+  const billNoYear = Number(await getSetting(db, K_BILL_YEAR)) || dd.y;
+
+  // BILL-06 (race/TOCTOU): cấp DẢI số hóa đơn ATOMIC dưới advisory lock trong 1 transaction — 2 request đồng
+  // thời nhận dải KHÔNG chồng nhau (đọc-tăng-ghi không tách rời). Dùng tx.appSetting trực tiếp (không qua helper
+  // để khớp kiểu client-trong-tx). Reserve targets.length số (dôi vài số nếu vài target không khớp = vô hại).
+  const billNoStart = await db.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(`SELECT pg_advisory_xact_lock(${BILLNO_LOCK})`);
+    const row = await tx.appSetting.findUnique({ where: { key: K_BILL_NO } });
+    const cur = Number(row?.value) || 1;
+    const next = String(cur + targets.length);
+    await tx.appSetting.upsert({ where: { key: K_BILL_NO }, update: { value: next }, create: { key: K_BILL_NO, value: next } });
+    await tx.appSetting.upsert({ where: { key: K_BILL_YEAR }, update: { value: String(billNoYear) }, create: { key: K_BILL_YEAR, value: String(billNoYear) } });
+    return cur;
+  });
 
   let result;
   try {
@@ -331,7 +394,7 @@ export async function generateBills(input: GenerateBillsInput): Promise<Generate
         hkd_name: dossier.hkdName || '',
         hkd_address: dossier.hkdAddress || '',
         seller: dossier.ownerName || '', // người bán = chủ hộ (chốt Mr.Long 16/7)
-        day: d.day, month: d.month, year: d.year
+        day: dd.d, month: dd.m, year: dd.y
       },
       billNoStart, billNoYear
     });
@@ -339,24 +402,21 @@ export async function generateBills(input: GenerateBillsInput): Promise<Generate
     return { ok: false, error: 'RENDER_FAILED', message: e instanceof Error ? e.message : 'Sinh bill thất bại.' };
   }
 
-  // Tăng số HĐ kế tiếp (theo số bill thực sinh) để lần sau không trùng số.
-  await setSetting(db, K_BILL_NO, String(billNoStart + result.totalBills));
-  await setSetting(db, K_BILL_YEAR, String(billNoYear));
-
-  const totalAmount = targets.reduce((s, t) => s + t, 0);
+  // BILL-05: tổng = Σ BigInt (KHÔNG qua Number → không mất chữ số dù nhiều số lớn).
+  const totalAmount = targets.reduce((s, t) => s + BigInt(t), 0n);
   const rec = await db.$transaction(async (tx) => {
     const code = await nextCode(BILL_CODE_PREFIX, tx);
     return tx.billExplain.create({
       data: {
         code, dossierId: input.dossierId, tidId: input.tidId ?? null, industryId: input.industryId,
-        billDate: new Date(input.billDate + 'T00:00:00'), totalAmount: BigInt(totalAmount),
+        billDate: new Date(Date.UTC(dd.y, dd.m - 1, dd.d)), totalAmount,
         billCount: result.totalBills, filePath: result.file, createdBy: user.id
       }
     });
   });
   await writeAudit(db, {
     actorUserId: user.id, action: 'BILLEXPLAIN_CREATED', targetType: 'BillExplain', targetId: String(rec.id),
-    after: auditSnapshot({ code: rec.code, dossierId: input.dossierId, tidCode, industryId: input.industryId, billCount: result.totalBills, totalAmount, file: result.file })
+    after: auditSnapshot({ code: rec.code, dossierId: input.dossierId, tidCode, industryId: input.industryId, billCount: result.totalBills, totalAmount: totalAmount.toString(), file: result.file })
   });
   return { ok: true, id: rec.id, file: result.file, totalBills: result.totalBills, errors: result.errors };
 }

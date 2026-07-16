@@ -73,12 +73,17 @@ export function ExportRequestPanel({ user, kind }: { user: AuthUser; kind: 'POS'
 
   async function reload(): Promise<void> {
     setLoading(true);
-    const res = await window.api.exportReqList({ kind, status: statusFilter || undefined });
-    if (res.ok && res.data) {
-      setRows(res.data);
-      setKpi(res.kpi ?? null);
-    } else if (res.message) toast.alert(res.message);
-    setLoading(false);
+    try { // FE53-02: list reject KHÔNG được để loading kẹt + unhandled.
+      const res = await window.api.exportReqList({ kind, status: statusFilter || undefined });
+      if (res.ok && res.data) {
+        setRows(res.data);
+        setKpi(res.kpi ?? null);
+      } else if (res.message) toast.alert(res.message);
+    } catch (e) {
+      toast.alert(e instanceof Error ? e.message : 'Không tải được danh sách phiếu.', 'Lỗi tải');
+    } finally {
+      setLoading(false);
+    }
   }
   useEffect(() => {
     void reload();
@@ -93,11 +98,16 @@ export function ExportRequestPanel({ user, kind }: { user: AuthUser; kind: 'POS'
   const { pageRows, bar } = usePagination(filteredRows, 50);
 
   async function doCancel(r: ExportRequestDto): Promise<void> {
-    const res = await window.api.exportReqCancel(r.id);
-    if (res.ok) toast.success(`Đã hủy phiếu yêu cầu xuất kho ${r.code ?? r.id}`);
-    else toast.alert(res.message ?? 'Không hủy được phiếu.', 'Hủy thất bại');
-    setCancelTarget(null);
-    await reload();
+    try { // FE53-02: cancel reject KHÔNG được để dialog kẹt mở.
+      const res = await window.api.exportReqCancel(r.id);
+      if (res.ok) toast.success(`Đã hủy phiếu yêu cầu xuất kho ${r.code ?? r.id}`);
+      else toast.alert(res.message ?? 'Không hủy được phiếu.', 'Hủy thất bại');
+    } catch (e) {
+      toast.alert(e instanceof Error ? e.message : 'Không hủy được phiếu.', 'Hủy thất bại');
+    } finally {
+      setCancelTarget(null);
+      await reload();
+    }
   }
 
   return (
@@ -139,7 +149,7 @@ export function ExportRequestPanel({ user, kind }: { user: AuthUser; kind: 'POS'
           ], onChange: setHandoverFilter }
         ]}
         onApply={reload}
-        onReset={() => { setStatusFilter(''); setHandoverFilter(''); setSearch(''); setTimeout(reload, 0); }}
+        onReset={() => { setStatusFilter(''); setHandoverFilter(''); setSearch(''); /* FE53-03: reload tự chạy qua useEffect([statusFilter]); search/handover lọc client-side — không setTimeout(reload) đọc filter cũ */ }}
       />
 
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">

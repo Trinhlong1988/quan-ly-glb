@@ -65,31 +65,38 @@ function ImportModal({ entityKey, label, onClose, onImported }: { entityKey: str
     setFileName(file.name);
     setBusy(true);
     resetState();
-    const parsed = await parseWorkbook(file);
-    if (!parsed.ok || !parsed.rows) {
+    try { // FE53-01: parse/dry-run reject KHÔNG được để busy kẹt vĩnh viễn + unhandled rejection.
+      const parsed = await parseWorkbook(file);
+      if (!parsed.ok || !parsed.rows) { toast.alert(parsed.error ?? 'Không đọc được file.', 'Lỗi đọc Excel'); return; }
+      const dry = await window.api.importDryRun(entityKey, parsed.rows);
+      if (!dry.ok) { toast.alert(dry.message ?? 'Không kiểm tra được file.', 'Không xem trước được'); return; }
+      setRows(parsed.rows);
+      setPreview({ results: dry.results ?? [], validCount: dry.summary?.validCount ?? 0, invalidCount: dry.summary?.invalidCount ?? 0 });
+    } catch (err) {
+      toast.alert(err instanceof Error ? err.message : 'Lỗi xử lý file nhập.', 'Lỗi nhập');
+    } finally {
       setBusy(false);
-      return toast.alert(parsed.error ?? 'Không đọc được file.', 'Lỗi đọc Excel');
     }
-    const dry = await window.api.importDryRun(entityKey, parsed.rows);
-    setBusy(false);
-    if (!dry.ok) return toast.alert(dry.message ?? 'Không kiểm tra được file.', 'Không xem trước được');
-    setRows(parsed.rows);
-    setPreview({ results: dry.results ?? [], validCount: dry.summary?.validCount ?? 0, invalidCount: dry.summary?.invalidCount ?? 0 });
   }
 
   // Bước 2: người dùng xác nhận → NHẬP THẬT (chỉ khi có ≥1 dòng hợp lệ).
   async function handleConfirm(): Promise<void> {
     if (!rows || !preview || preview.validCount === 0) return;
     setBusy(true);
-    const res = await window.api.importRun(entityKey, rows);
-    setBusy(false);
-    if (!res.ok) return toast.alert(res.message ?? 'Nhập thất bại.', 'Không nhập được');
-    setRunResults(res.results ?? []);
-    setRunSummary(res.summary ?? { created: 0, skipped: 0 });
-    setPreview(null);
-    if ((res.summary?.created ?? 0) > 0) {
-      toast.success(`Đã nhập ${res.summary?.created} dòng ${label}.`);
-      onImported();
+    try { // FE53-01: importRun reject KHÔNG được để busy kẹt.
+      const res = await window.api.importRun(entityKey, rows);
+      if (!res.ok) { toast.alert(res.message ?? 'Nhập thất bại.', 'Không nhập được'); return; }
+      setRunResults(res.results ?? []);
+      setRunSummary(res.summary ?? { created: 0, skipped: 0 });
+      setPreview(null);
+      if ((res.summary?.created ?? 0) > 0) {
+        toast.success(`Đã nhập ${res.summary?.created} dòng ${label}.`);
+        onImported();
+      }
+    } catch (err) {
+      toast.alert(err instanceof Error ? err.message : 'Nhập dữ liệu thất bại.', 'Không nhập được');
+    } finally {
+      setBusy(false);
     }
   }
 
