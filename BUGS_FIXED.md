@@ -22,7 +22,8 @@ Counter: B = 80 (+ hardening P1-01/04/07, P2-02/03 đóng). PF (process-failure)
 - **Fix:** `diskInfo()` gate `if (!isServerRole()) return null` — chỉ statfs khi máy đang chạy CHÍNH LÀ máy chủ PG; máy trạm trả disk*=null (thành thật "không đo được"), `dbBytes` (pg_database_size) vẫn đúng.
 - **Regression:** ST16 (STORAGE) `#3: máy trạm → disk*=null + over=false` + `dbBytes>0 qua pg_database_size`. **Bug class:** như B78 — đo tài nguyên MÁY CHỦ phải chạy TRÊN máy chủ, không suy từ máy trạm.
 
-### B80 — Icon app trên taskbar KHÔNG đồng bộ icon bản chuẩn [FIXED — chờ PV] — Mr.Long ("icon app mở ra ở taskbar không đồng bộ icon bản chuẩn")
+### B80 — Icon app trên taskbar KHÔNG đồng bộ icon bản chuẩn [FIXED ✓PV 16/7] — Mr.Long ("icon app mở ra ở taskbar không đồng bộ icon bản chuẩn")
+> **PRODUCTION PASS 16/7:** Mr.Long cài 0.2.58 thật → xác nhận "icon taskbar đúng chuẩn rồi" (≥1 cài thật + nghiệm thu mắt). `setAppUserModelId` khớp appId là fix đúng.
 - **Phát hiện bởi:** Mr.Long — mở app, icon taskbar không khớp icon shield chuẩn.
 - **Nguyên nhân:** `createWindow` tạo `BrowserWindow` **không set `icon`** + app **không gọi `app.setAppUserModelId(appId)`**. Trên Windows, thiếu AppUserModelID → tiến trình đang chạy KHÔNG liên kết với shortcut đã cài (appId `com.globeway.glb`) → taskbar hiện icon mặc định/nhóm sai.
 - **Fix:** (1) `app.setAppUserModelId('com.globeway.glb')` (khớp appId electron-builder) đặt SỚM trước tạo cửa sổ (win32). (2) `BrowserWindow` set `icon` = `build/icon.ico` (packaged: `process.resourcesPath/icon.ico` — thêm vào `extraResources`; dev: đọc trực tiếp). **CHỜ Production Validation:** icon taskbar chỉ nghiệm thu được khi CÀI bản mới + nhìn taskbar thật (không tự test bằng script). **Bug class:** app Electron Windows PHẢI setAppUserModelId khớp appId bộ cài để taskbar/pin dùng đúng icon + liên kết shortcut.
