@@ -18,11 +18,21 @@ function ok(name: string, cond: boolean, extra?: unknown): void {
 }
 const PW = 'Admin@123456';
 
-/** Tạo file ảnh nguồn tạm để thử đính kèm (nội dung không quan trọng, chỉ cần đuôi hợp lệ). */
+/** Magic-bytes THẬT theo đuôi (P2-02: storeAttachment nay xác thực chữ ký, không tin đuôi). */
+function magicFor(ext: string, tag: string): Buffer {
+  const filler = Buffer.from(`-glb-selftest-${tag}`);
+  const e = ext.toLowerCase();
+  if (e === '.png') return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), filler]);
+  if (e === '.jpg' || e === '.jpeg') return Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), filler]);
+  if (e === '.pdf') return Buffer.concat([Buffer.from('%PDF-1.7\n'), filler]);
+  return filler;
+}
+
+/** Tạo file ảnh nguồn tạm để thử đính kèm — nội dung có magic-bytes hợp lệ theo đuôi (P2-02). */
 function mkSrc(ext: string, tag: string): string {
   const dir = mkdtempSync(join(tmpdir(), 'glb-src-'));
   const p = join(dir, `nguon_${tag}${ext}`);
-  writeFileSync(p, Buffer.from(`fake-image-${tag}-${ext}`));
+  writeFileSync(p, magicFor(ext, tag));
   return p;
 }
 

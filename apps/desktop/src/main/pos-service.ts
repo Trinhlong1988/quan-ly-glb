@@ -245,6 +245,12 @@ export interface CreatePosInput {
   occurredAt?: string | null;
 }
 
+/** P1-07: chuẩn hóa serial để so GẦN-TRÙNG (bỏ khoảng trắng + viết hoa) — dùng cho guard chống trùng, KHÔNG
+ * đổi giá trị serial lưu trữ (serial thật giữ nguyên hoa/thường như người dùng nhập). */
+export function normalizeSerial(s: string): string {
+  return String(s ?? '').replace(/\s+/g, '').toUpperCase();
+}
+
 /** POS_MANAGE — register a new device (IN_STOCK) + STOCK_IN event + audit. */
 export async function createPos(input: CreatePosInput): Promise<MutationResult> {
   const g = await requirePermission('POS_MANAGE', { action: 'POS_CREATED', targetType: 'PosDevice' });
@@ -255,6 +261,17 @@ export async function createPos(input: CreatePosInput): Promise<MutationResult> 
   if (!serial) return { ok: false, error: 'VALIDATION', message: 'Serial máy POS bắt buộc.' };
   const dup = await db.posDevice.findUnique({ where: { serial } });
   if (dup) return { ok: false, error: 'DUPLICATE', message: `Serial POS "${serial}" đã tồn tại.` };
+  // P1-07 (hardening 16/7): chặn serial GẦN TRÙNG — chỉ khác hoa/thường hoặc khoảng trắng (vd "ABC1"/"abc1"/
+  // " ABC1 ") gần như chắc là gõ lệch cùng 1 máy → tránh 2 record cho 1 thiết bị. KHÔNG đổi serial đã lưu, KHÔNG
+  // migration; chỉ so chuẩn-hóa với máy ĐANG SỐNG (deleted_at IS NULL) để không chặn hồi sinh máy đã xóa mềm.
+  const normalized = normalizeSerial(serial);
+  const near = await db.$queryRaw<{ serial: string }[]>`
+    SELECT serial FROM pos_devices
+    WHERE deleted_at IS NULL AND upper(regexp_replace(serial, '[[:space:]]+', '', 'g')) = ${normalized}
+    LIMIT 1`;
+  if (Array.isArray(near) && near.length > 0) {
+    return { ok: false, error: 'DUPLICATE', message: `Serial POS gần trùng đã tồn tại: "${near[0].serial}" (chỉ khác hoa/thường hoặc khoảng trắng).` };
+  }
 
   const occurredAt = parseWhen(input.occurredAt);
   const created = await db.$transaction(async (tx) => {

@@ -396,7 +396,10 @@ export async function generateBills(input: GenerateBillsInput): Promise<Generate
 
   // BILL-06 (race/TOCTOU): cấp DẢI số hóa đơn ATOMIC dưới advisory lock trong 1 transaction — 2 request đồng
   // thời nhận dải KHÔNG chồng nhau (đọc-tăng-ghi không tách rời). Dùng tx.appSetting trực tiếp (không qua helper
-  // để khớp kiểu client-trong-tx). Reserve targets.length số (dôi vài số nếu vài target không khớp = vô hại).
+  // để khớp kiểu client-trong-tx). Reserve targets.length số.
+  // ── QUYẾT ĐỊNH Mr.Long 16/7 (Info-B): SỐ HĐ ĐƯỢC PHÉP NHẢY QUÃNG — target nào sinh lỗi/không khớp thì bỏ số
+  // đó, KHÔNG tái sử dụng, KHÔNG dồn số. Ưu tiên cấp-số-atomic-chống-trùng hơn liền-mạch. ĐÂY LÀ HÀNH VI ĐÚNG,
+  // audit KHÔNG được coi "số nhảy quãng" là bug hay đổi sang cấp-lại-số-thừa.
   const billNoStart = await db.$transaction(async (tx) => {
     await tx.$executeRawUnsafe(`SELECT pg_advisory_xact_lock(${BILLNO_LOCK})`);
     const row = await tx.appSetting.findUnique({ where: { key: K_BILL_NO } });

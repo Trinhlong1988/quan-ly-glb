@@ -94,6 +94,9 @@ export async function runGposSelfTest(): Promise<number> {
   await posSvc.updatePos(posC.id!, { bankId: appBank.id! }); // "Sửa máy chọn app" trước khi gán TID
   const dupSerial = await posSvc.createPos({ serial });
   assert('duplicate serial blocked with specific message', dupSerial.ok === false && dupSerial.error === 'DUPLICATE' && !!dupSerial.message?.includes(serial), { message: dupSerial.message });
+  // P1-07: serial GẦN TRÙNG (chỉ khác hoa/thường + khoảng trắng) cũng phải bị chặn (chống tạo 2 record 1 máy).
+  const nearDup = await posSvc.createPos({ serial: '  sn-selftest-001  ' });
+  assert('P1-07: serial gần trùng (hoa/thường/space) bị chặn', nearDup.ok === false && nearDup.error === 'DUPLICATE' && !!nearDup.message?.includes('gần trùng'), { message: nearDup.message });
 
   const dep = await posSvc.deployPos(serial, { customerId: c1.id!, fromWarehouseId: whG.id!, occurredAt: '2026-07-01T09:00:00Z', note: 'giao khách' });
   assert('deploy ok', dep.ok === true, dep.error);

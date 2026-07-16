@@ -179,6 +179,9 @@ async function approveOne(db: Db, user: AuthUser, requestId: number, decisionNot
     return { ok: false, error: 'NOT_FOUND', message: 'Yêu cầu hủy không tồn tại.' };
   // Phân vai (permission-based). Nhánh TỪ CHỐI CHÍNH SÁCH (self/elevated) VẪN ghi audit (R_AUDIT_003).
   // KHÁC với "đã xử lý/race thua" (ALREADY_DECIDED) — đó là no-op tương tranh, không ghi audit.
+  // ── QUYẾT ĐỊNH Mr.Long 16/7 (P1-09): quyền người-yêu-cầu tính LÚC DUYỆT (đọc live), KHÔNG snapshot lúc tạo.
+  // Nghĩa là nếu quyền requester bị đổi giữa tạo→duyệt thì theo quyền MỚI. Đây là hành vi CHỌN, audit không coi
+  // là lỗ hổng "cần snapshot". (Phương án snapshot lúc-tạo đã cân nhắc và BỎ — Mr.Long chọn giữ đơn giản.)
   const requesterPerms = await userPermSet(db, req.requestedBy);
   const requesterIsApprover = requesterPerms.has(APPROVE); // requester là Manager/Admin
   const approverElevated = hasPermission(user, ELEVATED); // approver là Admin

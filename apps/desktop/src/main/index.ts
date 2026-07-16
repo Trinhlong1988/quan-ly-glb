@@ -4,7 +4,7 @@ import './bigint-json.js'; // R48 — PHẢI import ĐẦU TIÊN: dạy JSON.str
 import { join } from 'node:path';
 import { app, BrowserWindow, ipcMain, screen, shell } from 'electron';
 import { initDb } from './db.js';
-import { registerIpc } from './ipc.js';
+import { registerIpc, setDbReady } from './ipc.js';
 import * as auth from './auth-service.js';
 
 const isDev = !app.isPackaged;
@@ -104,9 +104,12 @@ app.whenReady().then(async () => {
   }
   try {
     await initDb();
+    setDbReady(true); // P1-01: DB OK → mở khóa IPC dữ liệu
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error('[main] DB init failed:', err);
+    // P1-01 FAIL-CLOSED: KHÔNG set dbReady → mọi IPC dữ liệu bị chặn; chỉ serverConfig/window/update dùng được
+    // để người dùng sửa cấu hình kết nối. App vẫn mở (hiện màn cấu hình máy chủ) thay vì chạy trên DB hỏng.
   }
   registerIpc();
 

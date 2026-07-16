@@ -2,11 +2,29 @@
 // + checksum. Ảnh vào <userData>/uploads/<loại>/<id>/. Thay ảnh cũ → chuyển uploads/_trash (R_AUDIT_TRAIL).
 import { app } from 'electron';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, copyFileSync, renameSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, renameSync, readFileSync, writeFileSync, statSync } from 'node:fs';
 import { join, extname, basename, resolve, sep } from 'node:path';
 
 const ALLOWED_EXT = new Set(['.png', '.jpg', '.jpeg', '.pdf']);
 const MIME: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.pdf': 'application/pdf' };
+
+// P2-02 (hardening 16/7): xác thực NỘI DUNG bằng magic-bytes, KHÔNG tin đuôi file — chống đổi tên .exe→.png rồi
+// nhét vào kho ảnh. Trả họ định dạng thật ('png'|'jpg'|'pdf') hay null nếu không khớp chữ ký nào.
+export function sniffFileType(buf: Buffer): 'png' | 'jpg' | 'pdf' | null {
+  if (buf.length >= 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47 &&
+      buf[4] === 0x0d && buf[5] === 0x0a && buf[6] === 0x1a && buf[7] === 0x0a) return 'png';
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'jpg';
+  if (buf.length >= 5 && buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46 && buf[4] === 0x2d) return 'pdf'; // %PDF-
+  return null;
+}
+
+/** Đuôi file thuộc họ định dạng nào (để so với magic-bytes). */
+function extFamily(ext: string): 'png' | 'jpg' | 'pdf' | null {
+  if (ext === '.png') return 'png';
+  if (ext === '.jpg' || ext === '.jpeg') return 'jpg';
+  if (ext === '.pdf') return 'pdf';
+  return null;
+}
 
 export type AttachKind = 'receiveAccount' | 'dossier';
 export type AttachSide = 'cccdFront' | 'cccdBack' | 'dkkdFront' | 'dkkdBack';
@@ -55,6 +73,13 @@ export function storeAttachment(kind: AttachKind, id: number, side: AttachSide, 
   const ext = extname(srcAbsPath).toLowerCase();
   if (!ALLOWED_EXT.has(ext)) return { ok: false, error: 'BAD_EXT', message: 'Chỉ nhận ảnh PNG, JPG hoặc PDF.' };
 
+  // P2-02: đọc buffer nguồn 1 lần → xác thực magic-bytes khớp đuôi TRƯỚC khi nhận (không tin đuôi file).
+  const buf = readFileSync(srcAbsPath);
+  const sniff = sniffFileType(buf);
+  if (sniff === null || sniff !== extFamily(ext)) {
+    return { ok: false, error: 'BAD_CONTENT', message: 'Nội dung file không đúng định dạng PNG/JPG/PDF (đuôi file không khớp nội dung).' };
+  }
+
   const dir = join(uploadsRoot(), kind, String(id));
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   const fileName = `${SIDE_PREFIX[side]} - ${sanitize(ownerName)}${ext}`;
@@ -66,9 +91,8 @@ export function storeAttachment(kind: AttachKind, id: number, side: AttachSide, 
     if (!existsSync(trash)) mkdirSync(trash, { recursive: true });
     renameSync(destAbs, join(trash, `${Date.now()}_${fileName}`));
   }
-  copyFileSync(srcAbsPath, destAbs);
+  writeFileSync(destAbs, buf); // ghi từ buffer đã xác thực (thay copyFileSync — tránh đọc đĩa 2 lần)
 
-  const buf = readFileSync(destAbs);
   const checksum = createHash('sha256').update(buf).digest('hex');
   const relPath = join(kind, String(id), fileName).replace(/\\/g, '/');
   return { ok: true, file: { relPath, fileName: basename(srcAbsPath), checksum, size: buf.length } };

@@ -1,6 +1,6 @@
 {
   "name": "quan-ly-glb",
-  "version": "0.2.56",
+  "version": "0.2.57",
   "private": true,
   "description": "Quản Lý GLB — Internal Management System (IMS). G1 Phase A foundation + auth slice.",
   "workspaces": [
