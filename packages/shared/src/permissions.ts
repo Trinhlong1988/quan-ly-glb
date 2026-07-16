@@ -129,7 +129,12 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: 'EXPORT_REQUEST_APPROVE', name: 'Duyệt / từ chối yêu cầu xuất kho (chọn seri/TID + trừ tồn kho)', group: 'Yêu cầu xuất kho' },
   // ── Nhóm E — Bảo trì & Bộ nhớ (chống tràn, dọn dẹp, backup định kỳ) ──
   { code: 'STORAGE_VIEW', name: 'Xem tình trạng bộ nhớ & bảo trì', group: 'Bảo trì hệ thống' },
-  { code: 'STORAGE_CLEANUP', name: 'Dọn dẹp bộ nhớ (lịch sử + thùng rác) & backup thủ công', group: 'Bảo trì hệ thống' }
+  { code: 'STORAGE_CLEANUP', name: 'Dọn dẹp bộ nhớ (lịch sử + thùng rác) & backup thủ công', group: 'Bảo trì hệ thống' },
+  // ── Bill giải trình (Mr.Long 16/7) — sinh hóa đơn giải trình số tiền + thư viện sản phẩm theo ngành ──
+  { code: 'BILLEXPLAIN_VIEW', name: 'Xem Bill giải trình (theo dõi + thư viện sản phẩm)', group: 'Bill giải trình' },
+  { code: 'BILLEXPLAIN_CREATE', name: 'Sinh bill giải trình + xuất file', group: 'Bill giải trình' },
+  { code: 'BILLEXPLAIN_DELETE', name: 'Xóa bill giải trình đã sinh (theo dõi)', group: 'Bill giải trình' },
+  { code: 'PRODUCT_MANAGE', name: 'Quản lý thư viện sản phẩm (thêm/sửa/xóa/import)', group: 'Bill giải trình' }
 ];
 
 export const PERMISSION_CODES = PERMISSIONS.map((p) => p.code);
@@ -232,14 +237,21 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     'STORAGE_VIEW',
     'STORAGE_CLEANUP',
     // PHASE 1: managers = người duyệt yêu cầu xuất kho (VIEW/CREATE cấp qua vòng lặp chung bên dưới).
-    'EXPORT_REQUEST_APPROVE'
+    'EXPORT_REQUEST_APPROVE',
+    // Bill giải trình (Mr.Long 16/7): managers sinh bill + quản lý thư viện sản phẩm.
+    'BILLEXPLAIN_VIEW',
+    'BILLEXPLAIN_CREATE',
+    'BILLEXPLAIN_DELETE',
+    'PRODUCT_MANAGE'
   ],
   D_MANAGER: ['DASHBOARD_VIEW', 'USER_READ', 'ROLE_READ', 'CUSTOMER_VIEW', 'POS_VIEW', 'TID_VIEW', 'CONFIG_BANK_VIEW', 'CONFIG_WAREHOUSE_VIEW', 'CONFIG_HANDOVER_VIEW', 'DEVICE_SALE_VIEW'],
   ACCOUNTANT: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW', 'CONFIG_BANK_VIEW', 'CONFIG_FEE_VIEW', 'CONFIG_FEE_MANAGE', 'CONFIG_HANDOVER_VIEW', 'CONFIG_RCV_ACCT_VIEW', 'CONFIG_RCV_ACCT_MANAGE', 'CONFIG_DOSSIER_VIEW', 'CONFIG_DOSSIER_MANAGE', 'REVENUE_VIEW', 'REVENUE_MANAGE', 'DEBT_VIEW', 'DEBT_SETTLE', 'DEBT_CLASSIFY', 'BILL_CANCEL_REQUEST',
     // #3: kế toán = vai tiền chính → bán máy/TID + thu nợ mua thiết bị.
     'DEVICE_SALE_VIEW', 'DEVICE_SALE_MANAGE',
     // PHASE H2-core: kế toán = vai chính thu-chi (quỹ + phiếu thu/chi + báo cáo dòng tiền).
-    'FUND_VIEW', 'FUND_CREATE', 'FUND_UPDATE', 'FUND_DELETE', 'CASHENTRY_VIEW', 'CASHENTRY_CREATE', 'CASHENTRY_CANCEL'],
+    'FUND_VIEW', 'FUND_CREATE', 'FUND_UPDATE', 'FUND_DELETE', 'CASHENTRY_VIEW', 'CASHENTRY_CREATE', 'CASHENTRY_CANCEL',
+    // Bill giải trình (Mr.Long 16/7): kế toán = vai chính giải trình số tiền → sinh bill + thư viện SP.
+    'BILLEXPLAIN_VIEW', 'BILLEXPLAIN_CREATE', 'BILLEXPLAIN_DELETE', 'PRODUCT_MANAGE'],
   TECHNICIAN: ['DASHBOARD_VIEW', 'POS_VIEW'],
   SUPPORT: ['DASHBOARD_VIEW', 'CUSTOMER_VIEW'],
   WAREHOUSE: ['DASHBOARD_VIEW', 'POS_VIEW', 'TID_VIEW', 'CONFIG_POS_SUPPLY_VIEW', 'CONFIG_POS_SUPPLY_MANAGE', 'CONFIG_TID_VIEW', 'CONFIG_TID_MANAGE',

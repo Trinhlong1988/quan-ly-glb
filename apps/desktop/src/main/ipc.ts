@@ -29,6 +29,7 @@ import * as dossierSvc from './dossier-service.js';
 import * as tidCfgSvc from './tid-config-service.js';
 import * as tidSellFeeSvc from './tid-sell-fee-service.js';
 import * as industryCfgSvc from './industry-service.js';
+import * as billExplainSvc from './bill-explain-service.js';
 import * as cashCatSvc from './cash-category-service.js';
 import * as fundSvc from './fund-service.js';
 import * as cashEntrySvc from './cash-entry-service.js';
@@ -355,6 +356,39 @@ export function registerIpc(): void {
   ipcMain.handle('industry:create', async (_e, input: industryCfgSvc.CreateIndustryInput) => industryCfgSvc.createIndustry(input));
   ipcMain.handle('industry:update', async (_e, args: { id: number; input: industryCfgSvc.UpdateIndustryInput }) => industryCfgSvc.updateIndustry(args.id, args.input));
   ipcMain.handle('industry:delete', async (_e, args: { ids: number[]; password: string }) => industryCfgSvc.deleteIndustries(args.ids, args.password));
+
+  // ── Bill giải trình (Mr.Long 16/7): thư viện SP + sinh bill + theo dõi + template ──
+  ipcMain.handle('product:list', async (_e, filter: billExplainSvc.ProductFilter) => billExplainSvc.listProducts(filter));
+  ipcMain.handle('product:create', async (_e, input: billExplainSvc.CreateProductInput) => billExplainSvc.createProduct(input));
+  ipcMain.handle('product:update', async (_e, args: { id: number; input: billExplainSvc.UpdateProductInput }) => billExplainSvc.updateProduct(args.id, args.input));
+  ipcMain.handle('product:delete', async (_e, args: { ids: number[]; password: string }) => billExplainSvc.deleteProducts(args.ids, args.password));
+  ipcMain.handle('product:import', async (_e, args: { industryId: number; rows: { name?: string; unit?: string; price?: unknown }[] }) => billExplainSvc.importProducts(args.industryId, args.rows));
+  ipcMain.handle('billExplain:generate', async (_e, input: billExplainSvc.GenerateBillsInput) => {
+    const res = await billExplainSvc.generateBills(input);
+    // Cho phép mở file bill vừa sinh qua file:open (allowlist exportedFiles chống RCE — xem file:open bên dưới).
+    if (res.ok && res.file) exportedFiles.add(res.file);
+    return res;
+  });
+  ipcMain.handle('billExplain:list', async (_e, filter: billExplainSvc.BillExplainFilter) => billExplainSvc.listBillExplains(filter));
+  ipcMain.handle('billExplain:delete', async (_e, args: { ids: number[]; password: string }) => billExplainSvc.deleteBillExplains(args.ids, args.password));
+  ipcMain.handle('billExplain:config', async () => billExplainSvc.getBillExplainConfig());
+  ipcMain.handle('billExplain:setConfig', async (_e, input: billExplainSvc.SetBillExplainConfigInput) => billExplainSvc.setBillExplainConfig(input));
+  ipcMain.handle('billExplain:importTemplate', async () => billExplainSvc.importInvoiceTemplate());
+  ipcMain.handle('billExplain:resetTemplate', async () => billExplainSvc.resetInvoiceTemplate());
+  ipcMain.handle('billExplain:exportTemplate', async () => billExplainSvc.exportInvoiceTemplate());
+  ipcMain.handle('billExplain:openFile', async (_e, id: number) => {
+    const res = await billExplainSvc.getBillFilePath(id);
+    if (!res.ok || !res.path) return res;
+    const err = await shell.openPath(res.path);
+    return err ? { ok: false, message: 'Không mở được file: ' + err } : { ok: true };
+  });
+  // Mở THƯ MỤC chứa bill (đường dẫn từ cấu hình DB — an toàn RCE). shell.openPath mở thư mục bằng Explorer.
+  ipcMain.handle('billExplain:openFolder', async () => {
+    const res = await billExplainSvc.getBillOutputDir();
+    if (!res.ok || !res.path) return res;
+    const err = await shell.openPath(res.path);
+    return err ? { ok: false, message: 'Không mở được thư mục: ' + err } : { ok: true };
+  });
 
   // ── PHASE H1 — Thu–Chi: danh mục thu/chi ──
   ipcMain.handle('cashCategory:list', async (_e, filter: cashCatSvc.CashCategoryFilter) => cashCatSvc.listCashCategories(filter));

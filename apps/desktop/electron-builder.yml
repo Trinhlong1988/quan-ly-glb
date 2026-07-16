@@ -28,6 +28,15 @@ files:
 
 # pg + Prisma client đều pure-JS (không native .node) → KHÔNG cần asarUnpack.
 
+# Bill giải trình — template hóa đơn MẶC ĐỊNH đóng gói kèm app (đọc lúc runtime qua process.resourcesPath).
+# Tên ASCII (billexplain-template.xlsx) tránh lỗi phi-ASCII khi gói. User có thể import mẫu riêng (lưu userData).
+extraResources:
+  - from: build/billexplain-template.xlsx
+    to: billexplain-template.xlsx
+  # Thư viện SP gốc từ renbill (5 ngành + 199 SP Siêu thị thật) — seed 1 lần/DB lúc boot máy chủ.
+  - from: build/billexplain-seed.json
+    to: billexplain-seed.json
+
 win:
   target:
     - nsis

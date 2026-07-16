@@ -281,7 +281,7 @@ export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
             <col className="w-40" />
             <col className="w-24" />
           </colgroup>
-          <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+          <thead className="sticky top-0 z-20 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>
               <SelectAllCell ids={rows.map((r) => r.id)} sel={sel} />
               <th className="px-3 py-3">Mã bill</th>
@@ -347,7 +347,7 @@ export function ApprovalPage({ user }: { user: AuthUser }): JSX.Element {
                 <col className="w-40" />
                 <col className="w-24" />
               </colgroup>
-              <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+              <thead className="sticky top-0 z-20 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
                 <tr>
                   <SelectAllCell ids={entityRows.filter((r) => r.canApprove).map((r) => r.id)} sel={selEnt} />
                   <th className="px-3 py-3">Loại</th>

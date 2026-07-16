@@ -178,7 +178,7 @@ function ResultTable({ rows }: { rows: { rowIndex: number; ok: boolean; detail: 
   return (
     <div className="max-h-64 overflow-auto rounded-lg border border-line">
       <table className="w-full text-sm">
-        <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+        <thead className="sticky top-0 z-20 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
           <tr>
             <th className="w-16 px-3 py-2">Dòng</th>
             <th className="w-24 px-3 py-2">Kết quả</th>

@@ -64,7 +64,8 @@ const ACTION_LABEL: Record<AuditAction, string> = {
   MESSAGE_SENT: 'Gửi tin nhắn',
   TRANSACTION_CREATED: 'Tạo giao dịch', TRANSACTION_UPDATED: 'Sửa giao dịch', TRANSACTION_DELETED: 'Xóa giao dịch', DEBT_SETTLED: 'Tất toán công nợ',
   BILL_CANCEL_REQUESTED: 'Yêu cầu hủy bill', BILL_CANCEL_APPROVED: 'Duyệt hủy bill', BILL_CANCEL_REJECTED: 'Từ chối hủy bill',
-  EXPORT_REQUEST_CREATED: 'Tạo yêu cầu xuất kho', EXPORT_REQUEST_APPROVED: 'Duyệt yêu cầu xuất kho', EXPORT_REQUEST_REJECTED: 'Từ chối yêu cầu xuất kho', EXPORT_REQUEST_CANCELLED: 'Hủy yêu cầu xuất kho', EXPORT_REQ_PERMS_GRANTED: 'Cấp quyền yêu cầu xuất kho'
+  EXPORT_REQUEST_CREATED: 'Tạo yêu cầu xuất kho', EXPORT_REQUEST_APPROVED: 'Duyệt yêu cầu xuất kho', EXPORT_REQUEST_REJECTED: 'Từ chối yêu cầu xuất kho', EXPORT_REQUEST_CANCELLED: 'Hủy yêu cầu xuất kho', EXPORT_REQ_PERMS_GRANTED: 'Cấp quyền yêu cầu xuất kho',
+  BILLEXPLAIN_PERMS_GRANTED: 'Cấp quyền Bill giải trình', PRODUCT_CREATED: 'Tạo sản phẩm', PRODUCT_UPDATED: 'Sửa sản phẩm', PRODUCT_DELETED: 'Xóa sản phẩm', PRODUCT_IMPORTED: 'Import sản phẩm', BILLEXPLAIN_CREATED: 'Sinh bill giải trình', BILLEXPLAIN_DELETED: 'Xóa bill giải trình'
 };
 // Danh sách filter = KHÓA của map (1 nguồn sự thật duy nhất — không còn mảng ACTIONS lệch pha), sắp theo nhãn Việt.
 const ACTIONS = (Object.keys(ACTION_LABEL) as AuditAction[]).sort((a, b) => ACTION_LABEL[a].localeCompare(ACTION_LABEL[b], 'vi'));
@@ -169,7 +170,7 @@ export function AuditPage(): JSX.Element {
 
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm list-scroll">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs uppercase tracking-wide text-slate-500">
+          <thead className="sticky top-0 z-20 bg-[#F8FAFC] text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-3">Ngày</th>
               <th className="px-4 py-3">Giờ</th>

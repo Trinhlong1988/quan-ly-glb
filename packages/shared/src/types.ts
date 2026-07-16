@@ -212,6 +212,14 @@ export type AuditAction =
   | 'EXPORT_REQUEST_REJECTED'
   | 'EXPORT_REQUEST_CANCELLED'
   | 'EXPORT_REQ_PERMS_GRANTED'
+  // ── Bill giải trình (Mr.Long 16/7) — thư viện sản phẩm + sinh bill ──
+  | 'BILLEXPLAIN_PERMS_GRANTED'
+  | 'PRODUCT_CREATED'
+  | 'PRODUCT_UPDATED'
+  | 'PRODUCT_DELETED'
+  | 'PRODUCT_IMPORTED'
+  | 'BILLEXPLAIN_CREATED'
+  | 'BILLEXPLAIN_DELETED'
   // ── Nhóm E — Bảo trì & Bộ nhớ ──
   | 'AUTO_BACKUP'
   | 'AUTO_BACKUP_FAILED'

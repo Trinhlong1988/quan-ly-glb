@@ -1516,6 +1516,91 @@ export interface AuditQuery {
   limit?: number;
 }
 
+// ── Bill giải trình (Mr.Long 16/7) ──
+export interface ProductDto {
+  id: number;
+  industryId: number;
+  industryName: string | null;
+  name: string;
+  unit: string;
+  price: number;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface ProductFilter {
+  industryId?: number;
+  search?: string;
+  status?: string;
+  fromDate?: string;
+  toDate?: string;
+}
+export interface CreateProductInput {
+  industryId: number;
+  name: string;
+  unit: string;
+  price: number;
+  status?: string;
+}
+export interface UpdateProductInput {
+  industryId?: number;
+  name?: string;
+  unit?: string;
+  price?: number;
+  status?: string;
+  expectedUpdatedAt?: string | null;
+}
+export interface BillExplainDto {
+  id: number;
+  code: string | null;
+  dossierId: number;
+  dossierName: string | null;
+  tidId: number | null;
+  tidCode: string | null;
+  industryId: number;
+  industryName: string | null;
+  billDate: string;
+  totalAmount: number;
+  billCount: number;
+  filePath: string;
+  createdByName: string | null;
+  createdAt: string;
+}
+export interface BillExplainFilter {
+  dossierId?: number;
+  industryId?: number;
+  fromDate?: string;
+  toDate?: string;
+}
+export interface GenerateBillsInput {
+  dossierId: number;
+  tidId?: number | null;
+  industryId: number;
+  billDate: string;
+  targets: (number | string)[];
+}
+export interface GenerateBillsResult {
+  ok: boolean;
+  error?: string;
+  message?: string;
+  id?: number;
+  file?: string;
+  totalBills?: number;
+  errors?: { index: number; target: number; error: string }[];
+}
+export interface BillExplainConfigDto {
+  outputDir: string;
+  billNoStart: number;
+  billNoYear: number;
+  templatePath: string;
+  templateIsCustom: boolean;
+}
+export interface SetBillExplainConfigInput {
+  outputDir?: string;
+  billNoStart?: number;
+  billNoYear?: number;
+}
+
 export interface GlbApi {
   login(username: string, password: string, remember: boolean, force?: boolean): Promise<LoginOutcome>;
   me(): Promise<AuthUser | null>;
@@ -1729,6 +1814,23 @@ export interface GlbApi {
   industryCreate(input: CreateIndustryInput): Promise<MutationOutcome>;
   industryUpdate(id: number, input: UpdateIndustryInput): Promise<MutationOutcome>;
   industryDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
+
+  // ── Bill giải trình (Mr.Long 16/7) ──
+  productList(filter: ProductFilter): Promise<ListResult<ProductDto>>;
+  productCreate(input: CreateProductInput): Promise<MutationOutcome>;
+  productUpdate(id: number, input: UpdateProductInput): Promise<MutationOutcome>;
+  productDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
+  productImport(industryId: number, rows: { name?: string; unit?: string; price?: unknown }[]): Promise<MutationOutcome & { imported?: number; skipped?: number }>;
+  billExplainGenerate(input: GenerateBillsInput): Promise<GenerateBillsResult>;
+  billExplainList(filter: BillExplainFilter): Promise<ListResult<BillExplainDto>>;
+  billExplainDelete(ids: number[], password: string): Promise<BulkDeleteOutcome>;
+  billExplainConfig(): Promise<{ ok: boolean; data?: BillExplainConfigDto; error?: string; message?: string }>;
+  billExplainSetConfig(input: SetBillExplainConfigInput): Promise<MutationOutcome>;
+  billExplainImportTemplate(): Promise<{ ok: boolean; error?: string; message?: string; templatePath?: string }>;
+  billExplainResetTemplate(): Promise<MutationOutcome>;
+  billExplainExportTemplate(): Promise<{ ok: boolean; error?: string; message?: string; file?: string }>;
+  billExplainOpenFile(id: number): Promise<{ ok: boolean; error?: string; message?: string }>;
+  billExplainOpenFolder(): Promise<{ ok: boolean; error?: string; message?: string }>;
 
   // ── PHASE H1 — Thu–Chi: danh mục thu/chi (§A/§B) ──
   cashCategoryList(filter: CashCategoryFilter): Promise<ListResult<CashCategoryDto>>;

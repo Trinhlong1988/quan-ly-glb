@@ -441,6 +441,13 @@ app.whenReady().then(async () => {
     app.exit(code);
     return;
   }
+  // Bill giải trình (Mr.Long 16/7): thư viện SP CRUD/import + sinh bill money-exact + theo dõi + guard quyền.
+  if (process.env['GLB_SELFTEST'] === '44') {
+    const { runBillExplainSelfTest } = await import('./selftest-billexplain.js');
+    const code = await runBillExplainSelfTest();
+    app.exit(code);
+    return;
+  }
 
   await createWindow();
   startHousekeeping();

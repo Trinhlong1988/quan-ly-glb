@@ -144,7 +144,7 @@ export function ExportRequestPanel({ user, kind }: { user: AuthUser; kind: 'POS'
 
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm">
         <table className="w-full text-[13px]">
-          <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs uppercase tracking-wide text-slate-500">
+          <thead className="sticky top-0 z-20 bg-[#F8FAFC] text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-3">Mã phiếu</th>
               <th className="px-4 py-3">Hình thức</th>

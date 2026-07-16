@@ -21,7 +21,7 @@ import {
   type NormalizedServerConfig
 } from '@glb/shared';
 import { hashPassword } from '@glb/business-rules';
-import { backfillEmployeeCodes } from './code-service.js';
+import { backfillEmployeeCodes, nextCode } from './code-service.js';
 import { writeAudit } from './audit.js';
 
 const ADMIN_USERNAME = 'adminroot';
@@ -57,6 +57,79 @@ export async function grantIndustryPermsToExistingRoles(db: Db): Promise<number>
     }
   }
   return granted;
+}
+
+// ── Bill giải trình (Mr.Long 16/7) — db-evolution: cấp quyền cho role CŨ trên production ────────────
+// ADMIN tự nhận qua R_ADMIN_SUPERUSER mỗi boot; helper này cấp cho MANAGER + ACCOUNTANT (khớp DEFAULT).
+const BILLEXPLAIN_PERM_CODES = ['BILLEXPLAIN_VIEW', 'BILLEXPLAIN_CREATE', 'BILLEXPLAIN_DELETE', 'PRODUCT_MANAGE'];
+const BILLEXPLAIN_TARGET_ROLES = ['MANAGER', 'ACCOUNTANT'];
+const BILLEXPLAIN_GRANT_FLAG = 'seed.billExplainPermsGrantedV1';
+
+export async function grantBillExplainPermsToExistingRoles(db: Db): Promise<number> {
+  const perms = await db.permission.findMany({ where: { code: { in: BILLEXPLAIN_PERM_CODES } }, select: { id: true } });
+  let granted = 0;
+  for (const roleCode of BILLEXPLAIN_TARGET_ROLES) {
+    const role = await db.role.findUnique({ where: { code: roleCode }, select: { id: true } });
+    if (!role) continue;
+    for (const perm of perms) {
+      const existing = await db.rolePermission.findUnique({
+        where: { roleId_permissionId: { roleId: role.id, permissionId: perm.id } }
+      });
+      if (existing) continue;
+      await db.rolePermission.create({ data: { roleId: role.id, permissionId: perm.id } });
+      granted++;
+    }
+  }
+  return granted;
+}
+
+// ── Seed THƯ VIỆN SẢN PHẨM gốc từ renbill (Mr.Long 16/7 "import luôn thư viện đã có làm gốc") ──────
+// File bundled build/billexplain-seed.json (extraResources): 5 ngành renbill + 199 SP Siêu thị (giá/ĐVT
+// THẬT từ DANH MỤC SẢN PHẨM SIÊU THỊ.xlsx). Idempotent: ngành match theo TÊN (không tạo trùng); SP chỉ
+// seed khi ngành đang RỖNG (không đè dữ liệu người dùng đã nhập). Cờ guard ở seedIfEmpty (1 lần/DB).
+const BILLEXPLAIN_LIBRARY_FLAG = 'seed.billExplainLibraryV1';
+interface BillExplainSeed {
+  industries?: string[];
+  products?: Record<string, { name: string; unit: string; price: number }[]>;
+}
+function billExplainSeedPath(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, 'billexplain-seed.json')
+    : join(app.getAppPath(), 'build', 'billexplain-seed.json');
+}
+export async function seedBillExplainLibrary(db: Db): Promise<{ industries: number; products: number }> {
+  const p = billExplainSeedPath();
+  if (!existsSync(p)) return { industries: 0, products: 0 };
+  let seed: BillExplainSeed;
+  try { seed = JSON.parse(readFileSync(p, 'utf8')) as BillExplainSeed; } catch { return { industries: 0, products: 0 }; }
+
+  let indCount = 0, prodCount = 0;
+  const nameToId = new Map<string, number>();
+  for (const name of seed.industries ?? []) {
+    const existing = await db.industry.findFirst({ where: { name, deletedAt: null }, select: { id: true } });
+    if (existing) { nameToId.set(name, existing.id); continue; }
+    const code = await nextCode('NGH', db);
+    const created = await db.industry.create({ data: { code, name, active: true } });
+    nameToId.set(name, created.id);
+    indCount++;
+  }
+  for (const [indName, prods] of Object.entries(seed.products ?? {})) {
+    let indId = nameToId.get(indName);
+    if (indId === undefined) {
+      const found = await db.industry.findFirst({ where: { name: indName, deletedAt: null }, select: { id: true } });
+      if (!found) continue;
+      indId = found.id;
+    }
+    const have = await db.product.count({ where: { industryId: indId, deletedAt: null } });
+    if (have > 0) continue; // ngành đã có SP → KHÔNG seed đè
+    const data = (prods ?? [])
+      .filter((pr) => pr.name && pr.unit && Number.isFinite(pr.price) && pr.price > 0)
+      .map((pr) => ({ industryId: indId!, name: pr.name, unit: pr.unit, price: Math.round(pr.price), status: 'ACTIVE' }));
+    if (!data.length) continue;
+    await db.product.createMany({ data });
+    prodCount += data.length;
+  }
+  return { industries: indCount, products: prodCount };
 }
 
 // ── R27 (§C kho) — Danh mục Kho: bug class "DB tiến hóa" (H7) ─────────────────
@@ -729,6 +802,49 @@ export async function seedIfEmpty(db: Db): Promise<void> {
     }
   }
 
+  // db-evolution (Bill giải trình): cấp quyền BILLEXPLAIN_*/PRODUCT_MANAGE cho role CŨ (MANAGER/ACCOUNTANT)
+  // 1 lần/DB (cờ AppSetting). ADMIN đã tự nhận qua R_ADMIN_SUPERUSER. DB mới → role vừa tạo đã có → grant=0.
+  {
+    const flag = await db.appSetting.findUnique({ where: { key: BILLEXPLAIN_GRANT_FLAG } });
+    if (!flag) {
+      const granted = await grantBillExplainPermsToExistingRoles(db);
+      await db.appSetting.upsert({
+        where: { key: BILLEXPLAIN_GRANT_FLAG },
+        update: {},
+        create: { key: BILLEXPLAIN_GRANT_FLAG, value: new Date().toISOString() }
+      });
+      if (granted > 0) {
+        await writeAudit(db, {
+          actorUserId: null,
+          action: 'BILLEXPLAIN_PERMS_GRANTED',
+          targetType: 'System',
+          after: { granted, targetRoles: BILLEXPLAIN_TARGET_ROLES, perms: BILLEXPLAIN_PERM_CODES }
+        });
+      }
+    }
+  }
+
+  // seed THƯ VIỆN SẢN PHẨM gốc từ renbill 1 lần/DB (cờ AppSetting). Idempotent + non-destructive (chỉ
+  // seed SP khi ngành rỗng). Lỗi đọc file/seed KHÔNG làm chết boot (nuốt, log audit khi có thay đổi).
+  {
+    const flag = await db.appSetting.findUnique({ where: { key: BILLEXPLAIN_LIBRARY_FLAG } });
+    if (!flag) {
+      try {
+        const r = await seedBillExplainLibrary(db);
+        await db.appSetting.upsert({
+          where: { key: BILLEXPLAIN_LIBRARY_FLAG },
+          update: {},
+          create: { key: BILLEXPLAIN_LIBRARY_FLAG, value: new Date().toISOString() }
+        });
+        if (r.industries > 0 || r.products > 0) {
+          await writeAudit(db, { actorUserId: null, action: 'PRODUCT_IMPORTED', targetType: 'System', after: { seededFromRenbill: true, ...r } });
+        }
+      } catch {
+        // nuốt lỗi seed thư viện (offline-safe) — không đặt cờ để lần boot sau thử lại.
+      }
+    }
+  }
+
   // db-evolution (PHASE H1): cấp quyền thu-chi (CASHCAT_*) cho role CŨ 1 lần/DB (cờ AppSetting).
   // DB mới → role vừa tạo đã có quyền qua DEFAULT_ROLE_PERMISSIONS → grant=0 (no-op an toàn).
   {
@@ -893,7 +1009,44 @@ export async function ensureCriticalSchema(db: Db): Promise<void> {
     // FOR UPDATE → 2 transaction song song có thể chèn trùng kỳ giá). Partial (WHERE deleted_at IS NULL) để
     // không phá soft-delete (bài học B05). Idempotent (IF NOT EXISTS).
     `CREATE UNIQUE INDEX IF NOT EXISTS "fee_rates_active_uq" ON "fee_rates" ("partner_id", "card_type_id", "effective_from") WHERE "deleted_at" IS NULL`,
-    `CREATE UNIQUE INDEX IF NOT EXISTS "fee_sell_quotes_active_uq" ON "fee_sell_quotes" ("partner_id", "card_type_id", "fee_type_id", "effective_from") WHERE "deleted_at" IS NULL`
+    `CREATE UNIQUE INDEX IF NOT EXISTS "fee_sell_quotes_active_uq" ON "fee_sell_quotes" ("partner_id", "card_type_id", "fee_type_id", "effective_from") WHERE "deleted_at" IS NULL`,
+    // Bill giải trình (Mr.Long 16/7): bảng MỚI (products + bill_explains). Client .exe KHÔNG có migrate engine
+    // (Prisma 7) → self-heal CREATE TABLE IF NOT EXISTS mỗi boot (server migrate qua CLI; fresh DB đã có → no-op).
+    // updated_at có DEFAULT CURRENT_TIMESTAMP (phòng raw-insert); Prisma vẫn set @updatedAt mỗi write.
+    `CREATE TABLE IF NOT EXISTS "products" (
+      "id" SERIAL NOT NULL,
+      "industry_id" INTEGER NOT NULL,
+      "name" TEXT NOT NULL,
+      "unit" TEXT NOT NULL,
+      "price" INTEGER NOT NULL,
+      "status" TEXT NOT NULL DEFAULT 'ACTIVE',
+      "created_by" INTEGER,
+      "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updated_by" INTEGER,
+      "updated_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "deleted_at" TIMESTAMPTZ(3),
+      "deleted_by" INTEGER,
+      CONSTRAINT "products_pkey" PRIMARY KEY ("id")
+    )`,
+    `CREATE INDEX IF NOT EXISTS "products_industry_id_idx" ON "products" ("industry_id")`,
+    `CREATE TABLE IF NOT EXISTS "bill_explains" (
+      "id" SERIAL NOT NULL,
+      "code" TEXT,
+      "dossier_id" INTEGER NOT NULL,
+      "tid_id" INTEGER,
+      "industry_id" INTEGER NOT NULL,
+      "bill_date" TIMESTAMPTZ(3) NOT NULL,
+      "total_amount" BIGINT NOT NULL,
+      "bill_count" INTEGER NOT NULL,
+      "file_path" TEXT NOT NULL,
+      "created_by" INTEGER,
+      "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "deleted_at" TIMESTAMPTZ(3),
+      "deleted_by" INTEGER,
+      CONSTRAINT "bill_explains_pkey" PRIMARY KEY ("id")
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "bill_explains_code_key" ON "bill_explains" ("code")`,
+    `CREATE INDEX IF NOT EXISTS "bill_explains_dossier_id_idx" ON "bill_explains" ("dossier_id")`
   ];
   for (const s of stmts) {
     try {

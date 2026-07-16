@@ -269,7 +269,7 @@ function DeviceListTab({ user, initialSearch }: { user: AuthUser; initialSearch?
       <StaleBanner domain="Pos" onReload={reload} className="mb-2" />
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm list-scroll">
         <table className="w-full text-[13px]">
-          <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs uppercase tracking-wide text-slate-500">
+          <thead className="sticky top-0 z-20 bg-[#F8FAFC] text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
               {canCancelReq && <SelectAllCell ids={pageRows.map((r) => r.id)} sel={sel} />}
               <th className="px-4 py-3">Serial</th>

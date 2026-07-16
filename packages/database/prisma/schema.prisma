@@ -1005,6 +1005,48 @@ model Industry {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Bill giải trình (Mr.Long 16/7) — sinh hóa đơn giải trình số tiền + thư viện sản phẩm theo ngành nghề.
+// Product = thư viện SP (tên/đơn vị/đơn giá) gắn 1 ngành (industryId). BillExplain = mỗi lần sinh (tab theo dõi).
+// Khuôn F10: soft-delete (deletedAt) + audit (createdBy/updatedBy). Đơn giá SP = Int (VND, < 2,15 tỷ đủ cho 1 SP).
+// ─────────────────────────────────────────────────────────────────────────────
+model Product {
+  id         Int       @id @default(autoincrement())
+  industryId Int       @map("industry_id") // ngành nghề (Industry) — mỗi nhóm ngành có thư viện SP riêng
+  name       String
+  unit       String // đơn vị tính (cái/kg/lít/vé…)
+  price      Int // đơn giá VND nguyên
+  status     String    @default("ACTIVE") // ACTIVE | INACTIVE
+  createdBy  Int?      @map("created_by")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedBy  Int?      @map("updated_by")
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt  DateTime? @map("deleted_at") @db.Timestamptz(3)
+  deletedBy  Int?      @map("deleted_by")
+
+  @@index([industryId])
+  @@map("products")
+}
+
+model BillExplain {
+  id          Int       @id @default(autoincrement())
+  code        String?   @unique // BE00001… (CodeCounter prefix 'BE')
+  dossierId   Int       @map("dossier_id") // Hồ sơ HKD (nguồn tên/địa chỉ/chủ hộ điền vào hóa đơn)
+  tidId       Int?      @map("tid_id") // TID chỉ để THEO DÕI (không in lên hóa đơn — chốt Mr.Long 16/7)
+  industryId  Int       @map("industry_id")
+  billDate    DateTime  @map("bill_date") @db.Timestamptz(3)
+  totalAmount BigInt    @map("total_amount") // tổng tiền các bill trong lần sinh (VND, có thể lớn → BigInt)
+  billCount   Int       @map("bill_count")
+  filePath    String    @map("file_path") // đường dẫn file .xlsx đã xuất
+  createdBy   Int?      @map("created_by")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(3)
+  deletedBy   Int?      @map("deleted_by")
+
+  @@index([dossierId])
+  @@map("bill_explains")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // PHASE H1 — Thu–Chi (Cashflow). CashCategory = danh mục khoản THU/CHI (§A/§B spec H).
 // affectsPnl = cột chống double-count lợi nhuận accrual (§5). BẤT BIẾN (I#12): sourceKind nội bộ
 // (DEBT_*/DEPOSIT/DEPOSIT_REFUND/ADVANCE/DEVICE_DEPOSIT/FUND_TRANSFER) CẤM affectsPnl=true —

@@ -1,0 +1,1009 @@
+{
+ "_source": "globeway-renbill DANH MỤC SẢN PHẨM SIÊU THỊ.xlsx (Mr.Long 16/7 - làm gốc)",
+ "industries": [
+  "Vận tải",
+  "Thu hộ",
+  "Gas",
+  "Siêu thị",
+  "Cà phê"
+ ],
+ "products": {
+  "Siêu thị": [
+   {
+    "name": "Sữa tươi th true milk 1l",
+    "unit": "Hộp",
+    "price": 32447
+   },
+   {
+    "name": "Sữa tắm lifebuoy 850g",
+    "unit": "Chai",
+    "price": 161729
+   },
+   {
+    "name": "Măng khô",
+    "unit": "Kg",
+    "price": 44000
+   },
+   {
+    "name": "Sữa tắm lifebuoy 850g",
+    "unit": "Chai",
+    "price": 164549
+   },
+   {
+    "name": "Khoai tây đà lạt (loại 1)",
+    "unit": "Kg",
+    "price": 165000
+   },
+   {
+    "name": "Dầu gội sunsilk 650g",
+    "unit": "Chai",
+    "price": 138697
+   },
+   {
+    "name": "Đậu xanh nguyên hạt",
+    "unit": "Kg",
+    "price": 186000
+   },
+   {
+    "name": "Cải chíp",
+    "unit": "Kg",
+    "price": 86000
+   },
+   {
+    "name": "Nước mắm nam ngư 750ml",
+    "unit": "Chai",
+    "price": 45000
+   },
+   {
+    "name": "Tương ớt chinsu 250g",
+    "unit": "Chai",
+    "price": 15000
+   },
+   {
+    "name": "Đậu xanh nguyên hạt (loại 1)",
+    "unit": "Kg",
+    "price": 348000
+   },
+   {
+    "name": "Bầu sao",
+    "unit": "Kg",
+    "price": 137000
+   },
+   {
+    "name": "Thanh long ruột đỏ",
+    "unit": "Kg",
+    "price": 449000
+   },
+   {
+    "name": "Sữa đặc ông thọ",
+    "unit": "Lon",
+    "price": 33237
+   },
+   {
+    "name": "Lê nam phi",
+    "unit": "Kg",
+    "price": 345000
+   },
+   {
+    "name": "Nồi cơm điện sharp",
+    "unit": "Cái",
+    "price": 850000
+   },
+   {
+    "name": "Nước rửa chén sunlight 3.6kg",
+    "unit": "Can",
+    "price": 115000
+   },
+   {
+    "name": "Kẹo alpenliebe",
+    "unit": "Gói",
+    "price": 18856
+   },
+   {
+    "name": "Dầu gội sunsilk 650g",
+    "unit": "Chai",
+    "price": 132502
+   },
+   {
+    "name": "Snack poca",
+    "unit": "Gói",
+    "price": 7967
+   },
+   {
+    "name": "Ức gà",
+    "unit": "Kg",
+    "price": 359000
+   },
+   {
+    "name": "Mì hảo hảo tôm chua cay",
+    "unit": "Gói",
+    "price": 9008
+   },
+   {
+    "name": "Cà rốt",
+    "unit": "Kg",
+    "price": 333000
+   },
+   {
+    "name": "Nước ngọt coca-cola 330ml",
+    "unit": "Lon",
+    "price": 12846
+   },
+   {
+    "name": "Sữa tươi th true milk 1l",
+    "unit": "Hộp",
+    "price": 37105
+   },
+   {
+    "name": "Dầu gội sunsilk 650g",
+    "unit": "Chai",
+    "price": 132327
+   },
+   {
+    "name": "Hạt điều rang muối",
+    "unit": "Kg",
+    "price": 69000
+   },
+   {
+    "name": "Mận hậu",
+    "unit": "Kg",
+    "price": 481000
+   },
+   {
+    "name": "Cải bắp",
+    "unit": "Kg",
+    "price": 388000
+   },
+   {
+    "name": "Dầu ăn simply 2l",
+    "unit": "Chai",
+    "price": 94783
+   },
+   {
+    "name": "Sữa tươi th true milk 1l",
+    "unit": "Hộp",
+    "price": 36000
+   },
+   {
+    "name": "Mì hảo hảo tôm chua cay",
+    "unit": "Gói",
+    "price": 8757
+   },
+   {
+    "name": "Dầu gội sunsilk 650g",
+    "unit": "Chai",
+    "price": 137120
+   },
+   {
+    "name": "Gạo st25",
+    "unit": "Kg",
+    "price": 237000
+   },
+   {
+    "name": "Kẹo alpenliebe",
+    "unit": "Gói",
+    "price": 20000
+   },
+   {
+    "name": "Dầu gội sunsilk 650g",
+    "unit": "Chai",
+    "price": 129011
+   },
+   {
+    "name": "Dầu gội sunsilk 650g",
+    "unit": "Chai",
+    "price": 135441
+   },
+   {
+    "name": "Bầu sao (loại 1)",
+    "unit": "Kg",
+    "price": 333000
+   },
+   {
+    "name": "Chảo chống dính sunhouse",
+    "unit": "Cái",
+    "price": 180000
+   },
+   {
+    "name": "Nước ngọt coca-cola 330ml",
+    "unit": "Lon",
+    "price": 18680
+   },
+   {
+    "name": "Sữa đặc ông thọ",
+    "unit": "Lon",
+    "price": 25740
+   },
+   {
+    "name": "Snack poca",
+    "unit": "Gói",
+    "price": 8699
+   },
+   {
+    "name": "Dầu gội sunsilk 650g",
+    "unit": "Chai",
+    "price": 130024
+   },
+   {
+    "name": "Dầu ăn simply 2l",
+    "unit": "Chai",
+    "price": 96296
+   },
+   {
+    "name": "Gạo st25 (loại 1)",
+    "unit": "Kg",
+    "price": 206000
+   },
+   {
+    "name": "Dầu gội sunsilk 650g",
+    "unit": "Chai",
+    "price": 136108
+   },
+   {
+    "name": "Khoai tây đà lạt",
+    "unit": "Kg",
+    "price": 77000
+   },
+   {
+    "name": "Nước ngọt coca-cola 330ml",
+    "unit": "Lon",
+    "price": 10929
+   },
+   {
+    "name": "Mì hảo hảo tôm chua cay",
+    "unit": "Gói",
+    "price": 2871
+   },
+   {
+    "name": "Gạo lứt đỏ (loại 1)",
+    "unit": "Kg",
+    "price": 344000
+   },
+   {
+    "name": "Snack poca",
+    "unit": "Gói",
+    "price": 9737
+   },
+   {
+    "name": "Cà chua vietgap",
+    "unit": "Kg",
+    "price": 194000
+   },
+   {
+    "name": "Dầu gội sunsilk 650g",
+    "unit": "Chai",
+    "price": 135978
+   },
+   {
+    "name": "Dầu gội sunsilk 650g",
+    "unit": "Chai",
+    "price": 136095
+   },
+   {
+    "name": "Nước ngọt coca-cola 330ml",
+    "unit": "Lon",
+    "price": 13813
+   },
+   {
+    "name": "Snack poca",
+    "unit": "Gói",
+    "price": 5294
+   },
+   {
+    "name": "Tương ớt chinsu 250g",
+    "unit": "Chai",
+    "price": 18841
+   },
+   {
+    "name": "Dầu ăn simply 2l",
+    "unit": "Chai",
+    "price": 95576
+   },
+   {
+    "name": "Dầu gội sunsilk 650g",
+    "unit": "Chai",
+    "price": 130481
+   },
+   {
+    "name": "Dầu ăn simply 2l",
+    "unit": "Chai",
+    "price": 94964
+   },
+   {
+    "name": "Dầu ăn simply 2l",
+    "unit": "Chai",
+    "price": 93151
+   },
+   {
+    "name": "Kem đánh răng p/s",
+    "unit": "Tuýp",
+    "price": 31166
+   },
+   {
+    "name": "Dầu ăn simply 2l",
+    "unit": "Chai",
+    "price": 97281
+   },
+   {
+    "name": "Sữa tươi th true milk 1l",
+    "unit": "Hộp",
+    "price": 39460
+   },
+   {
+    "name": "Sữa tươi th true milk 1l",
+    "unit": "Hộp",
+    "price": 40797
+   },
+   {
+    "name": "Hạnh nhân (loại 2)",
+    "unit": "Kg",
+    "price": 168000
+   },
+   {
+    "name": "Snack poca",
+    "unit": "Gói",
+    "price": 12000
+   },
+   {
+    "name": "Kẹo alpenliebe",
+    "unit": "Gói",
+    "price": 22927
+   },
+   {
+    "name": "Nạc vai heo",
+    "unit": "Kg",
+    "price": 487000
+   },
+   {
+    "name": "Dầu gội sunsilk 650g",
+    "unit": "Chai",
+    "price": 125549
+   },
+   {
+    "name": "Cam sành",
+    "unit": "Kg",
+    "price": 360000
+   },
+   {
+    "name": "Nước rửa chén sunlight 3.6kg",
+    "unit": "Can",
+    "price": 111424
+   },
+   {
+    "name": "Bánh quy cosy",
+    "unit": "Gói",
+    "price": 35000
+   },
+   {
+    "name": "Sữa tươi th true milk 1l",
+    "unit": "Hộp",
+    "price": 40545
+   },
+   {
+    "name": "Dầu ăn simply 2l",
+    "unit": "Chai",
+    "price": 91580
+   },
+   {
+    "name": "Bộ 5 bát thủy tinh",
+    "unit": "Bộ",
+    "price": 119375
+   },
+   {
+    "name": "Thịt thăn heo",
+    "unit": "Kg",
+    "price": 158000
+   },
+   {
+    "name": "Nước rửa chén sunlight 3.6kg",
+    "unit": "Can",
+    "price": 110531
+   },
+   {
+    "name": "Thịt đùi gà",
+    "unit": "Kg",
+    "price": 73000
+   },
+   {
+    "name": "Nước rửa chén sunlight 3.6kg",
+    "unit": "Can",
+    "price": 108659
+   },
+   {
+    "name": "Thịt ba chỉ bò mỹ",
+    "unit": "Kg",
+    "price": 429000
+   },
+   {
+    "name": "Gạo st25 (loại 2)",
+    "unit": "Kg",
+    "price": 113000
+   },
+   {
+    "name": "Quýt đường",
+    "unit": "Kg",
+    "price": 359000
+   },
+   {
+    "name": "Lạc nhân (đậu phộng)",
+    "unit": "Kg",
+    "price": 466000
+   },
+   {
+    "name": "Đậu xanh nguyên hạt (loại 1)",
+    "unit": "Kg",
+    "price": 33000
+   },
+   {
+    "name": "Sữa đặc ông thọ",
+    "unit": "Lon",
+    "price": 27717
+   },
+   {
+    "name": "Dầu ăn simply 2l",
+    "unit": "Chai",
+    "price": 95000
+   },
+   {
+    "name": "Dầu ăn simply 2l",
+    "unit": "Chai",
+    "price": 91632
+   },
+   {
+    "name": "Cà rốt (loại 2)",
+    "unit": "Kg",
+    "price": 300000
+   },
+   {
+    "name": "Dầu gội sunsilk 650g",
+    "unit": "Chai",
+    "price": 132430
+   },
+   {
+    "name": "Snack poca",
+    "unit": "Gói",
+    "price": 11670
+   },
+   {
+    "name": "Thịt đùi gà (loại 2)",
+    "unit": "Kg",
+    "price": 129000
+   },
+   {
+    "name": "Xoài cát hòa lộc",
+    "unit": "Kg",
+    "price": 479000
+   },
+   {
+    "name": "Dầu gội sunsilk 650g",
+    "unit": "Chai",
+    "price": 140100
+   },
+   {
+    "name": "Bánh quy cosy",
+    "unit": "Gói",
+    "price": 33118
+   },
+   {
+    "name": "Bưởi da xanh",
+    "unit": "Kg",
+    "price": 335000
+   },
+   {
+    "name": "Bột giặt omo 4.1kg",
+    "unit": "Túi",
+    "price": 185898
+   },
+   {
+    "name": "Kem đánh răng p/s",
+    "unit": "Tuýp",
+    "price": 27792
+   },
+   {
+    "name": "Bầu sao (loại 1)",
+    "unit": "Kg",
+    "price": 469000
+   },
+   {
+    "name": "Bông cải xanh",
+    "unit": "Kg",
+    "price": 177000
+   },
+   {
+    "name": "Nấm hương khô",
+    "unit": "Kg",
+    "price": 150000
+   },
+   {
+    "name": "Dầu gội sunsilk 650g",
+    "unit": "Chai",
+    "price": 132709
+   },
+   {
+    "name": "Sữa tắm lifebuoy 850g",
+    "unit": "Chai",
+    "price": 165000
+   },
+   {
+    "name": "Dầu ăn simply 2l",
+    "unit": "Chai",
+    "price": 92293
+   },
+   {
+    "name": "Dầu gội sunsilk 650g",
+    "unit": "Chai",
+    "price": 137761
+   },
+   {
+    "name": "Mì hảo hảo tôm chua cay",
+    "unit": "Gói",
+    "price": 464
+   },
+   {
+    "name": "Dưa hấu",
+    "unit": "Kg",
+    "price": 54000
+   },
+   {
+    "name": "Vải thiều bắc giang",
+    "unit": "Kg",
+    "price": 402000
+   },
+   {
+    "name": "Mì hảo hảo tôm chua cay",
+    "unit": "Gói",
+    "price": 4000
+   },
+   {
+    "name": "Tương ớt chinsu 250g",
+    "unit": "Chai",
+    "price": 15877
+   },
+   {
+    "name": "Kẹo alpenliebe",
+    "unit": "Gói",
+    "price": 24460
+   },
+   {
+    "name": "Tương ớt chinsu 250g",
+    "unit": "Chai",
+    "price": 18121
+   },
+   {
+    "name": "Cá hồi phi lê",
+    "unit": "Kg",
+    "price": 253000
+   },
+   {
+    "name": "Dầu ăn simply 2l",
+    "unit": "Chai",
+    "price": 96518
+   },
+   {
+    "name": "Dầu ăn simply 2l",
+    "unit": "Chai",
+    "price": 96111
+   },
+   {
+    "name": "Dầu ăn simply 2l",
+    "unit": "Chai",
+    "price": 88770
+   },
+   {
+    "name": "Kẹo alpenliebe",
+    "unit": "Gói",
+    "price": 19076
+   },
+   {
+    "name": "Dầu ăn simply 2l",
+    "unit": "Chai",
+    "price": 91437
+   },
+   {
+    "name": "Nho xanh không hạt (loại 2)",
+    "unit": "Kg",
+    "price": 254000
+   },
+   {
+    "name": "Nước rửa chén sunlight 3.6kg",
+    "unit": "Can",
+    "price": 107539
+   },
+   {
+    "name": "Đậu đen",
+    "unit": "Kg",
+    "price": 49000
+   },
+   {
+    "name": "Cà chua vietgap (loại 2)",
+    "unit": "Kg",
+    "price": 384000
+   },
+   {
+    "name": "Nước ngọt coca-cola 330ml",
+    "unit": "Lon",
+    "price": 12029
+   },
+   {
+    "name": "Tương ớt chinsu 250g",
+    "unit": "Chai",
+    "price": 11366
+   },
+   {
+    "name": "Nho xanh không hạt",
+    "unit": "Kg",
+    "price": 144000
+   },
+   {
+    "name": "Sữa đặc ông thọ",
+    "unit": "Lon",
+    "price": 31300
+   },
+   {
+    "name": "Sữa đặc ông thọ",
+    "unit": "Lon",
+    "price": 26000
+   },
+   {
+    "name": "Dầu ăn simply 2l",
+    "unit": "Chai",
+    "price": 93159
+   },
+   {
+    "name": "Dầu ăn simply 2l",
+    "unit": "Chai",
+    "price": 92540
+   },
+   {
+    "name": "Tương ớt chinsu 250g",
+    "unit": "Chai",
+    "price": 13852
+   },
+   {
+    "name": "Bột giặt omo 4.1kg",
+    "unit": "Túi",
+    "price": 185119
+   },
+   {
+    "name": "Dưa chuột (loại 2)",
+    "unit": "Kg",
+    "price": 442000
+   },
+   {
+    "name": "Nước ngọt coca-cola 330ml",
+    "unit": "Lon",
+    "price": 11544
+   },
+   {
+    "name": "Sữa đặc ông thọ",
+    "unit": "Lon",
+    "price": 33163
+   },
+   {
+    "name": "Xúc xích tiệt trùng vissan",
+    "unit": "Gói",
+    "price": 23439
+   },
+   {
+    "name": "Hành tây",
+    "unit": "Kg",
+    "price": 450000
+   },
+   {
+    "name": "Dầu ăn simply 2l",
+    "unit": "Chai",
+    "price": 94799
+   },
+   {
+    "name": "Sữa tắm lifebuoy 850g",
+    "unit": "Chai",
+    "price": 165761
+   },
+   {
+    "name": "Kem đánh răng p/s",
+    "unit": "Tuýp",
+    "price": 32000
+   },
+   {
+    "name": "Nước rửa chén sunlight 3.6kg",
+    "unit": "Can",
+    "price": 108164
+   },
+   {
+    "name": "Nước ngọt coca-cola 330ml",
+    "unit": "Lon",
+    "price": 9001
+   },
+   {
+    "name": "Mì hảo hảo tôm chua cay",
+    "unit": "Gói",
+    "price": 3912
+   },
+   {
+    "name": "Nước ngọt coca-cola 330ml",
+    "unit": "Lon",
+    "price": 8960
+   },
+   {
+    "name": "Dầu ăn simply 2l",
+    "unit": "Chai",
+    "price": 97646
+   },
+   {
+    "name": "Bánh quy cosy",
+    "unit": "Gói",
+    "price": 35991
+   },
+   {
+    "name": "Nước ngọt coca-cola 330ml",
+    "unit": "Lon",
+    "price": 16163
+   },
+   {
+    "name": "Sữa tươi th true milk 1l",
+    "unit": "Hộp",
+    "price": 38754
+   },
+   {
+    "name": "Snack poca",
+    "unit": "Gói",
+    "price": 4871
+   },
+   {
+    "name": "Mì hảo hảo tôm chua cay",
+    "unit": "Gói",
+    "price": 4655
+   },
+   {
+    "name": "Nồi cơm điện sharp",
+    "unit": "Cái",
+    "price": 850340
+   },
+   {
+    "name": "Nước ngọt coca-cola 330ml",
+    "unit": "Lon",
+    "price": 13741
+   },
+   {
+    "name": "Dầu gội sunsilk 650g",
+    "unit": "Chai",
+    "price": 135334
+   },
+   {
+    "name": "Tôm thẻ chân trắng",
+    "unit": "Kg",
+    "price": 133000
+   },
+   {
+    "name": "Dầu gội sunsilk 650g",
+    "unit": "Chai",
+    "price": 135292
+   },
+   {
+    "name": "Xà lách thủy canh",
+    "unit": "Kg",
+    "price": 480000
+   },
+   {
+    "name": "Dầu ăn simply 2l",
+    "unit": "Chai",
+    "price": 94265
+   },
+   {
+    "name": "Táo envy",
+    "unit": "Kg",
+    "price": 304000
+   },
+   {
+    "name": "Sữa tắm lifebuoy 850g",
+    "unit": "Chai",
+    "price": 164647
+   },
+   {
+    "name": "Ấm siêu tốc",
+    "unit": "Cái",
+    "price": 150000
+   },
+   {
+    "name": "Nồi cơm điện sharp",
+    "unit": "Cái",
+    "price": 844549
+   },
+   {
+    "name": "Gạo lứt đỏ",
+    "unit": "Kg",
+    "price": 488000
+   },
+   {
+    "name": "Sữa đặc ông thọ",
+    "unit": "Lon",
+    "price": 29400
+   },
+   {
+    "name": "Kẹo alpenliebe",
+    "unit": "Gói",
+    "price": 20154
+   },
+   {
+    "name": "Ớt chuông đỏ",
+    "unit": "Kg",
+    "price": 197000
+   },
+   {
+    "name": "Nồi cơm điện sharp",
+    "unit": "Cái",
+    "price": 846974
+   },
+   {
+    "name": "Nước ngọt coca-cola 330ml",
+    "unit": "Lon",
+    "price": 16070
+   },
+   {
+    "name": "Tương ớt chinsu 250g",
+    "unit": "Chai",
+    "price": 18591
+   },
+   {
+    "name": "Mực ống",
+    "unit": "Kg",
+    "price": 101000
+   },
+   {
+    "name": "Dầu ăn simply 2l",
+    "unit": "Chai",
+    "price": 91036
+   },
+   {
+    "name": "Chảo chống dính sunhouse",
+    "unit": "Cái",
+    "price": 178231
+   },
+   {
+    "name": "Sườn non heo",
+    "unit": "Kg",
+    "price": 238000
+   },
+   {
+    "name": "Nước rửa chén sunlight 3.6kg",
+    "unit": "Can",
+    "price": 112797
+   },
+   {
+    "name": "Bộ 5 bát thủy tinh",
+    "unit": "Bộ",
+    "price": 120000
+   },
+   {
+    "name": "Dầu gội sunsilk 650g",
+    "unit": "Chai",
+    "price": 135000
+   },
+   {
+    "name": "Sữa tắm lifebuoy 850g",
+    "unit": "Chai",
+    "price": 165253
+   },
+   {
+    "name": "Nước ngọt coca-cola 330ml",
+    "unit": "Lon",
+    "price": 15567
+   },
+   {
+    "name": "Gạo st25 (loại 2)",
+    "unit": "Kg",
+    "price": 416000
+   },
+   {
+    "name": "Mì hảo hảo tôm chua cay",
+    "unit": "Gói",
+    "price": 3178
+   },
+   {
+    "name": "Thịt ba chỉ bò mỹ (loại 2)",
+    "unit": "Kg",
+    "price": 389000
+   },
+   {
+    "name": "Dầu gội sunsilk 650g",
+    "unit": "Chai",
+    "price": 134248
+   },
+   {
+    "name": "Nồi cơm điện sharp",
+    "unit": "Cái",
+    "price": 847030
+   },
+   {
+    "name": "Dầu gội sunsilk 650g",
+    "unit": "Chai",
+    "price": 128578
+   },
+   {
+    "name": "Chuối ngự",
+    "unit": "Kg",
+    "price": 88000
+   },
+   {
+    "name": "Bầu sao (loại 1)",
+    "unit": "Kg",
+    "price": 199000
+   },
+   {
+    "name": "Xúc xích tiệt trùng vissan",
+    "unit": "Gói",
+    "price": 25000
+   },
+   {
+    "name": "Rau muống",
+    "unit": "Kg",
+    "price": 430000
+   },
+   {
+    "name": "Bầu sao (loại 1)",
+    "unit": "Kg",
+    "price": 347000
+   },
+   {
+    "name": "Bột giặt omo 4.1kg",
+    "unit": "Túi",
+    "price": 185000
+   },
+   {
+    "name": "Xúc xích tiệt trùng vissan",
+    "unit": "Gói",
+    "price": 27549
+   },
+   {
+    "name": "Hạnh nhân",
+    "unit": "Kg",
+    "price": 388000
+   },
+   {
+    "name": "Sữa tươi th true milk 1l",
+    "unit": "Hộp",
+    "price": 36874
+   },
+   {
+    "name": "Dầu ăn simply 2l",
+    "unit": "Chai",
+    "price": 89092
+   },
+   {
+    "name": "Nước ngọt coca-cola 330ml",
+    "unit": "Lon",
+    "price": 10000
+   },
+   {
+    "name": "Dầu gội sunsilk 650g",
+    "unit": "Chai",
+    "price": 138852
+   },
+   {
+    "name": "Dầu gội sunsilk 650g",
+    "unit": "Chai",
+    "price": 126043
+   },
+   {
+    "name": "Kẹo alpenliebe",
+    "unit": "Gói",
+    "price": 19610
+   },
+   {
+    "name": "Mì hảo hảo tôm chua cay",
+    "unit": "Gói",
+    "price": 1667
+   },
+   {
+    "name": "Sữa đặc ông thọ",
+    "unit": "Lon",
+    "price": 29434
+   },
+   {
+    "name": "Dưa chuột",
+    "unit": "Kg",
+    "price": 389000
+   }
+  ]
+ }
+}

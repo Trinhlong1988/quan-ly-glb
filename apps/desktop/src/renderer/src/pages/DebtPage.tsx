@@ -211,7 +211,7 @@ export function DebtPage({ user }: { user: AuthUser }): JSX.Element {
 
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm list-scroll">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+          <thead className="sticky top-0 z-20 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-3 py-3">Mã GD</th>
               <th className="px-3 py-3">Ngày</th>

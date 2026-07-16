@@ -25,7 +25,8 @@ import {
   Clock,
   Search as SearchIcon,
   Camera,
-  Monitor
+  Monitor,
+  FileText
 } from 'lucide-react';
 
 const SEARCH_KIND_LABEL: Record<string, string> = { customer: 'Khách hàng', tid: 'TID', pos: 'Máy POS', transaction: 'Giao dịch', dossier: 'Hồ sơ HKD' };
@@ -163,6 +164,7 @@ import { DossierPage } from './DossierPage.js';
 import { RevenueDebtPage } from './RevenueDebtPage.js';
 import { ApprovalPage } from './ApprovalPage.js';
 import { ExportApprovalPage } from './ExportApprovalPage.js';
+import { BillExplainPage } from './BillExplainPage.js';
 import { UpdateBanner } from '../components/UpdateBanner.js';
 import { useRealtime } from '../lib/realtime.js';
 
@@ -194,6 +196,8 @@ const MENU: MenuItem[] = [
   // R31: "Quản Lý Tài Khoản Nhận Tiền" đã gộp thành tab trong Quản Lý Nhân Sự (cạnh Vai trò & Quyền).
   { key: 'dossier', label: 'Quản Lý Hồ Sơ HKD', icon: <FolderKanban className="h-[18px] w-[18px]" />, perms: ['CONFIG_DOSSIER_VIEW'] },
   { key: 'finance', label: 'Quản Lý Tài Chính', icon: <Wallet className="h-[18px] w-[18px]" />, perms: ['CASHENTRY_VIEW', 'FUND_VIEW', 'CASHCAT_VIEW'] },
+  // Bill giải trình (Mr.Long 16/7): sinh hóa đơn giải trình số tiền theo HKD · ngành · thư viện SP riêng.
+  { key: 'billexplain', label: 'Bill Giải Trình', icon: <FileText className="h-[18px] w-[18px]" />, perms: ['BILLEXPLAIN_VIEW'] },
   // Mr.Long 13/7 — "Cấu hình ngân hàng" → "Quản Lý Ngân Hàng - Đối Tác", đưa xuống DƯỚI Quản Lý Tài Chính.
   // Gồm tab Ngân hàng/Đối tác + "Phí mua-cài máy-bán" + "Ngành nghề" + "Loại giao" → menu hiện với 1 trong các quyền.
   { key: 'bankcfg', label: 'Quản Lý Ngân Hàng - Đối Tác', icon: <Landmark className="h-[18px] w-[18px]" />, perms: ['CONFIG_BANK_VIEW', 'CONFIG_FEE_VIEW', 'CONFIG_INDUSTRY_VIEW', 'CONFIG_HANDOVER_VIEW'] },
@@ -438,6 +442,7 @@ export function Dashboard({ user, onLogout }: { user: AuthUser; onLogout: () => 
           {activeItem?.key === 'revdebt' && <RevenueDebtPage user={user} initialJump={jump?.page === 'revdebt' ? { kind: jump.kind, id: jump.id, term: jump.term } : undefined} />}
           {activeItem?.key === 'approval' && <ApprovalPage user={user} />}
           {activeItem?.key === 'exportapproval' && <ExportApprovalPage user={user} />}
+          {activeItem?.key === 'billexplain' && <BillExplainPage user={user} />}
           {activeItem?.key === 'system' && <SystemConfigPage user={user} />}
           </div>
         </main>

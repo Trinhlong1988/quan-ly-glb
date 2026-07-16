@@ -136,7 +136,7 @@ export function CashCategoryConfigPage({ user }: { user: AuthUser }): JSX.Elemen
       {canDelete && <SelectionBar count={sel.count} entityLabel="danh mục" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm list-scroll">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+          <thead className="sticky top-0 z-20 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>
               {canDelete && <SelectAllCell ids={deletableIds} sel={sel} />}
               <th className="px-4 py-3">Loại</th>

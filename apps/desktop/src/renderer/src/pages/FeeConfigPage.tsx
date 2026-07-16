@@ -99,7 +99,7 @@ function TypeTab({ canManage }: { canManage: boolean }): JSX.Element {
       {canManage && <SelectionBar count={sel.count} entityLabel="loại phí" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm list-scroll">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+          <thead className="sticky top-0 z-20 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>
               {canManage && <SelectAllCell ids={rows.map((r) => r.id)} sel={sel} />}
               <th className="px-4 py-3">Tên loại phí</th>
@@ -241,7 +241,7 @@ function RateTab({ canManage }: { canManage: boolean }): JSX.Element {
       {canManage && <SelectionBar count={sel.count} entityLabel="biểu phí" onClear={sel.clear} onDelete={() => setBulkDel(true)} />}
       <div className="overflow-x-auto rounded-xl border border-line bg-white shadow-sm list-scroll">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+          <thead className="sticky top-0 z-20 bg-[#F8FAFC] text-left text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>
               {canManage && <SelectAllCell ids={rows.map((r) => r.id)} sel={sel} />}
               <th className="px-4 py-3">Đối tác</th>
