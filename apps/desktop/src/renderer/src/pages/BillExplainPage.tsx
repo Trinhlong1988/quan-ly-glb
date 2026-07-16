@@ -86,6 +86,14 @@ function CreateBillTab(): JSX.Element {
   const validRawAmounts = useMemo(() => amounts.map((a) => a.replace(/[^\d]/g, '').replace(/^0+/, '')).filter((s) => s !== ''), [amounts]);
   const validAmounts = validRawAmounts; // dùng cho đếm; tổng tính bằng BigInt bên dưới
   const total = validRawAmounts.reduce((s, n) => s + BigInt(n), 0n);
+  // Trần thực tế 1 hóa đơn = 299tr (Mr.Long 16/7: KHÔNG tách HĐ; số > 299tr sẽ bị backend từ chối). Cảnh báo
+  // NGAY trên form (theo từng dòng + chặn nút Sinh bill) để tránh lỗi khi sinh — thay vì để backend báo lỗi.
+  const REAL_CEILING = 299_000_000n;
+  const overCeil = useMemo(() => {
+    const s = new Set<number>();
+    amounts.forEach((a, i) => { const d = a.replace(/[^\d]/g, '').replace(/^0+/, ''); if (d && BigInt(d) > REAL_CEILING) s.add(i); });
+    return s;
+  }, [amounts]);
   const dossier = dossiers.find((d) => String(d.id) === dossierId);
   const industry = industries.find((i) => String(i.id) === industryId);
 
@@ -107,8 +115,10 @@ function CreateBillTab(): JSX.Element {
       const keys = Object.keys(row);
       const moneyKey = keys.find((k) => /tiền|so tien|amount|thành tiền/i.test(k)) ?? keys.find((k) => Number(String(row[k]).replace(/[^\d]/g, '')) > 0);
       if (!moneyKey) continue;
-      const n = Number(String(row[moneyKey]).replace(/[^\d]/g, ''));
-      if (Number.isFinite(n) && n > 0) nums.push(String(n));
+      // GIỮ chuỗi digit-raw (KHÔNG qua Number — bất biến FE53-04/BILL-05): Number làm số ≥1e21 thành "1e+21"
+      // → strip còn "121" → sai giá trị + né trần 299tr (agent review 16/7). Sanitize y như nhập tay.
+      const d = String(row[moneyKey]).replace(/[^\d]/g, '').replace(/^0+/, '');
+      if (d) nums.push(d);
     }
     if (!nums.length) { toast.alert('File không có số tiền hợp lệ.', 'Không có dữ liệu'); return; }
     setAmounts((prev) => { const base = prev.filter((a) => a.trim()); return [...base, ...nums]; });
@@ -119,6 +129,7 @@ function CreateBillTab(): JSX.Element {
     if (!dossierId) { toast.alert('Chọn Hộ Kinh Doanh.', 'Thiếu thông tin'); return; }
     if (!industryId) { toast.alert('Chọn nhóm ngành nghề.', 'Thiếu thông tin'); return; }
     if (!validAmounts.length) { toast.alert('Nhập ít nhất 1 số tiền cần giải trình.', 'Thiếu số tiền'); return; }
+    if (overCeil.size) { toast.alert('Mỗi hóa đơn tối đa 299.000.000đ (không tách hóa đơn). Vui lòng sửa các dòng đang bôi đỏ trước khi sinh.', 'Số tiền vượt trần'); return; }
     setConfirm(true);
   }
   async function doGenerate(): Promise<void> {
@@ -180,18 +191,23 @@ function CreateBillTab(): JSX.Element {
         </div>
         <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
           {amounts.map((a, idx) => (
-            <div key={idx} className="flex items-center gap-2">
-              <span className="w-7 text-right text-xs text-slate-400">{idx + 1}.</span>
-              <input className={inputCls + ' text-right tabular-nums'} inputMode="numeric" value={groupDigits(a)} onChange={(e) => setAmountAt(idx, e.target.value)} placeholder="0" />
-              <span className="text-xs text-slate-400">đ</span>
-              <button onClick={() => removeAmount(idx)} title="Xóa dòng" className="rounded-md p-1.5 text-danger hover:bg-danger/10"><X className="h-4 w-4" /></button>
+            <div key={idx}>
+              <div className="flex items-center gap-2">
+                <span className="w-7 text-right text-xs text-slate-400">{idx + 1}.</span>
+                <input className={inputCls + ' text-right tabular-nums' + (overCeil.has(idx) ? ' border-danger focus:border-danger' : '')} inputMode="numeric" value={groupDigits(a)} onChange={(e) => setAmountAt(idx, e.target.value)} placeholder="0" />
+                <span className="text-xs text-slate-400">đ</span>
+                <button onClick={() => removeAmount(idx)} title="Xóa dòng" className="rounded-md p-1.5 text-danger hover:bg-danger/10"><X className="h-4 w-4" /></button>
+              </div>
+              {overCeil.has(idx) && (
+                <div className="ml-9 mt-0.5 text-xs text-danger">Vượt trần 299.000.000đ — 1 hóa đơn không quá 299tr (không tách hóa đơn).</div>
+              )}
             </div>
           ))}
         </div>
 
         <div className="mt-4 flex items-center justify-between border-t border-line pt-3">
           <div className="text-sm text-slate-600">Tổng: <span className="text-lg font-bold text-brand tabular-nums">{money(total)}</span></div>
-          <Button variant="confirm" icon={busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />} onClick={openConfirm} disabled={busy}>Sinh bill</Button>
+          <Button variant="confirm" icon={busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />} onClick={openConfirm} disabled={busy || overCeil.size > 0}>Sinh bill</Button>
         </div>
       </div>
 
@@ -507,7 +523,7 @@ function ProductForm({ mode, row, industries, defaultIndustryId, onClose, onSave
   const [name, setName] = useState(row?.name ?? '');
   const [unit, setUnit] = useState(row?.unit ?? '');
   const [price, setPrice] = useState(row ? String(row.price) : '');
-  const [priority, setPriority] = useState(row ? String(row.priority) : '0');
+  const [priority, setPriority] = useState(row ? String(row.priority ?? 0) : '0');
   const [status, setStatus] = useState(row?.status ?? 'ACTIVE');
   const [saving, setSaving] = useState(false);
 
@@ -519,7 +535,8 @@ function ProductForm({ mode, row, industries, defaultIndustryId, onClose, onSave
     if (!Number.isFinite(p) || p <= 0) { toast.alert('Đơn giá phải là số nguyên dương.', 'Đơn giá sai'); return; }
     setSaving(true);
     try {
-      const payload = { industryId: Number(industryId), name: name.trim(), unit: unit.trim(), price: p, priority: Number(priority.replace(/[^\d]/g, '')) || 0, status };
+      const prio = Math.min(1000, Number(priority.replace(/[^\d]/g, '')) || 0); // clamp 0–1000 khớp backend (validPriority)
+      const payload = { industryId: Number(industryId), name: name.trim(), unit: unit.trim(), price: p, priority: prio, status };
       const res = mode === 'create'
         ? await window.api.productCreate(payload)
         : await window.api.productUpdate(row!.id, { ...payload, expectedUpdatedAt: row!.updatedAt });

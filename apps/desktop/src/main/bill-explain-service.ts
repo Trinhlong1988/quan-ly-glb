@@ -6,12 +6,12 @@
 // KHÔNG in TID/MST lên hóa đơn (chốt Mr.Long 16/7). Người bán = chủ hộ HKD. Audit đầy đủ (R_AUDIT_TRAIL).
 import { app, dialog, BrowserWindow } from 'electron';
 import path from 'node:path';
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { copyFile, readFile, writeFile, mkdir, unlink } from 'node:fs/promises';
 import { auditSnapshot } from '@glb/business-rules';
 import type { Db } from '@glb/database';
 import { requirePermission, verifyActorPassword } from './guard.js';
-import { writeAudit } from './audit.js';
+import { writeAudit, writeAuditStrict } from './audit.js';
 import { nextCode } from './code-service.js';
 import { dateRange } from './customer-service.js';
 import { staleGuard } from './optimistic-lock.js';
@@ -306,6 +306,9 @@ export interface GenerateBillsResult {
 
 const MAX_TARGET = Number.MAX_SAFE_INTEGER; // engine sinh dòng dùng Number → chặn tại MAX_SAFE để KHÔNG mất chữ số
 const BILLNO_LOCK = 561053; // pg advisory lock cấp DẢI số hóa đơn Bill giải trình (BILL-06 chống race/TOCTOU)
+// Trần THỰC TẾ 1 hóa đơn (Mr.Long 16/7): hóa đơn bán lẻ thật KHÔNG quá ~299tr. KHÔNG tách hóa đơn — số nào
+// vượt trần thì báo lỗi rõ để người dùng nhập số nhỏ hơn (giữ số lượng dòng cân đối, không phi lý).
+const REAL_CEILING = 299_000_000;
 
 /** Parse danh sách số tiền STRICT — KHÔNG strip/mutate (BILL-04/05/09):
  *  - number: nguyên, >0, ≤ MAX_SAFE. - string: `^\d+$` (chỉ chữ số, không dấu/mũ/chữ), >0, ≤ MAX_SAFE.
@@ -377,6 +380,11 @@ export async function generateBills(input: GenerateBillsInput): Promise<Generate
     return { ok: false, error: 'VALIDATION', message: invalid < 0 ? 'Danh sách số tiền không hợp lệ.' : `${invalid} số tiền không hợp lệ (số nguyên dương ≤ ${MAX_TARGET}, không âm/thập phân/chữ).` };
   }
   if (!targets.length) return { ok: false, error: 'VALIDATION', message: 'Chưa có số tiền hợp lệ nào để sinh bill.' };
+  // Trần thực tế 1 hóa đơn (KHÔNG tách): số nào > 299tr → báo rõ, không sinh (giữ số lượng dòng cân đối).
+  const overCeil = targets.filter((t) => t > REAL_CEILING);
+  if (overCeil.length) {
+    return { ok: false, error: 'VALIDATION', message: `Mỗi hóa đơn tối đa ${REAL_CEILING.toLocaleString('vi-VN')}đ (số tiền thực tế 1 hóa đơn). Có ${overCeil.length} số vượt trần — hãy nhập số nhỏ hơn (vd chia thành nhiều hóa đơn).` };
+  }
 
   const products = await db.product.findMany({ where: { industryId: input.industryId, status: 'ACTIVE', deletedAt: null }, select: { name: true, unit: true, price: true, priority: true } });
   const productLites: ProductLite[] = products.map((p) => ({ name: p.name, unit: p.unit, price: p.price, priority: p.priority }));
@@ -419,26 +427,31 @@ export async function generateBills(input: GenerateBillsInput): Promise<Generate
   const totalAmount = targets.reduce((s, t) => s + BigInt(t), 0n);
   let rec;
   try {
+    // LOW-A (audit đa-agent 16/7): gộp create bill + writeAudit vào CÙNG transaction (mẫu B44) → bill và
+    // vết audit ATOMIC. Trước đây audit nằm SAU commit + không try/catch → nếu audit ném thì bill có thật
+    // nhưng THIẾU vết + hàm reject (không mở được file). Nay: audit fail → rollback cả bill → dọn file.
     rec = await db.$transaction(async (tx) => {
       const code = await nextCode(BILL_CODE_PREFIX, tx);
-      return tx.billExplain.create({
+      const created = await tx.billExplain.create({
         data: {
           code, dossierId: input.dossierId, tidId: input.tidId ?? null, industryId: input.industryId,
           billDate: new Date(Date.UTC(dd.y, dd.m - 1, dd.d)), totalAmount,
           billCount: result.totalBills, filePath: result.file, createdBy: user.id
         }
       });
+      await writeAuditStrict(tx, {
+        actorUserId: user.id, action: 'BILLEXPLAIN_CREATED', targetType: 'BillExplain', targetId: String(created.id),
+        after: auditSnapshot({ code: created.code, dossierId: input.dossierId, tidCode, industryId: input.industryId, billCount: result.totalBills, totalAmount: totalAmount.toString(), file: result.file })
+      });
+      return created;
     });
   } catch (e) {
-    // BILL-07 (B1, Mr.Long 16/7 "cấm nợ kỹ thuật"): render tạo file TRƯỚC khi lưu DB. Nếu lưu DB thất bại →
+    // BILL-07 (B1, Mr.Long 16/7 "cấm nợ kỹ thuật"): render tạo file TRƯỚC khi lưu DB. Nếu lưu DB/audit thất bại →
     // DỌN file mồ côi (không để rác + không claim đã lưu). Số HĐ đã cấp atomic (BILL-06) — dôi số vô hại.
-    await unlink(result.file).catch(() => {});
+    // LOW-B: log khi cleanup thất bại (đừng nuốt lặng → còn manh mối nếu file bị khóa còn sót).
+    await unlink(result.file).catch((ue) => { console.warn('[billExplain] dọn file mồ côi thất bại:', result.file, ue instanceof Error ? ue.message : ue); });
     return { ok: false, error: 'DB_FAILED', message: e instanceof Error ? e.message : 'Lưu bill vào cơ sở dữ liệu thất bại.' };
   }
-  await writeAudit(db, {
-    actorUserId: user.id, action: 'BILLEXPLAIN_CREATED', targetType: 'BillExplain', targetId: String(rec.id),
-    after: auditSnapshot({ code: rec.code, dossierId: input.dossierId, tidCode, industryId: input.industryId, billCount: result.totalBills, totalAmount: totalAmount.toString(), file: result.file })
-  });
   return { ok: true, id: rec.id, file: result.file, totalBills: result.totalBills, errors: result.errors };
 }
 
@@ -538,7 +551,14 @@ export async function setBillExplainConfig(input: SetBillExplainConfigInput): Pr
   const g = await requirePermission('BILLEXPLAIN_CREATE', { action: 'BILLEXPLAIN_CREATED', targetType: 'BillExplain' });
   if (!g.ok) return g;
   const { db } = g;
-  if (input.outputDir !== undefined) await setSetting(db, K_OUTPUT_DIR, input.outputDir.trim());
+  if (input.outputDir !== undefined) {
+    const d = input.outputDir.trim();
+    // LOW-C: nếu path đã tồn tại thì PHẢI là thư mục (chống lưu cấu hình trỏ vào file thực thi → openFolder RCE).
+    if (d && existsSync(d)) {
+      try { if (!statSync(d).isDirectory()) return { ok: false, error: 'VALIDATION', message: 'Đường dẫn lưu bill phải là thư mục.' }; } catch { /* không stat được → để resolveOutputDir/mkdir xử lý sau */ }
+    }
+    await setSetting(db, K_OUTPUT_DIR, d);
+  }
   if (input.billNoStart !== undefined && Number.isFinite(input.billNoStart) && input.billNoStart >= 1) await setSetting(db, K_BILL_NO, String(Math.floor(input.billNoStart)));
   if (input.billNoYear !== undefined && Number.isFinite(input.billNoYear)) await setSetting(db, K_BILL_YEAR, String(Math.floor(input.billNoYear)));
   return { ok: true };
@@ -597,6 +617,13 @@ export async function getBillOutputDir(): Promise<{ ok: boolean; error?: string;
     if (!existsSync(dir)) await mkdir(dir, { recursive: true });
   } catch (e) {
     return { ok: false, error: 'MKDIR_FAILED', message: e instanceof Error ? e.message : 'Không tạo được thư mục.' };
+  }
+  // LOW-C (audit đa-agent 16/7): outputDir do người dùng cấu hình → PHẢI là THƯ MỤC thật trước khi shell.openPath
+  // (nếu trỏ nhầm/cố ý vào .exe/.bat/.lnk thì openPath sẽ THỰC THI). Defense-in-depth (nối B51 file:open RCE).
+  try {
+    if (!statSync(dir).isDirectory()) return { ok: false, error: 'NOT_A_DIR', message: 'Đường dẫn lưu bill không phải thư mục — kiểm tra lại cấu hình.' };
+  } catch {
+    return { ok: false, error: 'NOT_A_DIR', message: 'Không truy cập được thư mục lưu bill.' };
   }
   return { ok: true, path: dir };
 }

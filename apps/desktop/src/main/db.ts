@@ -104,24 +104,37 @@ export async function seedBillExplainLibrary(db: Db): Promise<{ industries: numb
   try { seed = JSON.parse(readFileSync(p, 'utf8')) as BillExplainSeed; } catch { return { industries: 0, products: 0 }; }
 
   let indCount = 0, prodCount = 0;
-  // B71 FIX: CHỈ seed ngành CÓ sản phẩm (KHÔNG tạo ngành rỗng — tránh trùng danh mục ngành sẵn có của user).
-  // Khớp ngành THEO TÊN chuẩn hóa (case-INSENSITIVE) → tái dùng "Siêu Thị"/"Siêu thị" sẵn có, KHÔNG đẻ bản
-  // trùng hoa/thường. Bỏ hoàn toàn `seed.industries` (danh sách ngành rỗng) — người dùng tự quản danh mục ngành.
+  // B71 FIX (mở rộng — F1 audit đa-agent 16/7): CHỈ seed ngành CÓ sản phẩm (KHÔNG tạo ngành rỗng).
+  // Khớp ngành theo tên CHUẨN HÓA trong JS (NFC + gộp khoảng trắng + trim + toLowerCase Unicode) — KÍN hơn
+  // Prisma `mode:'insensitive'` (ILIKE chỉ fold hoa/thường ASCII, KHÔNG phủ NFD/space-thừa/hoa-thường-CÓ-DẤU
+  // như "CÀ PHÊ" vs "Cà phê"). Nhờ vậy KHÔNG đẻ ngành trùng dù encoding/space/case của ngành sẵn có khác nhau.
+  const existing = await db.industry.findMany({ where: { deletedAt: null }, select: { id: true, name: true } });
+  const byNorm = new Map<string, number>();
+  for (const e of existing) { const k = normIndustryName(e.name); if (!byNorm.has(k)) byNorm.set(k, e.id); }
   for (const [indName, prods] of Object.entries(seed.products ?? {})) {
     const list = (prods ?? []).filter((pr) => pr.name && pr.unit && Number.isFinite(pr.price) && pr.price > 0);
     if (!list.length) continue;
-    let ind = await db.industry.findFirst({ where: { name: { equals: indName, mode: 'insensitive' }, deletedAt: null }, select: { id: true } });
-    if (!ind) {
+    const key = normIndustryName(indName);
+    let indId = byNorm.get(key);
+    if (indId == null) {
       const code = await nextCode('NGH', db);
-      ind = await db.industry.create({ data: { code, name: indName, active: true }, select: { id: true } });
+      const created = await db.industry.create({ data: { code, name: indName, active: true }, select: { id: true } });
+      indId = created.id;
+      byNorm.set(key, indId);
       indCount++;
     }
-    const have = await db.product.count({ where: { industryId: ind.id, deletedAt: null } });
+    const have = await db.product.count({ where: { industryId: indId, deletedAt: null } });
     if (have > 0) continue; // ngành đã có SP → KHÔNG seed đè
-    await db.product.createMany({ data: list.map((pr) => ({ industryId: ind!.id, name: pr.name, unit: pr.unit, price: Math.round(pr.price), status: 'ACTIVE' })) });
+    await db.product.createMany({ data: list.map((pr) => ({ industryId: indId!, name: pr.name, unit: pr.unit, price: Math.round(pr.price), status: 'ACTIVE' })) });
     prodCount += list.length;
   }
   return { industries: indCount, products: prodCount };
+}
+/** Chuẩn hóa tên ngành để so khớp dedup: NFC (gộp NFD) + gộp mọi khoảng trắng về 1 + trim + toLowerCase
+ *  (Unicode, fold cả chữ CÓ DẤU). KHÔNG bỏ dấu → "Cà phê" ≠ "Ca phe" (giữ tên khác biệt), nhưng
+ *  "CÀ PHÊ"/"Cà  phê"/NFD đều chuẩn về 1 khóa. */
+export function normIndustryName(s: string): string {
+  return String(s ?? '').normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
 // ── R27 (§C kho) — Danh mục Kho: bug class "DB tiến hóa" (H7) ─────────────────

@@ -69,11 +69,11 @@ nsis:
   createStartMenuShortcut: true
   shortcutName: Quản Lý GLB
 
-# G11 — Feed cập nhật qua Tailscale (electron-updater). HTTP tĩnh cổng 8686 phục vụ D:\glb-updates\, nghe
-# 0.0.0.0 nên tới được qua CẢ LAN (192.168.1.6) LẪN Tailscale (100.75.194.94). Dùng IP Tailscale làm feed
-# để máy MẠNG KHÁC cũng tự cập nhật (mọi máy cài Tailscale — đã kèm trong bộ cài). LAN vẫn tới IP này qua
-# Tailscale (route trực tiếp nội bộ). quitAndInstall(true,…) truyền /S → tự cập nhật vẫn cài IM.
+# G11 — Feed cập nhật qua Cloudflare Tunnel (electron-updater). HTTP tĩnh cổng 8686 (D:\glb-updates\) được
+# cloudflared (Windows service) publish ra HTTPS công khai glb-update.mecaglb.vn/updates/. Mr.Long 16/7: 8 máy
+# (4 văn phòng + 4 ngoài) DÙNG CHUNG 1 URL này để tự update — KHÔNG cần Tailscale, KHÔNG mở cổng router. DB đi
+# đường riêng glb-db.mecaglb.vn qua Cloudflare Access (không lộ). quitAndInstall(true,…) /S → tự cập nhật cài IM.
 publish:
   provider: generic
-  url: http://100.75.194.94:8686/updates/
+  url: https://glb-update.mecaglb.vn/updates/
   channel: latest

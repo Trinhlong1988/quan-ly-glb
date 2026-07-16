@@ -4,13 +4,13 @@
 // NO_PRODUCTS khi ngành trống. Engine composition assert TRỰC TIẾP generateLineItems (không parse xlsx).
 import { existsSync } from 'node:fs';
 import { login, logout } from './auth-service.js';
-import { getDb, seedBillExplainLibrary } from './db.js';
+import { getDb, seedBillExplainLibrary, normIndustryName } from './db.js';
 import * as ind from './industry-service.js';
 import * as dsr from './dossier-service.js';
 import * as tidSvc from './tid-service.js';
 import * as userSvc from './user-service.js';
 import * as be from './bill-explain-service.js';
-import { generateLineItems, realisticMaxQty, type ProductLite } from './billexplain/lineitem-gen.js';
+import { generateLineItems, maxComposable, type ProductLite } from './billexplain/lineitem-gen.js';
 
 let failures = 0;
 function assert(name: string, cond: boolean, extra?: unknown): void {
@@ -119,9 +119,9 @@ export async function runBillExplainSelfTest(): Promise<number> {
     assert(`engine sinh dòng khớp CHÍNH XÁC target ${t}`, okGen && exact, { t });
   }
 
-  // ══ (B-realistic) SỐ LƯỢNG HỢP LÝ (Mr.Long 16/7): chống 40 nồi cơm / 100kg hành ══════════════════
-  // Thư viện lẫn SP đắt (nồi cơm 1.5tr, tivi 8tr) + đồ cân (hành 30k/kg) + đồ rẻ. Sinh nhiều lần,
-  // KHÔNG dòng nào vượt realisticMaxQty(ĐVT, giá, relax=3) và tiền vẫn khớp CHÍNH XÁC.
+  // ══ (B-realistic) CÂN ĐỐI + SỐ LƯỢNG hợp lý + KHÔNG treo (Mr.Long 16/7) ═══════════════════════════
+  // KHÔNG tách HĐ; 1 HĐ tới 299tr; số lượng CÂN ĐỐI đều các dòng (không 1 dòng ôm hết = gốc "40 nồi cơm"),
+  // ≤ HARD_UNIT_CAP (200), đa dạng SP, tiền khớp CHÍNH XÁC, và target lẻ khó ghép KHÔNG treo (deadline).
   const realyLib: ProductLite[] = [
     { name: 'Nồi cơm điện', unit: 'cái', price: 1_500_000 },
     { name: 'Tivi 43 inch', unit: 'cái', price: 8_000_000 },
@@ -131,31 +131,39 @@ export async function runBillExplainSelfTest(): Promise<number> {
     { name: 'Bột giặt', unit: 'hộp', price: 120_000 },
     { name: 'Dầu ăn', unit: 'lít', price: 50_000 },
     { name: 'Bàn chải', unit: 'cái', price: 20_000 },
+    { name: 'Cà phê bột', unit: 'gói', price: 90_000 },
+    { name: 'Đường trắng', unit: 'kg', price: 25_000 }
   ];
-  // 1 hóa đơn ≤ 5 dòng + trần ~5tr/dòng → miền thực tế 1 bill ≤ ~20tr (số lớn hơn tách nhiều bill).
-  let qtyOk = true, qtyExact = true, genCount = 0, worstNoiCom = 0, worstHanh = 0;
-  for (const t of [1_230_000, 3_450_000, 7_770_000, 11_100_000, 15_000_000]) {
+  let balanceOk = true, qtyOk = true, moneyOk = true, diverseOk = true, genCount = 0, worstRatio = 0, worstQty = 0;
+  for (const t of [1_230_000, 11_100_000, 60_000_000, 150_000_000, 299_000_000]) {
     for (let rep = 0; rep < 8; rep++) {
-      const g = generateLineItems(t, realyLib); // KHÔNG bọc try — target thực tế PHẢI ghép được (nếu throw = lỗi thật)
+      const g = generateLineItems(t, realyLib); // target thực tế ≤299tr PHẢI ghép được (throw = lỗi thật)
       genCount++;
-      const sum = g.lines.reduce((s, l) => s + l.price * l.qty, 0);
-      if (sum !== g.subtotal || g.subtotal - g.discount_amount !== t) qtyExact = false;
+      const sum = g.lines.reduce((s, l) => s + Math.round(l.price * l.qty), 0);
+      if (sum !== g.subtotal || g.subtotal - g.discount_amount !== t) moneyOk = false;
+      if (new Set(g.lines.map((l) => l.name)).size !== g.lines.length) diverseOk = false;
+      const share = g.subtotal / g.lines.length;
       for (const l of g.lines) {
-        if (l.qty > realisticMaxQty(l.unit, l.price, 3)) qtyOk = false;
-        if (l.name === 'Nồi cơm điện') worstNoiCom = Math.max(worstNoiCom, l.qty);
-        if (l.name === 'Hành tây') worstHanh = Math.max(worstHanh, l.qty);
+        const ratio = (l.price * l.qty) / share;
+        worstRatio = Math.max(worstRatio, ratio);
+        worstQty = Math.max(worstQty, l.qty);
+        if (ratio > 3.5) balanceOk = false;
+        if (l.qty > 200 || l.qty <= 0) qtyOk = false;
       }
     }
   }
-  assert('B-realistic: sinh được mọi target thực tế (không throw)', genCount === 40, { genCount });
-  assert('B-realistic: mọi dòng ≤ trần thực tế theo ĐVT+giá (relax≤3)', qtyOk, { worstNoiCom, worstHanh });
-  assert('B-realistic: tiền vẫn khớp CHÍNH XÁC khi giới hạn số lượng', qtyExact);
-  assert('B-realistic: nồi cơm 1.5tr KHÔNG bao giờ ra 40 cái (≤9)', worstNoiCom <= 9, { worstNoiCom });
-  assert('B-realistic: hành tây KHÔNG bao giờ ra 100kg (≤45)', worstHanh <= 45, { worstHanh });
-  // degrade tường minh: target quá lớn cho 1 hóa đơn (5 dòng) → throw (service đẩy vào errors[], không ép khớp phi lý).
-  let threw = false;
-  try { generateLineItems(500_000_000, realyLib); } catch { threw = true; }
-  assert('B-realistic: target 500tr cho 1 bill → throw (degrade, không sinh SL phi lý)', threw);
+  assert('B-realistic: sinh được mọi target 1.2tr→299tr (không throw)', genCount === 40, { genCount });
+  assert('B-realistic: CÂN ĐỐI — không dòng nào ôm > 3.5× phần chia đều', balanceOk, { worstRatio: worstRatio.toFixed(2) });
+  assert('B-realistic: số lượng KHÔNG phi lý (≤200, >0)', qtyOk, { worstQty });
+  assert('B-realistic: các dòng ĐA DẠNG (khác tên nhau)', diverseOk);
+  assert('B-realistic: tiền khớp CHÍNH XÁC', moneyOk);
+  // KHÔNG treo: target lẻ khó ghép trả về nhanh (deadline ~300ms), không spin main process 30–50s (agent-1 HIGH).
+  const tPerf = Date.now();
+  try { generateLineItems(123_456_789, realyLib); } catch { /* ok nếu throw */ }
+  assert('B-realistic: target lẻ khó ghép KHÔNG treo (<1.5s)', Date.now() - tPerf < 1500, { ms: Date.now() - tPerf });
+  // Service chặn > trần 299tr (KHÔNG tách): báo VALIDATION rõ, không sinh.
+  const over = await be.generateBills({ dossierId: dos.id!, industryId: indMain.id!, billDate: '2026-07-16', targets: [300_000_000] });
+  assert('service: 1 hóa đơn > 299tr → VALIDATION (không tách, báo rõ)', over.ok === false && over.error === 'VALIDATION', { over: over.error });
 
   // ══ (B) SINH BILL end-to-end (xuất file thật) ══════════════════════════════════
   // ngành trống → NO_PRODUCTS.
@@ -253,6 +261,15 @@ export async function runBillExplainSelfTest(): Promise<number> {
   const reseed2 = await seedBillExplainLibrary(db);
   assert('B71: seed khớp case-insensitive "Siêu Thị" → KHÔNG tạo ngành mới', reseed2.industries === 0, reseed2);
   assert('B71: vẫn chỉ 1 ngành Siêu thị sau seed lại (hoa/thường)', (await db.industry.findMany({ where: { name: { equals: 'Siêu thị', mode: 'insensitive' }, deletedAt: null } })).length === 1);
+  // F4 (16/7): dedup seed KHÔNG chỉ hoa/thường — còn NFD (dấu tổ hợp) + khoảng trắng thừa. normIndustryName
+  // chuẩn hóa NFC + gộp space + trim + lower → biến thể "Siêu  thị " (2 space + NFD) PHẢI tái dùng, không đẻ mới.
+  await db.industry.update({ where: { id: sieuThi!.id }, data: { name: '  Siêu  thị  '.normalize('NFD') } });
+  const reseed3 = await seedBillExplainLibrary(db);
+  assert('F4: seed khớp NFD + khoảng trắng thừa → KHÔNG tạo ngành mới', reseed3.industries === 0, reseed3);
+  // Đếm bằng CHUẨN HÓA (normIndustryName) chứ không so tên thô — vì tên trong DB đang ở dạng NFD/space vừa set,
+  // query equals thô sẽ trượt. Bản chất kiểm: đúng 1 ngành chuẩn hóa về "siêu thị" (không đẻ trùng).
+  const allInd = await db.industry.findMany({ where: { deletedAt: null }, select: { name: true } });
+  assert('F4: vẫn chỉ 1 ngành Siêu thị sau seed lại (NFD/space)', allInd.filter((i) => normIndustryName(i.name) === 'siêu thị').length === 1);
   await db.industry.update({ where: { id: sieuThi!.id }, data: { name: 'Siêu thị' } });
   // engine khớp CHÍNH XÁC với thư viện SIÊU THỊ THẬT (giá lẻ 464..850k) — chọn target cấu trúc từ chính SP.
   const realLites = (await be.listProducts({ industryId: sieuThi!.id })).data!.map((p) => ({ name: p.name, unit: p.unit, price: p.price }));
