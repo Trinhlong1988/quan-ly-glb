@@ -29,10 +29,22 @@ async function idSet(model: { findMany: (a: { select: { id: true } }) => Promise
  * Bộ kiểm tra toàn vẹn — CHỈ ĐỌC (không sửa). Trả danh sách phát hiện.
  * Mỗi check độc lập, bọc try/catch để 1 check hỏng không làm sập cả lần quét.
  */
-export async function collectFindings(db: Db): Promise<Finding[]> {
+export interface CollectResult { findings: Finding[]; checksRun: number; }
+
+export async function collectFindings(db: Db): Promise<CollectResult> {
   const f: Finding[] = [];
-  const safe = async (fn: () => Promise<void>): Promise<void> => {
-    try { await fn(); } catch (err) { /* eslint-disable-next-line no-console */ console.error('[health-scan] check failed', err); }
+  let checksRun = 0;
+  // Mỗi check bọc safe(name, fn). KHÔNG nuốt lỗi im: check nào ném lỗi → đẩy CHECK_FAILED (ERROR) để LỘ ra —
+  // "không chạy được kiểm tra" KHÁC "kiểm tra thấy sạch". Chống class-bug báo OK giả (vd PRAGMA SQLite chạy trên PG).
+  // checksRun đếm ĐỘNG số mục đã chạy → checksTotal luôn khớp thực tế, không hard-code lệch được nữa.
+  const safe = async (name: string, fn: () => Promise<void>): Promise<void> => {
+    checksRun++;
+    try { await fn(); }
+    catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[health-scan] check failed:', name, err);
+      f.push({ code: 'CHECK_FAILED', severity: 'ERROR', title: `Không chạy được kiểm tra: ${name}`, count: 1, detail: `Mục "${name}" ném lỗi nên CHƯA hoàn tất — không thể khẳng định dữ liệu sạch ở phần này. Chi tiết: ${(err as Error).message}`, suggestion: 'Báo kỹ thuật (thường do truy vấn sai / lệch schema); coi như CHƯA kiểm tra tới khi chạy lại được.', autoFixable: false });
+    }
   };
 
   // Nạp sẵn tập id hợp lệ (kể cả đã xóa mềm — vẫn tồn tại bản ghi).
@@ -46,7 +58,7 @@ export async function collectFindings(db: Db): Promise<Finding[]> {
   });
 
   // 1) ERROR — doanh thu không khớp công thức (revenueAmount ≠ chênh đối tác + chênh bán).
-  await safe(async () => {
+  await safe('doanh thu khớp công thức', async () => {
     const bad: number[] = [];
     for (const t of txns) {
       const exp = computeRevenue(Number(t.amount), t.partnerMarginMilli, t.sellMarginMilli);
@@ -56,19 +68,19 @@ export async function collectFindings(db: Db): Promise<Finding[]> {
   });
 
   // 2) ERROR — số tiền giao dịch âm.
-  await safe(async () => {
+  await safe('số tiền giao dịch không âm', async () => {
     const bad = txns.filter((t) => t.amount < 0).map((t) => t.id);
     if (bad.length) f.push({ code: 'TXN_NEGATIVE_AMOUNT', severity: 'ERROR', title: 'Giao dịch có số tiền âm', count: bad.length, detail: 'Số tiền giao dịch phải ≥ 0.', suggestion: 'Kiểm tra & sửa lại số tiền, hoặc xóa giao dịch nhập sai.', autoFixable: false, sampleIds: bad.slice(0, 10) });
   });
 
   // 3) ERROR — giao dịch trỏ tới TID không tồn tại (orphan).
-  await safe(async () => {
+  await safe('giao dịch trỏ TID tồn tại', async () => {
     const bad = txns.filter((t) => !tidIds.has(t.tidId)).map((t) => t.id);
     if (bad.length) f.push({ code: 'TXN_ORPHAN_TID', severity: 'ERROR', title: 'Giao dịch trỏ tới TID không tồn tại', count: bad.length, detail: 'tid_id không còn bản ghi TID tương ứng.', suggestion: 'Phục hồi TID bị xóa hoặc gán lại giao dịch cho TID đúng.', autoFixable: false, sampleIds: bad.slice(0, 10) });
   });
 
   // 4) WARN — giao dịch trỏ tới khách/loại thẻ không tồn tại.
-  await safe(async () => {
+  await safe('giao dịch trỏ khách/loại thẻ tồn tại', async () => {
     const badCust = txns.filter((t) => t.customerId != null && !custIds.has(t.customerId)).map((t) => t.id);
     if (badCust.length) f.push({ code: 'TXN_ORPHAN_CUSTOMER', severity: 'WARN', title: 'Giao dịch trỏ tới khách hàng không tồn tại', count: badCust.length, detail: 'customer_id không còn bản ghi khách tương ứng.', suggestion: 'Gán lại khách đúng hoặc để trống (theo TID).', autoFixable: false, sampleIds: badCust.slice(0, 10) });
     const badCard = txns.filter((t) => t.cardTypeId != null && !cardIds.has(t.cardTypeId)).map((t) => t.id);
@@ -77,7 +89,7 @@ export async function collectFindings(db: Db): Promise<Finding[]> {
 
   // REL-02 (Codex 15/7) — WARN: trạng thái KHÔNG nằm trong danh mục StatusOption hợp lệ (gõ sai / import / sửa
   // DB trực tiếp). App dùng StatusOption cấu-hình-được nên KHÔNG dùng CHECK cứng; scanner phát hiện để sửa.
-  await safe(async () => {
+  await safe('trạng thái nằm trong danh mục', async () => {
     const opts = await db.statusOption.findMany({ where: { deletedAt: null }, select: { entity: true, code: true } });
     const validBy = new Map<string, Set<string>>();
     for (const o of opts) { if (!validBy.has(o.entity)) validBy.set(o.entity, new Set()); validBy.get(o.entity)!.add(o.code); }
@@ -97,27 +109,27 @@ export async function collectFindings(db: Db): Promise<Finding[]> {
   });
 
   // 5) WARN — biểu phí trỏ tới đối tác/loại thẻ không tồn tại.
-  await safe(async () => {
+  await safe('biểu phí trỏ đối tác/loại thẻ tồn tại', async () => {
     const rates = await db.feeRate.findMany({ where: { deletedAt: null }, select: { id: true, partnerId: true, cardTypeId: true } });
     const bad = rates.filter((r) => !partnerIds.has(r.partnerId) || !cardIds.has(r.cardTypeId)).map((r) => r.id);
     if (bad.length) f.push({ code: 'FEERATE_ORPHAN', severity: 'WARN', title: 'Biểu phí trỏ tới đối tác/loại thẻ không tồn tại', count: bad.length, detail: 'Bản ghi biểu phí tham chiếu đối tác hoặc loại thẻ đã bị xóa cứng.', suggestion: 'Xóa biểu phí mồ côi hoặc khôi phục đối tác/loại thẻ liên quan.', autoFixable: false, sampleIds: bad.slice(0, 10) });
   });
 
   // 6) WARN — TID trỏ tới đối tác/ngân hàng không tồn tại.
-  await safe(async () => {
+  await safe('TID trỏ đối tác/ngân hàng tồn tại', async () => {
     const tids = await db.tid.findMany({ where: { deletedAt: null }, select: { id: true, partnerId: true, bankId: true } });
     const bad = tids.filter((t) => (t.partnerId != null && !partnerIds.has(t.partnerId)) || (t.bankId != null && !bankIds.has(t.bankId))).map((t) => t.id);
     if (bad.length) f.push({ code: 'TID_ORPHAN_REF', severity: 'WARN', title: 'TID trỏ tới đối tác/ngân hàng không tồn tại', count: bad.length, detail: 'partner_id/bank_id của TID không còn bản ghi tương ứng.', suggestion: 'Cập nhật lại đối tác/ngân hàng cho TID trong Cấu hình TID.', autoFixable: false, sampleIds: bad.slice(0, 10) });
   });
 
   // 7) ERROR — không còn quản trị viên hoạt động (ADMIN active).
-  await safe(async () => {
+  await safe('còn quản trị viên hoạt động', async () => {
     const adminActive = await db.user.count({ where: { deletedAt: null, status: 'ACTIVE', roles: { some: { role: { code: 'ADMIN', status: 'ACTIVE' } } } } });
     if (adminActive === 0) f.push({ code: 'NO_ACTIVE_ADMIN', severity: 'ERROR', title: 'Không còn quản trị viên (ADMIN) hoạt động', count: 1, detail: 'Hệ thống phải luôn có ít nhất 1 tài khoản ADMIN đang hoạt động.', suggestion: 'Kích hoạt hoặc tạo lại một tài khoản ADMIN ngay.', autoFixable: false });
   });
 
   // 8) WARN — bản ghi trong thùng rác thiếu người xóa (deletedBy null) — dấu vết bug tiến hóa DB cũ.
-  await safe(async () => {
+  await safe('thùng rác có người xóa', async () => {
     const models: { name: string; m: { count: (a: { where: { deletedAt: { not: null }; deletedBy: null } }) => Promise<number> } }[] = [
       { name: 'customer', m: db.customer }, { name: 'tid', m: db.tid }, { name: 'transaction', m: db.transaction },
       { name: 'feeRate', m: db.feeRate }, { name: 'dossier', m: db.dossier }, { name: 'receiveAccount', m: db.receiveAccount }
@@ -128,37 +140,25 @@ export async function collectFindings(db: Db): Promise<Finding[]> {
   });
 
   // 9) WARN — tài khoản đang bị khóa do nhập sai mật khẩu (cần admin mở khóa).
-  await safe(async () => {
+  await safe('tài khoản bị khóa', async () => {
     const locked = await db.user.count({ where: { deletedAt: null, lockedAt: { not: null } } });
     if (locked) f.push({ code: 'USERS_LOCKED', severity: 'WARN', title: 'Có tài khoản đang bị khóa (nhập sai mật khẩu ≥ 5 lần)', count: locked, detail: 'Người dùng bị khóa cho tới khi admin mở khóa/đặt lại mật khẩu.', suggestion: 'Vào Quản Lý Nhân Sự để mở khóa hoặc đặt lại mật khẩu cho các tài khoản này.', autoFixable: false });
   });
 
   // 10) WARN — chưa từng backup / backup quá cũ (> 48h).
-  await safe(async () => {
+  await safe('backup gần đây', async () => {
     const row = await db.appSetting.findUnique({ where: { key: 'backup.lastAt' } });
     const last = row?.value ? new Date(row.value).getTime() : 0;
     const staleMs = 48 * 3600_000;
     if (!last || Date.now() - last > staleMs) f.push({ code: 'BACKUP_STALE', severity: 'WARN', title: 'Chưa backup gần đây', count: 1, detail: last ? `Backup gần nhất đã quá ${Math.round((Date.now() - last) / 3600_000)} giờ.` : 'Chưa có bản backup nào được ghi nhận.', suggestion: 'Chạy backup thủ công hoặc để lịch backup định kỳ chạy (mặc định 24h/lần).', autoFixable: false });
   });
 
-  // 11) ERROR — toàn vẹn file SQLite (PRAGMA integrity_check). Phát hiện DB hỏng/lỗi trang.
-  await safe(async () => {
-    const rows = (await db.$queryRawUnsafe('PRAGMA integrity_check')) as { integrity_check?: string }[];
-    const msgs = rows.map((r) => r.integrity_check ?? '').filter((m) => m && m.toLowerCase() !== 'ok');
-    if (msgs.length) f.push({ code: 'DB_INTEGRITY', severity: 'ERROR', title: 'Cơ sở dữ liệu có dấu hiệu hỏng (integrity_check)', count: msgs.length, detail: msgs.slice(0, 5).join(' · '), suggestion: 'NGƯNG ghi dữ liệu, khôi phục từ bản backup gần nhất còn tốt (Sao lưu & Phục hồi) và kiểm tra ổ đĩa.', autoFixable: false });
-  });
+  // (BỎ 16/7 — audit 0.2.57) 2 check cũ dùng `PRAGMA integrity_check` / `PRAGMA foreign_key_check` là
+  // cú pháp SQLite; trên PostgreSQL (G10) chúng LUÔN ném lỗi cú pháp → trước đây bị nuốt im mà vẫn đếm đủ
+  // → "báo OK giả". Đã gỡ. Toàn vẹn cấp-engine do chính PostgreSQL bảo đảm; toàn vẹn nghiệp vụ đã có các
+  // check orphan/khóa-ngoại-logic ở trên (#3–#6). Nếu cần integrity sâu hơn (amcheck) sẽ bổ sung riêng.
 
-  // 12) ERROR — vi phạm khóa ngoại còn lại (PRAGMA foreign_key_check). Với thiết kế scalar-id
-  //      (không FK cứng) thường rỗng — bắt được nếu về sau có bảng khai báo FK bị lệch.
-  await safe(async () => {
-    const rows = (await db.$queryRawUnsafe('PRAGMA foreign_key_check')) as { table?: string; rowid?: number; parent?: string }[];
-    if (rows.length) {
-      const tables = [...new Set(rows.map((r) => r.table).filter(Boolean))].slice(0, 6).join(', ');
-      f.push({ code: 'DB_FOREIGN_KEY', severity: 'ERROR', title: 'Có vi phạm khóa ngoại trong cơ sở dữ liệu', count: rows.length, detail: `Bảng liên quan: ${tables}.`, suggestion: 'Rà soát & sửa/xóa các bản ghi trỏ tới bản ghi cha không tồn tại; khôi phục từ backup nếu cần.', autoFixable: false });
-    }
-  });
-
-  return f;
+  return { findings: f, checksRun };
 }
 
 /** Áp dụng TỰ SỬA cho các phát hiện autoFixable. Hiện hỗ trợ: REVENUE_MISMATCH (tính lại doanh thu). */
@@ -196,14 +196,14 @@ export interface ScanResult {
   findings: Finding[];
 }
 
-const CHECKS_TOTAL = 12; // số nhóm kiểm tra chạy trong collectFindings (gồm 2 PRAGMA integrity)
+// checksTotal KHÔNG còn hard-code: lấy ĐỘNG từ collectFindings().checksRun (số mục thực chạy) → không lệch được.
 
 /**
  * Lưu 1 lần quét vào maintenance_runs (dùng chung cho quét thủ công & bảo trì định kỳ).
  */
 export async function persistRun(
   db: Db,
-  args: { kind: 'MANUAL' | 'SCHEDULED'; findings: Finding[]; actorId: number | null; startedAt: Date; autoFixed?: number; backupFile?: string | null; auditDeleted?: number; trashDeleted?: number; vacuumed?: boolean }
+  args: { kind: 'MANUAL' | 'SCHEDULED'; findings: Finding[]; checksTotal: number; actorId: number | null; startedAt: Date; autoFixed?: number; backupFile?: string | null; auditDeleted?: number; trashDeleted?: number; vacuumed?: boolean }
 ): Promise<ScanResult> {
   const { status, errorCount, warnCount } = severityRollup(args.findings);
   const issuesFound = args.findings.reduce((s, x) => s + x.count, 0);
@@ -212,7 +212,7 @@ export async function persistRun(
     data: {
       kind: args.kind,
       status,
-      checksTotal: CHECKS_TOTAL,
+      checksTotal: args.checksTotal,
       issuesFound,
       errorCount,
       warnCount,
@@ -228,7 +228,7 @@ export async function persistRun(
       finishedAt: new Date()
     }
   });
-  return { runId: run.id, status, checksTotal: CHECKS_TOTAL, issuesFound, errorCount, warnCount, autoFixed: args.autoFixed ?? 0, durationMs, findings: args.findings };
+  return { runId: run.id, status, checksTotal: args.checksTotal, issuesFound, errorCount, warnCount, autoFixed: args.autoFixed ?? 0, durationMs, findings: args.findings };
 }
 
 /** STORAGE_VIEW (quét) / STORAGE_CLEANUP (khi autoFix) — quét thủ công từ UI "Quét ngay". */
@@ -238,16 +238,16 @@ export async function runScan(opts: { autoFix?: boolean } = {}): Promise<{ ok: b
   if (!g.ok) return g;
   const { db, user } = g;
   const startedAt = new Date();
-  let findings = await collectFindings(db);
+  let { findings, checksRun } = await collectFindings(db);
   let autoFixed = 0;
   if (opts.autoFix) {
     // AN TOÀN (audit Nhóm E): backup TRƯỚC khi ghi đè dữ liệu tài chính; fail backup → HỦY tự sửa.
     const bk = await systemBackup(db, 'pre-autofix snapshot (Health-Scan)');
     if (!bk.ok) return { ok: false, error: 'BACKUP_FAILED', message: `Không tạo được backup an toàn trước khi tự sửa — HỦY: ${bk.error}` };
     autoFixed = await applyAutoFixes(db, findings);
-    if (autoFixed > 0) findings = await collectFindings(db); // quét lại để phản ánh sau khi sửa
+    if (autoFixed > 0) ({ findings, checksRun } = await collectFindings(db)); // quét lại để phản ánh sau khi sửa
   }
-  const res = await persistRun(db, { kind: 'MANUAL', findings, actorId: user.id, startedAt, autoFixed });
+  const res = await persistRun(db, { kind: 'MANUAL', findings, checksTotal: checksRun, actorId: user.id, startedAt, autoFixed });
   await writeAudit(db, { actorUserId: user.id, action: 'STORAGE_CLEANUP', targetType: 'System', targetId: 'scan', after: { runId: res.runId, status: res.status, issuesFound: res.issuesFound, autoFixed } });
   return { ok: true, data: res };
 }
@@ -316,8 +316,8 @@ export async function getRun(id: number): Promise<{ ok: boolean; error?: string;
  */
 export async function persistScheduledRun(db: Db, extra: { backupFile: string | null; auditDeleted: number; trashDeleted: number; vacuumed: boolean }): Promise<ScanResult> {
   const startedAt = new Date();
-  const findings = await collectFindings(db);
-  const res = await persistRun(db, { kind: 'SCHEDULED', findings, actorId: null, startedAt, ...extra });
+  const { findings, checksRun } = await collectFindings(db);
+  const res = await persistRun(db, { kind: 'SCHEDULED', findings, checksTotal: checksRun, actorId: null, startedAt, ...extra });
   await writeAudit(db, { actorUserId: null, action: 'STORAGE_CLEANUP', targetType: 'System', targetId: 'weekly-scan', after: { runId: res.runId, status: res.status, issuesFound: res.issuesFound } });
   return res;
 }

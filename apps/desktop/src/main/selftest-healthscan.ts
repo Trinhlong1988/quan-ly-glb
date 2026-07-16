@@ -55,8 +55,13 @@ export async function runHealthScanSelfTest(): Promise<number> {
   ok('bắt FEERATE_ORPHAN (WARN)', has(F, 'FEERATE_ORPHAN'), find(F, 'FEERATE_ORPHAN'));
   ok('bắt USERS_LOCKED (WARN)', has(F, 'USERS_LOCKED'), find(F, 'USERS_LOCKED'));
   ok('mỗi phát hiện đều có đề xuất fix', F.every((x) => x.suggestion && x.suggestion.length > 0), {});
-  ok('chạy đủ 12 nhóm kiểm tra (gồm 2 PRAGMA integrity)', scan.data!.checksTotal === 12, { checksTotal: scan.data!.checksTotal });
-  ok('DB lành lặn → KHÔNG có DB_INTEGRITY / DB_FOREIGN_KEY', !has(F, 'DB_INTEGRITY') && !has(F, 'DB_FOREIGN_KEY'), F.map((x) => x.code));
+  // #1 (audit 0.2.57): checksTotal lấy ĐỘNG = số mục thực chạy (11 sau khi bỏ 2 PRAGMA SQLite). Nếu ai thêm/bớt
+  // check, con số này tự đổi theo → test buộc cập nhật (chống "đếm lệch" tái diễn).
+  ok('checksTotal khớp số check ĐỘNG (11 mục sau khi bỏ 2 PRAGMA)', scan.data!.checksTotal === 11, { checksTotal: scan.data!.checksTotal });
+  // REGRESSION cốt lõi: trên PostgreSQL, KHÔNG check nào được ném lỗi rồi bị nuốt im. PRAGMA SQLite trước đây
+  // văng lỗi trên PG → nay hiện thành CHECK_FAILED → test FAIL nếu ai lại nhét câu truy vấn lệch engine.
+  ok('KHÔNG check nào bị nuốt lỗi trên PostgreSQL (không có CHECK_FAILED)', !has(F, 'CHECK_FAILED'), F.filter((x) => x.code === 'CHECK_FAILED'));
+  ok('đã gỡ 2 check PRAGMA SQLite (không còn DB_INTEGRITY / DB_FOREIGN_KEY)', !has(F, 'DB_INTEGRITY') && !has(F, 'DB_FOREIGN_KEY'), F.map((x) => x.code));
   ok('trạng thái tổng = ERROR (có lỗi nghiêm trọng)', scan.data!.status === 'ERROR', { status: scan.data!.status });
   ok('lưu 1 dòng lịch sử (runId > 0)', scan.data!.runId > 0, { runId: scan.data!.runId });
 
@@ -85,7 +90,7 @@ export async function runHealthScanSelfTest(): Promise<number> {
   // xóa cứng các bản ghi orphan/âm để chứng minh scan phản ánh trạng thái sạch hơn
   await db.transaction.deleteMany({ where: { OR: [{ amount: { lt: 0 } }, { tidId: 999999 }, { cardTypeId: 888888 }] } });
   await db.feeRate.deleteMany({ where: { partnerId: 555555 } });
-  const after = await collectFindings(db);
+  const after = (await collectFindings(db)).findings;
   ok('sau dọn dữ liệu sai: hết TXN_ORPHAN_TID', !has(after, 'TXN_ORPHAN_TID'), after.map((x) => x.code));
   ok('sau dọn: hết TXN_NEGATIVE_AMOUNT', !has(after, 'TXN_NEGATIVE_AMOUNT'), {});
 

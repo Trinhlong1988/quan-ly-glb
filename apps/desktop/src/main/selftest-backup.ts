@@ -84,6 +84,16 @@ export async function runBackupSelfTest(): Promise<number> {
   ok('C1: backup lỗi → ran=false', due.ran === false, due);
   ok('C1: ghi audit AUTO_BACKUP_FAILED (không lặng)', (await db.auditLog.count({ where: { action: 'AUTO_BACKUP_FAILED' } })) >= 1);
 
+  // ═══ A1 (audit 0.2.57): SAO LƯU CHỈ Ở MÁY CHỦ — máy trạm (GLB_ROLE≠server) bị chặn server-only ═══
+  const savedRole = process.env['GLB_ROLE'];
+  delete process.env['GLB_ROLE'];
+  const clientBk = await createBackup('client-should-block');
+  ok('A1: máy trạm createBackup bị chặn (BACKUP_SERVER_ONLY)', clientBk.ok === false && clientBk.error === 'BACKUP_SERVER_ONLY', clientBk);
+  await db.appSetting.deleteMany({ where: { key: 'backup.lastAt' } }); // ép "đến hạn"
+  const clientDue = await systemBackupIfDue(db);
+  ok('A1: máy trạm backup định kỳ KHÔNG chạy (ran=false)', clientDue.ran === false, clientDue);
+  if (savedRole === undefined) delete process.env['GLB_ROLE']; else process.env['GLB_ROLE'] = savedRole;
+
   await logout();
   // eslint-disable-next-line no-console
   console.log(`BACKUP36 SUMMARY | pass=${pass} fail=${fail}`);

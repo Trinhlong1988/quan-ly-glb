@@ -14,6 +14,11 @@ const isDev = !app.isPackaged;
 // với fmtDate. PHẢI gọi TRƯỚC app.whenReady() (Chromium đọc --lang lúc khởi tạo). Áp 1 điểm, không sửa từng ô.
 app.commandLine.appendSwitch('lang', 'vi-VN');
 
+// Mr.Long 16/7 — "icon app trên taskbar không đồng bộ icon bản chuẩn": Windows cần AppUserModelID KHỚP appId
+// bộ cài (`com.globeway.glb`, xem electron-builder.yml) để liên kết tiến trình đang chạy với shortcut đã cài
+// → taskbar/pin dùng ĐÚNG icon chuẩn (thay vì icon Electron mặc định hoặc nhóm sai). PHẢI đặt trước khi tạo cửa sổ.
+if (process.platform === 'win32') app.setAppUserModelId('com.globeway.glb');
+
 // [H2] Giữ ref cửa sổ chính ở module để update-service gửi sự kiện (webContents.send).
 // `win` cục bộ trong createWindow không gửi được từ nơi khác.
 let mainWindow: BrowserWindow | null = null;
@@ -30,6 +35,9 @@ async function createWindow(): Promise<void> {
     minHeight: Math.min(720, wa.height - 48),
     show: false,
     autoHideMenuBar: true,
+    // Mr.Long 16/7 — icon cửa sổ/taskbar = icon shield chuẩn (build/icon.ico). Packaged: đọc từ resources
+    // (đóng gói qua extraResources); dev: đọc trực tiếp trong build/. Thiếu file → Electron tự lùi về icon exe.
+    icon: app.isPackaged ? join(process.resourcesPath, 'icon.ico') : join(__dirname, '../../build/icon.ico'),
     // Mr.Long 15/7 — ẩn khung/nút cửa sổ gốc để tự vẽ 3 nút tròn kiểu Mac (đỏ/vàng/lục). Windows vẫn
     // giữ viền kéo giãn (khác frame:false), thanh tiêu đề tự vẽ có vùng kéo -webkit-app-region:drag.
     titleBarStyle: 'hidden',
@@ -480,7 +488,10 @@ let housekeepingTimer: ReturnType<typeof setInterval> | undefined;
 function startHousekeeping(): void {
   const tick = async (): Promise<void> => {
     try {
-      const { getDb } = await import('./db.js');
+      const { getDb, isServerRole } = await import('./db.js');
+      // A1 (Mr.Long 16/7): bảo trì nền (backup định kỳ / dọn dẹp / đo ổ đĩa) CHỈ chạy trên MÁY CHỦ.
+      // Máy trạm không có pg_dump + data_directory là đường dẫn máy khác → bỏ qua để không sinh lỗi/cảnh báo sai.
+      if (!isServerRole()) return;
       const { systemBackupIfDue, systemStorageCheck, systemWeeklyMaintenanceIfDue, backupWatchdog } = await import('./storage-service.js');
       const db = getDb();
       await systemBackupIfDue(db);

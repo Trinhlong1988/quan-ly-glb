@@ -15,7 +15,7 @@ import {
   backupFileName,
   type FutureSyncService
 } from '@glb/business-rules';
-import { resolveDatabaseUrl } from './db.js';
+import { resolveDatabaseUrl, isServerRole } from './db.js';
 import { requirePermission, verifyActorPassword } from './guard.js';
 import { writeAudit } from './audit.js';
 import { notifyAdmins } from './message-service.js';
@@ -235,6 +235,9 @@ export async function setBackupMirrorConfig(input: { mirrorDir: string | null; k
 
 /** R_BACKUP_001 — create a local backup archive (pg_dump custom format zipped + manifest). */
 export async function createBackup(note?: string): Promise<MutationResult> {
+  // A1 (Mr.Long 16/7): SAO LƯU CHỈ Ở MÁY CHỦ. pg_dump/pg_restore chỉ có trên máy chủ (nơi cài PostgreSQL);
+  // máy trạm không có nên sẽ fail. Fail-closed rõ ràng thay vì để pg_dump ném lỗi khó hiểu.
+  if (!isServerRole()) return { ok: false, error: 'BACKUP_SERVER_ONLY', message: 'Sao lưu chỉ thực hiện trên MÁY CHỦ (nơi cài PostgreSQL). Máy trạm không chạy được pg_dump — hãy sao lưu từ máy chủ.' };
   const g = await requirePermission('BACKUP_CREATE', { action: 'BACKUP_CREATED', targetType: 'System' });
   if (!g.ok) return g;
   const { db, user } = g;
@@ -343,6 +346,8 @@ async function writeBackupArchive(
  * Dùng cho auto-backup định kỳ & "backup trước khi xóa" của Storage-Guard. Trả về đường dẫn + size.
  */
 export async function systemBackup(db: import('@glb/database').Db, note: string): Promise<{ ok: boolean; filePath?: string; size?: number; error?: string }> {
+  // A1: backup hệ thống (scheduler/pre-snapshot) cũng CHỈ ở máy chủ — máy trạm không có pg_dump.
+  if (!isServerRole()) return { ok: false, error: 'BACKUP_SERVER_ONLY: sao lưu chỉ chạy trên máy chủ (role=server).' };
   try {
     const out = await writeBackupArchive(db, 'system', note);
     await writeAudit(db, {

@@ -7,6 +7,7 @@
 import { statfsSync } from 'node:fs';
 import type { Db } from '@glb/database';
 import { requirePermission, verifyActorPassword } from './guard.js';
+import { isServerRole } from './db.js';
 import { writeAudit } from './audit.js';
 import { systemBackup } from './backup-service.js';
 import { notifyAdmins } from './message-service.js';
@@ -85,6 +86,10 @@ async function pgDataDirectory(db: Db): Promise<string | null> {
  * xác định được", KHÔNG báo bừa) — cảnh báo ngưỡng chỉ có ý nghĩa khi chạy trên máy chủ.
  */
 async function diskInfo(db: Db): Promise<{ total: number; free: number } | null> {
+  // #3 (audit 0.2.57): `SHOW data_directory` trả ĐƯỜNG DẪN TRÊN MÁY CHỦ PostgreSQL. Chỉ statfs khi máy
+  // đang chạy CHÍNH LÀ máy chủ (role=server). Trên máy trạm, statfs đường dẫn đó = đo NHẦM ổ máy trạm
+  // (hoặc null) → cảnh báo ổ đầy vô nghĩa/sai. Fail-safe: máy trạm trả null (thành thật "không đo được").
+  if (!isServerRole()) return null;
   const dir = await pgDataDirectory(db);
   if (!dir) return null;
   try {

@@ -20,9 +20,15 @@ export function BackupPage({ user }: { user: AuthUser }): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [restoreTarget, setRestoreTarget] = useState<BackupDto | null>(null);
+  // A1 (16/7): sao lưu chỉ chạy trên MÁY CHỦ. Mặc định true để máy chủ không nhấp nháy khóa; máy trạm → false.
+  const [serverRole, setServerRole] = useState(true);
 
   const canCreate = hasPermission(user, 'BACKUP_CREATE');
   const canRestore = hasPermission(user, 'BACKUP_RESTORE');
+
+  useEffect(() => {
+    window.api.serverConfigGet().then((st) => setServerRole(st.serverRole)).catch(() => { /* không lấy được → giữ mặc định */ });
+  }, []);
 
   async function reload(): Promise<void> {
     setLoading(true);
@@ -64,7 +70,7 @@ export function BackupPage({ user }: { user: AuthUser }): JSX.Element {
           <button onClick={reload} title="Tải lại dữ liệu mới nhất" className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium bg-brand/10 text-brand hover:bg-brand/20">
             <RefreshCw className="h-4 w-4" /> Làm mới
           </button>
-          {canCreate && (
+          {canCreate && serverRole && (
             <button
               onClick={createBackup}
               disabled={creating}
@@ -73,6 +79,14 @@ export function BackupPage({ user }: { user: AuthUser }): JSX.Element {
               {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <HardDriveDownload className="h-4 w-4" />}
               Tạo bản sao lưu ngay
             </button>
+          )}
+          {canCreate && !serverRole && (
+            <span
+              title="Sao lưu chỉ thực hiện trên máy chủ (nơi cài PostgreSQL). Máy trạm không chạy được pg_dump."
+              className="flex items-center gap-2 rounded-lg border border-line px-4 py-2 text-sm font-medium text-slate-400"
+            >
+              <HardDriveDownload className="h-4 w-4" /> Sao lưu chạy ở máy chủ
+            </span>
           )}
         </div>
       </div>
