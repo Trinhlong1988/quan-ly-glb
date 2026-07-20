@@ -35,6 +35,11 @@ export async function runIndustrySelfTest(): Promise<number> {
   await login('adminroot', PW);
 
   // ═══════════ ĐÚNG — CRUD ═══════════
+  // BASELINE trước khi tạo: seed nghiệp vụ (vd Bill Giải Trình) có thể đã tạo sẵn ngành CÓ sản phẩm →
+  // KHÔNG hardcode tổng số. Đếm TƯƠNG ĐỐI so với baseline để test bền với seed (bài học ST24 rotted 20/7).
+  const base = (await ind.listIndustries()).data?.length ?? 0;
+  const baseActive = (await ind.listIndustries({ active: true })).data?.length ?? 0;
+  const baseInactive = (await ind.listIndustries({ active: false })).data?.length ?? 0;
   const commonNames = ['Vận tải', 'Tạp hóa', 'Cà phê', 'Ăn uống', 'Thời trang', 'Điện tử'];
   const ids: number[] = [];
   const codes: string[] = [];
@@ -43,7 +48,7 @@ export async function runIndustrySelfTest(): Promise<number> {
     ok(`tạo ngành "${nm}" → ok`, r.ok === true, r);
     if (r.id) ids.push(r.id);
   }
-  ok('list = 6', (await ind.listIndustries()).data?.length === 6);
+  ok('list = baseline + 6 (test tạo 6)', (await ind.listIndustries()).data?.length === base + 6);
 
   // Mã NGH## auto tuần tự (atomic $transaction, §D)
   const listed = (await ind.listIndustries()).data ?? [];
@@ -52,15 +57,15 @@ export async function runIndustrySelfTest(): Promise<number> {
   ok('mã KHÔNG trùng nhau', new Set(codes).size === codes.length, codes);
   ok('mã đầu = NGH01', codes[0] === 'NGH01', codes[0]);
 
-  // active mặc định = true
-  ok('mặc định active = true', listed.every((r) => r.active === true));
+  // active mặc định = true (chỉ xét ngành TEST vừa tạo — không phụ thuộc seed)
+  ok('mặc định active = true', listed.filter((r) => ids.includes(r.id)).every((r) => r.active === true));
 
   // update: đổi tên
   ok('sửa tên ngành[0] → ok', (await ind.updateIndustry(ids[0], { name: 'Vận tải (sửa)' })).ok === true);
   // update: tắt active
   ok('tắt active ngành[1] → ok', (await ind.updateIndustry(ids[1], { active: false })).ok === true);
-  ok('lọc active=false = 1', (await ind.listIndustries({ active: false })).data?.length === 1);
-  ok('lọc active=true = 5', (await ind.listIndustries({ active: true })).data?.length === 5);
+  ok('lọc active=false = baseline + 1 (test tắt 1)', (await ind.listIndustries({ active: false })).data?.length === baseInactive + 1);
+  ok('lọc active=true = baseline + 5 (6 tạo − 1 tắt)', (await ind.listIndustries({ active: true })).data?.length === baseActive + 5);
   // update: ghi chú
   ok('sửa ghi chú ngành[2] → ok', (await ind.updateIndustry(ids[2], { note: 'Đồ uống' })).ok === true);
   ok('ghi chú đã lưu', (await ind.listIndustries({ search: 'Cà phê' })).data?.[0]?.note === 'Đồ uống');

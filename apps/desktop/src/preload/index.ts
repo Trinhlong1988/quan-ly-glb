@@ -254,6 +254,7 @@ const api = {
   cashEntryList: (filter: unknown) => ipcRenderer.invoke('cashEntry:list', filter),
   cashEntryReport: (filter: unknown) => ipcRenderer.invoke('cashEntry:report', filter),
   cashEntryCategoryLite: () => ipcRenderer.invoke('cashEntry:categoryLite'),
+  cashEntryPartnerLite: () => ipcRenderer.invoke('cashEntry:partnerLite'),
   cashEntryCreate: (input: unknown) => ipcRenderer.invoke('cashEntry:create', input),
   cashEntryCreateDebtReceipt: (input: unknown) => ipcRenderer.invoke('cashEntry:createDebtReceipt', input),
   cashEntryCancel: (id: number, reason: string, password: string) => ipcRenderer.invoke('cashEntry:cancel', { id, reason, password }),

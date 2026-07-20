@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import { Plus, Ban, Loader2, Receipt, Download, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
 import type { AuthUser } from '@glb/shared';
 import { hasPermission, fmtDate } from '@glb/shared';
-import type { CashEntryDto, CashflowSummary, CashflowUserLite, EntryCategoryLite, FundDto, CreateCashEntryInput } from '../../../preload/index.d';
+import type { CashEntryDto, CashflowSummary, CashflowUserLite, EntryCategoryLite, FundDto, CreateCashEntryInput, CashPartnerLite } from '../../../preload/index.d';
 import { useToast } from '../lib/toast.js';
 import { Modal } from '../components/Modal.js';
 import { Field, inputCls } from '../components/Field.js';
@@ -65,6 +65,7 @@ export function CashEntryPage({ user, kind }: { user: AuthUser; kind: 'THU' | 'C
   const [cats, setCats] = useState<EntryCategoryLite[]>([]);
   const [funds, setFunds] = useState<FundDto[]>([]);
   const [users, setUsers] = useState<CashflowUserLite[]>([]);
+  const [partners, setPartners] = useState<CashPartnerLite[]>([]);
 
   const [form, setForm] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<CashEntryDto | null>(null);
@@ -77,10 +78,11 @@ export function CashEntryPage({ user, kind }: { user: AuthUser; kind: 'THU' | 'C
   const selectedTotal = selectedRows.reduce((s, r) => s + r.amount, 0);
 
   async function loadRefs(): Promise<void> {
-    const [c, f, u] = await Promise.all([window.api.cashEntryCategoryLite(), window.api.fundList({ active: true }), window.api.fundUserLite()]);
+    const [c, f, u, p] = await Promise.all([window.api.cashEntryCategoryLite(), window.api.fundList({ active: true }), window.api.fundUserLite(), window.api.cashEntryPartnerLite()]);
     if (c.ok && c.data) setCats(c.data);
     if (f.ok && f.data) setFunds(f.data);
     if (u.ok && u.data) setUsers(u.data);
+    if (p.ok && p.data) setPartners(p.data);
   }
   async function reload(): Promise<void> {
     setLoading(true);
@@ -136,7 +138,7 @@ export function CashEntryPage({ user, kind }: { user: AuthUser; kind: 'THU' | 'C
         <div className="text-sm text-slate-500">{rows.length} phiếu</div>
         <div className="flex items-center gap-2">
         {canCreate && <ImportButton entityKey={isThu ? 'cashThu' : 'cashChi'} label={isThu ? 'Phiếu thu' : 'Phiếu chi'} onImported={reload} />}
-        <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv(isThu ? 'phieu_thu' : 'phieu_chi', ['Mã', 'Ngày', 'Danh mục', 'Quỹ', 'Số tiền', 'Hình thức', isThu ? 'Người nhận' : 'Người chi', 'Trạng thái', 'Ghi chú'], rows.map((r) => [r.code ?? '', fmtDate(r.entryDate), r.categoryName ?? '', r.fundName ?? '', String(r.amount), r.method === 'CK' ? 'Chuyển khoản' : 'Tiền mặt', (isThu ? r.receiverUserName : r.payerUserName) ?? '', r.status === 'POSTED' ? 'Đã ghi' : r.status === 'CANCELLED' ? 'Đã hủy' : r.status, r.note ?? '']))}>Xuất Excel</Button>
+        <Button variant="confirm" icon={<Download className="h-4 w-4" />} onClick={() => exportCsv(isThu ? 'phieu_thu' : 'phieu_chi', ['Mã', 'Ngày', 'Danh mục', 'Quỹ', 'Số tiền', 'Hình thức', isThu ? 'Người nhận' : 'Người chi', isThu ? 'Thu của' : 'Chi cho', 'Trạng thái', 'Ghi chú'], rows.map((r) => [r.code ?? '', fmtDate(r.entryDate), r.categoryName ?? '', r.fundName ?? '', String(r.amount), r.method === 'CK' ? 'Chuyển khoản' : 'Tiền mặt', (isThu ? r.receiverUserName : r.payerUserName) ?? '', r.partnerName ?? r.partnerText ?? '', r.status === 'POSTED' ? 'Đã ghi' : r.status === 'CANCELLED' ? 'Đã hủy' : r.status, r.note ?? '']))}>Xuất Excel</Button>
         </div>
       </div>
 
@@ -162,13 +164,14 @@ export function CashEntryPage({ user, kind }: { user: AuthUser; kind: 'THU' | 'C
               <th className="px-4 py-3 text-right">Số tiền</th>
               <th className="px-4 py-3">Hình thức</th>
               <th className="px-4 py-3">{isThu ? 'Người nhận' : 'Người chi'}</th>
+              <th className="px-4 py-3">{isThu ? 'Thu của' : 'Chi cho'}</th>
               <th className="px-4 py-3">Trạng thái</th>
               {canCancel && <th className="px-4 py-3 text-right">Thao tác</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {loading && <tr><td colSpan={canCancel ? 10 : 8} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
-            {!loading && rows.length === 0 && <tr><td colSpan={canCancel ? 10 : 8} className="px-4 py-10 text-center text-slate-400"><Receipt className="mx-auto mb-2 h-6 w-6" /> Chưa có phiếu {isThu ? 'thu' : 'chi'}.</td></tr>}
+            {loading && <tr><td colSpan={canCancel ? 11 : 9} className="px-4 py-8 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+            {!loading && rows.length === 0 && <tr><td colSpan={canCancel ? 11 : 9} className="px-4 py-10 text-center text-slate-400"><Receipt className="mx-auto mb-2 h-6 w-6" /> Chưa có phiếu {isThu ? 'thu' : 'chi'}.</td></tr>}
             {!loading && rows.map((r) => (
               <tr key={r.id} className={'hover:bg-appbg/60 ' + (r.status === 'CANCELLED' ? 'opacity-60' : '')}>
                 {canCancel && (isCancellable(r) ? <SelectCell id={r.id} sel={sel} /> : <td className="px-4 py-3" />)}
@@ -179,6 +182,7 @@ export function CashEntryPage({ user, kind }: { user: AuthUser; kind: 'THU' | 'C
                 <td className={'px-4 py-3 text-right font-semibold tabular-nums whitespace-nowrap ' + (isThu ? 'text-success' : 'text-warning')}>{money(r.amount)}</td>
                 <td className="px-4 py-3 text-slate-600">{r.method === 'CK' ? 'Chuyển khoản' : 'Tiền mặt'}</td>
                 <td className="px-4 py-3 text-slate-600">{(isThu ? r.receiverUserName : r.payerUserName) ?? '—'}</td>
+                <td className="px-4 py-3 text-slate-600">{r.partnerName ?? r.partnerText ?? '—'}</td>
                 <td className="px-4 py-3"><StatusBadge status={r.status} /></td>
                 {canCancel && (
                   <td className="px-4 py-3"><div className="flex justify-end">
@@ -191,7 +195,7 @@ export function CashEntryPage({ user, kind }: { user: AuthUser; kind: 'THU' | 'C
         </table>
       </div>
 
-      {form && <CashEntryForm kind={kind} cats={kindCats} funds={funds} users={users} onClose={() => setForm(false)} onSaved={() => { setForm(false); void reload(); }} />}
+      {form && <CashEntryForm kind={kind} cats={kindCats} funds={funds} users={users} partners={partners} onClose={() => setForm(false)} onSaved={() => { setForm(false); void reload(); }} />}
       {cancelTarget && <CancelEntryModal entry={cancelTarget} isThu={isThu} onClose={() => setCancelTarget(null)} onDone={() => { setCancelTarget(null); void reload(); }} />}
       {bulkOpen && <BulkCancelEntryModal entries={selectedRows} isThu={isThu} onClose={() => setBulkOpen(false)} onDone={() => { setBulkOpen(false); void reload(); }} />}
     </div>
@@ -242,7 +246,7 @@ function BulkCancelEntryModal({ entries, isThu, onClose, onDone }: { entries: Ca
   );
 }
 
-function CashEntryForm({ kind, cats, funds, users, onClose, onSaved }: { kind: 'THU' | 'CHI'; cats: EntryCategoryLite[]; funds: FundDto[]; users: CashflowUserLite[]; onClose: () => void; onSaved: () => void }): JSX.Element {
+function CashEntryForm({ kind, cats, funds, users, partners, onClose, onSaved }: { kind: 'THU' | 'CHI'; cats: EntryCategoryLite[]; funds: FundDto[]; users: CashflowUserLite[]; partners: CashPartnerLite[]; onClose: () => void; onSaved: () => void }): JSX.Element {
   const toast = useToast();
   const isThu = kind === 'THU';
   // Danh mục cho phép lập phiếu (H2-core chặn công nợ DEBT_*).
@@ -254,6 +258,9 @@ function CashEntryForm({ kind, cats, funds, users, onClose, onSaved }: { kind: '
   const [entryDate, setEntryDate] = useState(todayStr());
   const [payerUserId, setPayerUserId] = useState('');
   const [receiverUserId, setReceiverUserId] = useState('');
+  // "Của ai" (mục D): '' = không chọn · số = id đối tác trong danh sách · '__other__' = nhập tay (partnerText).
+  const [partnerSel, setPartnerSel] = useState('');
+  const [partnerText, setPartnerText] = useState('');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -263,9 +270,14 @@ function CashEntryForm({ kind, cats, funds, users, onClose, onSaved }: { kind: '
     if (!categoryId) return toast.alert('Vui lòng chọn danh mục.', 'Thiếu danh mục');
     if (!fundId) return toast.alert('Vui lòng chọn quỹ.', 'Thiếu quỹ');
     if (!isThu && !payerUserId) return toast.alert('Phiếu chi bắt buộc chọn người chi.', 'Thiếu người chi');
+    // "Của ai": chọn danh sách → partnerId; nhập tay → partnerText; loại trừ nhau (khớp backend).
+    const isOther = partnerSel === '__other__';
+    const partnerId = isOther || !partnerSel ? null : Number(partnerSel);
+    const partnerTextOut = isOther ? partnerText.trim() || null : null;
     setBusy(true);
     const input: CreateCashEntryInput = {
       kind, categoryId: Number(categoryId), fundId: Number(fundId), amount: amt, method, entryDate,
+      partnerId, partnerText: partnerTextOut,
       payerUserId: payerUserId ? Number(payerUserId) : null,
       receiverUserId: receiverUserId ? Number(receiverUserId) : null,
       note: note.trim() || null
@@ -315,6 +327,16 @@ function CashEntryForm({ kind, cats, funds, users, onClose, onSaved }: { kind: '
           </Field>
         )}
       </div>
+      <Field label={isThu ? 'Thu của ai (đối tác)' : 'Chi cho ai (đối tác)'} hint="Tùy chọn. Chọn từ danh sách đối tác, hoặc 'Khác' để nhập tay đối tác lẻ.">
+        <select className={inputCls} value={partnerSel} onChange={(e) => setPartnerSel(e.target.value)}>
+          <option value="">— Không chọn —</option>
+          {partners.map((p) => <option key={p.id} value={String(p.id)}>{p.name}</option>)}
+          <option value="__other__">Khác (nhập tay)…</option>
+        </select>
+        {partnerSel === '__other__' && (
+          <input className={inputCls} value={partnerText} onChange={(e) => setPartnerText(e.target.value)} placeholder="Nhập tên đối tác / đối tượng" autoFocus />
+        )}
+      </Field>
       <Field label="Ghi chú"><input className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} /></Field>
       <div className="mt-6 flex justify-end gap-2">
         <Button variant="neutral" onClick={onClose}>Hủy</Button>

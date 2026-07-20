@@ -311,7 +311,7 @@ export async function updateCashCategory(id: number, input: UpdateCashCategoryIn
 /**
  * CASHCAT_DELETE — xóa mềm 1..n danh mục + nhập lại mật khẩu (§14). Từ chối cũng ghi audit.
  * - Danh mục HỆ THỐNG (isSystem) KHÔNG xóa được → chặn (SYSTEM_LOCKED).
- * - (H2) danh mục ĐANG DÙNG (có CashEntry tham chiếu) sẽ chặn IN_USE — thêm khi có bảng CashEntry.
+ * - Danh mục ĐANG DÙNG (có CashEntry chưa xóa tham chiếu) → chặn IN_USE (khuyên "Ngừng dùng" thay vì xóa).
  */
 export async function deleteCashCategories(ids: number[], password: string): Promise<MutationResult & { deleted?: number }> {
   const g = await requirePermission('CASHCAT_DELETE', { action: 'CASH_CATEGORY_DELETED', targetType: 'CashCategory' });
@@ -326,11 +326,20 @@ export async function deleteCashCategories(ids: number[], password: string): Pro
 
   let deleted = 0;
   let systemBlocked = 0;
+  let inUseBlocked = 0;
   for (const id of ids) {
     const row = await db.cashCategory.findUnique({ where: { id } });
     if (!row || row.deletedAt) continue;
     if (row.isSystem) {
       systemBlocked++;
+      continue;
+    }
+    // IN_USE: danh mục còn phiếu thu/chi (chưa xóa) tham chiếu → KHÔNG xóa (tránh phiếu mồ côi danh mục).
+    // Bao gồm cả phiếu CANCELLED (vẫn cần tên danh mục cho lịch sử/nhật ký). Bảng CashEntry đã có từ H2-core.
+    const refCount = await db.cashEntry.count({ where: { categoryId: id, deletedAt: null } });
+    if (refCount > 0) {
+      inUseBlocked++;
+      await writeAudit(db, { actorUserId: user.id, action: 'CASH_CATEGORY_DELETED', targetType: 'CashCategory', targetId: String(id), after: { denied: true, reason: 'IN_USE', refCount } });
       continue;
     }
     await db.cashCategory.update({ where: { id }, data: { deletedAt: new Date(), updatedBy: user.id, deletedBy: user.id } });
@@ -342,6 +351,9 @@ export async function deleteCashCategories(ids: number[], password: string): Pro
       before: auditSnapshot({ kind: row.kind, name: row.name, sourceKind: row.sourceKind })
     });
     deleted++;
+  }
+  if (deleted === 0 && inUseBlocked > 0) {
+    return { ok: false, error: 'IN_USE', message: `Danh mục đang được dùng ở ${inUseBlocked > 1 ? inUseBlocked + ' danh mục có' : ''} phiếu thu/chi nên không thể xóa. Hãy chuyển sang "Ngừng dùng" thay vì xóa.` };
   }
   if (deleted === 0 && systemBlocked > 0) {
     return { ok: false, error: 'SYSTEM_LOCKED', message: 'Danh mục hệ thống không thể xóa.' };

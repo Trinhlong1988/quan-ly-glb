@@ -1348,6 +1348,7 @@ export interface CashEntryDto {
   customerName: string | null;
   partnerId: number | null;
   partnerName: string | null;
+  partnerText: string | null; // "của ai" nhập tay (đối tác lẻ ngoài danh sách)
   payerUserId: number | null;
   payerUserName: string | null;
   receiverUserId: number | null;
@@ -1379,9 +1380,14 @@ export interface CreateCashEntryInput {
   entryDate: string;
   customerId?: number | null;
   partnerId?: number | null;
+  partnerText?: string | null; // "của ai" nhập tay — loại trừ với partnerId
   payerUserId?: number | null;
   receiverUserId?: number | null;
   note?: string | null;
+}
+export interface CashPartnerLite {
+  id: number;
+  name: string;
 }
 export interface CashflowSummary {
   count: number;
@@ -1850,6 +1856,7 @@ export interface GlbApi {
   cashEntryList(filter: CashEntryFilter): Promise<CashEntryListResult>;
   cashEntryReport(filter: CashEntryFilter): Promise<CashEntryListResult>;
   cashEntryCategoryLite(): Promise<ListResult<EntryCategoryLite>>;
+  cashEntryPartnerLite(): Promise<ListResult<CashPartnerLite>>;
   cashEntryCreate(input: CreateCashEntryInput): Promise<MutationOutcome>;
   cashEntryCreateDebtReceipt(input: CreateDebtReceiptInput): Promise<MutationOutcome>;
   cashEntryCancel(id: number, reason: string, password: string): Promise<MutationOutcome>;

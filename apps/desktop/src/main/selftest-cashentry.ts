@@ -117,6 +117,33 @@ export async function runCashEntrySelfTest(): Promise<number> {
   const marchRow = await db.cashEntry.findUnique({ where: { id: march.id! }, select: { entryDate: true } });
   ok('I#10 lưu đúng ngày local (tháng 3, ngày 31 — KHÔNG nhảy sang tháng 4)', marchRow!.entryDate.getMonth() === 2 && marchRow!.entryDate.getDate() === 31, { m: marchRow!.entryDate.getMonth(), d: marchRow!.entryDate.getDate() });
 
+  // ═══════════ TRƯỜNG "CỦA AI" (đối tác): partnerLite · partnerId · partnerText · loại trừ · none ═══════════
+  const partner = await db.partner.upsert({ where: { code: 'DTPC-ST26' }, update: {}, create: { name: 'Đối tác Phí Chênh ST26', code: 'DTPC-ST26', status: 'SIGNED', createdBy: me()!.id } });
+  const pl = await ce.listPartnersLite();
+  ok('partnerLite trả danh sách đối tác (quyền CASHENTRY_VIEW, không cần CONFIG_BANK_VIEW)', pl.ok === true && (pl.data?.some((p) => p.id === partner.id) ?? false), pl.error);
+  // (a) chọn từ danh sách → lưu partnerId, partnerText=null
+  const pA = await ce.createCashEntry({ kind: 'THU', categoryId: thuCat!.id, fundId: f2r.id!, amount: 120_000, method: 'CASH', entryDate: dateStr(15), partnerId: partner.id });
+  ok('phiếu THU chọn đối tác từ danh sách → ok', pA.ok === true, pA);
+  const pArow = await db.cashEntry.findUnique({ where: { id: pA.id! }, select: { partnerId: true, partnerText: true } });
+  ok('lưu partnerId, partnerText=null khi chọn danh sách', pArow?.partnerId === partner.id && pArow?.partnerText === null, pArow);
+  // (b) nhập tay "Khác" → lưu partnerText (đã trim), partnerId=null
+  const pB = await ce.createCashEntry({ kind: 'CHI', categoryId: chiCat!.id, fundId: f2r.id!, amount: 90_000, method: 'CASH', entryDate: dateStr(15), payerUserId: payerId, partnerText: '  Đối tác lẻ ABC  ' });
+  ok('phiếu CHI nhập tay đối tác → ok', pB.ok === true, pB);
+  const pBrow = await db.cashEntry.findUnique({ where: { id: pB.id! }, select: { partnerId: true, partnerText: true } });
+  ok('lưu partnerText (trim), partnerId=null khi nhập tay', pBrow?.partnerId === null && pBrow?.partnerText === 'Đối tác lẻ ABC', pBrow);
+  // (c) vừa chọn vừa nhập tay → PARTNER_SOURCE_CONFLICT (không lưu)
+  ok('SAI vừa chọn vừa nhập tay → PARTNER_SOURCE_CONFLICT', (await ce.createCashEntry({ kind: 'THU', categoryId: thuCat!.id, fundId: f2r.id!, amount: 50_000, method: 'CASH', entryDate: dateStr(15), partnerId: partner.id, partnerText: 'X' })).error === 'PARTNER_SOURCE_CONFLICT');
+  // (d) không chọn → mặc định none (cả hai null)
+  const pD = await ce.createCashEntry({ kind: 'THU', categoryId: thuCat!.id, fundId: f2r.id!, amount: 40_000, method: 'CASH', entryDate: dateStr(15) });
+  const pDrow = await db.cashEntry.findUnique({ where: { id: pD.id! }, select: { partnerId: true, partnerText: true } });
+  ok('không chọn đối tác → partnerId & partnerText đều null (mặc định)', pDrow?.partnerId === null && pDrow?.partnerText === null, pDrow);
+  // (e) partnerText chỉ khoảng trắng → coi như none (null)
+  const pE = await ce.createCashEntry({ kind: 'THU', categoryId: thuCat!.id, fundId: f2r.id!, amount: 30_000, method: 'CASH', entryDate: dateStr(15), partnerText: '   ' });
+  const pErow = await db.cashEntry.findUnique({ where: { id: pE.id! }, select: { partnerText: true } });
+  ok('partnerText chỉ khoảng trắng → null', pErow?.partnerText === null, pErow);
+  // (f) đối tác không tồn tại → VALIDATION
+  ok('SAI partnerId không tồn tại → VALIDATION', (await ce.createCashEntry({ kind: 'THU', categoryId: thuCat!.id, fundId: f2r.id!, amount: 20_000, method: 'CASH', entryDate: dateStr(15), partnerId: 999_999 })).error === 'VALIDATION');
+
   // ═══════════ XÓA QUỸ đang có phiếu → IN_USE; quỹ trống → xóa được ═══════════
   const emptyR = await fundSvc.createFund({ name: 'Quỹ trống ST26', type: 'EWALLET', openingBalance: 0 });
   ok('SAI xóa quỹ F1 (đang có phiếu) → IN_USE', (await fundSvc.deleteFunds([f1r.id!], PW)).error === 'IN_USE');

@@ -1054,7 +1054,10 @@ export async function ensureCriticalSchema(db: Db): Promise<void> {
       CONSTRAINT "bill_explains_pkey" PRIMARY KEY ("id")
     )`,
     `CREATE UNIQUE INDEX IF NOT EXISTS "bill_explains_code_key" ON "bill_explains" ("code")`,
-    `CREATE INDEX IF NOT EXISTS "bill_explains_dossier_id_idx" ON "bill_explains" ("dossier_id")`
+    `CREATE INDEX IF NOT EXISTS "bill_explains_dossier_id_idx" ON "bill_explains" ("dossier_id")`,
+    // Trường "của ai" nhập tay trên phiếu thu/chi (Mr.Long 20/7): đối tác lẻ ngoài danh sách (loại trừ partner_id).
+    // Additive nullable — client .exe (Prisma 7 thiếu migrate engine) tự thêm cột mỗi boot, tránh "column does not exist".
+    `ALTER TABLE "cash_entries" ADD COLUMN IF NOT EXISTS "partner_text" TEXT`
   ];
   for (const s of stmts) {
     try {

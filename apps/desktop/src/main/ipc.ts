@@ -462,6 +462,7 @@ export function registerIpc(): void {
   handle('cashEntry:list', async (_e, filter: cashEntrySvc.CashEntryFilter) => cashEntrySvc.listCashEntries(filter));
   handle('cashEntry:report', async (_e, filter: cashEntrySvc.CashEntryFilter) => cashEntrySvc.cashflowReport(filter));
   handle('cashEntry:categoryLite', async () => cashEntrySvc.listEntryCategoriesLite());
+  handle('cashEntry:partnerLite', async () => cashEntrySvc.listPartnersLite());
   handle('cashEntry:create', async (_e, input: cashEntrySvc.CreateCashEntryInput) => cashEntrySvc.createCashEntry(input));
   handle('cashEntry:createDebtReceipt', async (_e, input: cashEntrySvc.CreateDebtReceiptInput) => cashEntrySvc.createDebtReceipt(input));
   handle('cashEntry:cancel', async (_e, args: { id: number; reason: string; password: string }) => cashEntrySvc.cancelCashEntry(args.id, args.reason, args.password));

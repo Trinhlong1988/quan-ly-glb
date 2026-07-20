@@ -57,6 +57,7 @@ export interface CashEntryDto {
   customerName: string | null;
   partnerId: number | null;
   partnerName: string | null;
+  partnerText: string | null; // "của ai" nhập tay (đối tác lẻ ngoài danh sách)
   payerUserId: number | null;
   payerUserName: string | null;
   receiverUserId: number | null;
@@ -90,6 +91,7 @@ export interface CreateCashEntryInput {
   entryDate: string; // YYYY-MM-DD (local) hoặc ISO
   customerId?: number | null;
   partnerId?: number | null;
+  partnerText?: string | null; // "của ai" nhập tay — loại trừ với partnerId
   payerUserId?: number | null; // bắt buộc khi kind=CHI
   receiverUserId?: number | null;
   note?: string | null;
@@ -217,6 +219,7 @@ async function toDtos(db: Db, rows: Awaited<ReturnType<Db['cashEntry']['findMany
       customerName: r.customerId != null ? custMap.get(r.customerId) ?? null : null,
       partnerId: r.partnerId,
       partnerName: r.partnerId != null ? partMap.get(r.partnerId) ?? null : null,
+      partnerText: r.partnerText,
       payerUserId: r.payerUserId,
       payerUserName: r.payerUserId != null ? userNames.get(r.payerUserId) ?? null : null,
       receiverUserId: r.receiverUserId,
@@ -284,6 +287,17 @@ export async function listEntryCategoriesLite(): Promise<{ ok: boolean; data?: {
   return { ok: true, data: rows };
 }
 
+/**
+ * CASHENTRY_VIEW — danh sách đối tác gọn (id + tên) để chọn "của ai" khi lập phiếu, KHÔNG cần quyền nặng
+ * CONFIG_BANK_VIEW (listPartners). Chỉ đối tác chưa xóa; sắp theo tên cho dễ tìm (tránh phiếu mồ côi quyền).
+ */
+export async function listPartnersLite(): Promise<{ ok: boolean; data?: { id: number; name: string }[]; error?: string; message?: string }> {
+  const g = await requirePermission('CASHENTRY_VIEW', { action: 'CASHENTRY_VIEW' });
+  if (!g.ok) return g;
+  const rows = await g.db.partner.findMany({ where: { deletedAt: null }, select: { id: true, name: true }, orderBy: [{ name: 'asc' }, { id: 'asc' }] });
+  return { ok: true, data: rows };
+}
+
 /** CASHENTRY_CREATE — lập phiếu thu/chi (POSTED thẳng). Mã PT/PC atomic trong $transaction. */
 export async function createCashEntry(input: CreateCashEntryInput): Promise<MutationResult> {
   const g = await requirePermission('CASHENTRY_CREATE', { action: 'CASH_ENTRY_CREATED', targetType: 'CashEntry' });
@@ -340,6 +354,13 @@ export async function createCashEntry(input: CreateCashEntryInput): Promise<Muta
     if (!p || p.deletedAt) return { ok: false, error: 'VALIDATION', message: 'Đối tác không hợp lệ.' };
   }
 
+  // "Của ai" (mục D): chọn từ danh sách đối tác (partnerId) HOẶC gõ tay (partnerText) — LOẠI TRỪ nhau
+  // (không cho vừa chọn vừa gõ → tránh 2 nguồn tên mâu thuẫn). Bỏ trống cả hai = none (mặc định).
+  const partnerText = input.partnerText?.trim() || null;
+  if (input.partnerId != null && partnerText) {
+    return { ok: false, error: 'PARTNER_SOURCE_CONFLICT', message: 'Chỉ chọn đối tác từ danh sách HOẶC nhập tay, không dùng cả hai.' };
+  }
+
   const prefix = kind === 'THU' ? 'PT' : 'PC';
   const created = await db.$transaction(async (tx) => {
     const code = await nextCode(prefix, tx);
@@ -354,6 +375,7 @@ export async function createCashEntry(input: CreateCashEntryInput): Promise<Muta
         entryDate,
         customerId: input.customerId ?? null,
         partnerId: input.partnerId ?? null,
+        partnerText,
         payerUserId: input.payerUserId ?? null,
         receiverUserId: input.receiverUserId ?? null,
         note: input.note?.trim() || null,

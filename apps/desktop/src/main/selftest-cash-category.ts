@@ -100,6 +100,16 @@ export async function runCashCategorySelfTest(): Promise<number> {
   // tái tạo tên đã xóa (cùng loại) → DUPLICATE_TRASH
   ok('SAI tái tạo tên đã xóa → DUPLICATE_TRASH', (await cc.createCashCategory({ kind: 'CHI', name: 'Chi tiếp khách', sourceKind: 'MANUAL', affectsPnl: true })).error === 'DUPLICATE_TRASH');
 
+  // ═══════════ IN_USE — danh mục còn phiếu thu/chi tham chiếu KHÔNG xóa được ═══════════
+  const usedCat = await cc.createCashCategory({ kind: 'CHI', name: 'Chi có phiếu ST25', sourceKind: 'MANUAL', affectsPnl: true });
+  ok('tạo danh mục để test IN_USE → ok', usedCat.ok === true, usedCat);
+  const refEntry = await db.cashEntry.create({ data: { code: 'PC-INUSE-ST25', kind: 'CHI', categoryId: usedCat.id!, fundId: null, amount: 10_000, method: 'CASH', entryDate: new Date('2026-01-15T00:00:00'), status: 'POSTED', createdBy: me()!.id } });
+  ok('SAI xóa danh mục đang có phiếu → IN_USE', (await cc.deleteCashCategories([usedCat.id!], PW)).error === 'IN_USE');
+  ok('danh mục IN_USE VẪN còn (không bị xóa)', (await db.cashCategory.findUnique({ where: { id: usedCat.id! } }))?.deletedAt == null);
+  // Xóa mềm phiếu tham chiếu → danh mục hết "đang dùng" → xóa được.
+  await db.cashEntry.update({ where: { id: refEntry.id }, data: { deletedAt: new Date() } });
+  ok('sau khi phiếu bị xóa mềm → xóa danh mục được (deleted=1)', (await cc.deleteCashCategories([usedCat.id!], PW)).deleted === 1);
+
   // ═══════════ AUDIT ═══════════
   ok('audit CASH_CATEGORY_CREATED ≥ 4', (await auditCount(db, 'CASH_CATEGORY_CREATED')) >= 4);
   ok('audit CASH_CATEGORY_UPDATED ≥ 2', (await auditCount(db, 'CASH_CATEGORY_UPDATED')) >= 2);

@@ -1141,7 +1141,8 @@ model CashEntry {
   method         String // CK | CASH
   entryDate      DateTime  @map("entry_date") @db.Timestamptz(3) // ngày thu/chi (local) — M6
   customerId     Int?      @map("customer_id") // KH (mục D)
-  partnerId      Int?      @map("partner_id") // đối tác (mục D)
+  partnerId      Int?      @map("partner_id") // đối tác (mục D) — chọn từ danh sách đối tác
+  partnerText    String?   @map("partner_text") // "của ai" nhập tay (đối tác lẻ ngoài danh sách) — loại trừ với partnerId
   payerUserId    Int?      @map("payer_user_id") // NGƯỜI CHI — bắt buộc khi kind=CHI (mục E, I#3)
   receiverUserId Int?      @map("receiver_user_id") // người nhận (thu hộ / hoàn cọc)
   docPath        String?   @map("doc_path")
