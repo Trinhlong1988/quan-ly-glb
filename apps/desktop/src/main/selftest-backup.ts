@@ -2,9 +2,9 @@
 // C1 báo lỗi khi backup tự động thất bại. Self-test (GLB_SELFTEST=36). Cần pg_dump/pg_restore (DB throwaway).
 import { tmpdir } from 'node:os';
 import { join, basename } from 'node:path';
-import { readdirSync, writeFileSync } from 'node:fs';
+import { readdirSync, writeFileSync, existsSync, rmSync } from 'node:fs';
 import { login, logout } from './auth-service.js';
-import { getDb } from './db.js';
+import { getDb, isServerRole } from './db.js';
 import { createBackup, restoreBackup, setBackupMirrorConfig } from './backup-service.js';
 import { backupWatchdog, systemBackupIfDue } from './storage-service.js';
 
@@ -85,14 +85,39 @@ export async function runBackupSelfTest(): Promise<number> {
   ok('C1: ghi audit AUTO_BACKUP_FAILED (không lặng)', (await db.auditLog.count({ where: { action: 'AUTO_BACKUP_FAILED' } })) >= 1);
 
   // ═══ A1 (audit 0.2.57): SAO LƯU CHỈ Ở MÁY CHỦ — máy trạm (GLB_ROLE≠server) bị chặn server-only ═══
+  // B83 (20/7): isServerRole() giờ có fallback marker FILE (ProgramData) — xóa GLB_ROLE thôi CHƯA chắc
+  // mô phỏng đúng "máy trạm" nếu máy chạy selftest thật sự có marker (vd chính máy chủ 192.168.1.6).
+  // Trỏ GLB_ROLE_MARKER sang đường KHÔNG tồn tại để cô lập ca test khỏi trạng thái marker thật của máy.
   const savedRole = process.env['GLB_ROLE'];
+  const savedMarker = process.env['GLB_ROLE_MARKER'];
   delete process.env['GLB_ROLE'];
+  process.env['GLB_ROLE_MARKER'] = join(tmpdir(), '__glb_no_such_marker__.flag');
   const clientBk = await createBackup('client-should-block');
   ok('A1: máy trạm createBackup bị chặn (BACKUP_SERVER_ONLY)', clientBk.ok === false && clientBk.error === 'BACKUP_SERVER_ONLY', clientBk);
   await db.appSetting.deleteMany({ where: { key: 'backup.lastAt' } }); // ép "đến hạn"
   const clientDue = await systemBackupIfDue(db);
   ok('A1: máy trạm backup định kỳ KHÔNG chạy (ran=false)', clientDue.ran === false, clientDue);
   if (savedRole === undefined) delete process.env['GLB_ROLE']; else process.env['GLB_ROLE'] = savedRole;
+  if (savedMarker === undefined) delete process.env['GLB_ROLE_MARKER']; else process.env['GLB_ROLE_MARKER'] = savedMarker;
+
+  // ═══ B83 (Mr.Long báo 20/7 "sao không sao lưu được"): marker FILE là nguồn vai trò BỀN, không phụ
+  // thuộc GLB_ROLE (biến môi trường tiến trình — app đóng gói mở bằng icon thường KHÔNG có cách đặt nó,
+  // nên máy chủ THẬT trước đây bị chính gate A1 chặn nhầm). Chứng minh: KHÔNG marker → false; TẠO marker
+  // (dù GLB_ROLE vẫn xóa) → true; XÓA marker → false lại. ═══
+  {
+    const savedRoleB83 = process.env['GLB_ROLE'];
+    const markerPath = join(tmpdir(), `__glb_role_marker_test_${process.pid}.flag`);
+    process.env['GLB_ROLE_MARKER'] = markerPath;
+    delete process.env['GLB_ROLE'];
+    if (existsSync(markerPath)) rmSync(markerPath, { force: true });
+    ok('B83: chưa có marker + không GLB_ROLE → isServerRole()=false', isServerRole() === false);
+    writeFileSync(markerPath, 'server');
+    ok('B83: TẠO marker file (dù GLB_ROLE vẫn xóa) → isServerRole()=true', isServerRole() === true);
+    rmSync(markerPath, { force: true });
+    ok('B83: XÓA marker → isServerRole()=false lại (không dính cache)', isServerRole() === false);
+    if (savedRoleB83 === undefined) delete process.env['GLB_ROLE']; else process.env['GLB_ROLE'] = savedRoleB83;
+    delete process.env['GLB_ROLE_MARKER'];
+  }
 
   await logout();
   // eslint-disable-next-line no-console

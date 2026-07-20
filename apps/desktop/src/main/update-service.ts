@@ -61,6 +61,9 @@ export interface UpdaterController {
   start(): Promise<void>;
   installNow(): void;
   isDownloading(): boolean;
+  /** [H2b] Bản mới nhất đã biết (PULL lúc mount — push 'update-available' có thể rơi nếu bắn trước khi
+   * renderer kịp đăng ký listener, y hệt lớp lỗi H2 của boot marker). null nếu chưa từng thấy bản mới. */
+  getLastAvailable(): { version: string } | null;
   /** Dừng interval (dọn tài nguyên; selftest). */
   stop(): void;
 }
@@ -159,6 +162,7 @@ export function startUpdater(deps: StartDeps): UpdaterController {
     start: async () => {},
     installNow: () => {},
     isDownloading: () => false,
+    getLastAvailable: () => null,
     stop: () => {}
   };
   // [dev-guard] KHÔNG đóng gói → KHÔNG khởi động updater (tránh crash dev/selftest). (ca a)
@@ -173,6 +177,8 @@ export function startUpdater(deps: StartDeps): UpdaterController {
   let installing = false;
   let pendingVersion: string | null = null;
   let timer: ReturnType<typeof setInterval> | undefined;
+  // [H2b] Giữ lại bản mới nhất đã thấy — PULL lúc mount, không chỉ push (chống rơi sự kiện).
+  let lastAvailable: { version: string } | null = null;
 
   const send = (channel: string, payload: unknown): void => {
     const w = getWindow();
@@ -190,6 +196,7 @@ export function startUpdater(deps: StartDeps): UpdaterController {
 
   updater.on('update-available', (info: unknown) => {
     const version = (info as { version?: string })?.version ?? '';
+    lastAvailable = { version }; // [H2b] lưu lại TRƯỚC — renderer mount sau vẫn PULL được.
     send('update-available', { version });
   });
   updater.on('download-progress', (p: unknown) => {
@@ -247,6 +254,7 @@ export function startUpdater(deps: StartDeps): UpdaterController {
     start,
     installNow,
     isDownloading: () => downloading,
+    getLastAvailable: () => lastAvailable,
     stop: () => {
       if (timer) clearInterval(timer);
     }
@@ -310,6 +318,9 @@ export async function registerUpdateService(deps: RegisterDeps): Promise<void> {
       bootConsumed = true;
       return bootResult.kind === 'none' ? null : bootResult;
     });
+    // [H2b] PULL bản mới nhất đã biết — KHÔNG tiêu thụ (renderer có thể mount lại nhiều lần trước khi
+    // user cài; mỗi lần mount đều phải thấy banner nếu bản mới chưa được cài).
+    ipcMain.handle('update:getLastAvailable', async () => controller.getLastAvailable());
     ipcMain.handle('app:getVersion', async () => deps.version);
   }
 }

@@ -34,6 +34,16 @@ export function UpdateBanner(): JSX.Element | null {
     window.api.getUpdateBootResult().then((r) => {
       if (alive && r) setBoot(r);
     });
+    // [H2b] PULL bản mới nhất đã biết — check() ở main chạy NGAY lúc app ready, có thể xong (network)
+    // trước khi React kịp mount + useEffect đăng ký onUpdateAvailable → push rơi mất, banner im lặng cả
+    // giờ (interval kế = 60'). Pull bù cho đúng race-class H2, không đợi push.
+    window.api.getLastAvailableUpdate().then((p) => {
+      if (alive && p) {
+        setVersion(p.version);
+        setErrorMsg('');
+        setPhase((cur) => (cur === 'idle' ? 'available' : cur));
+      }
+    });
 
     // Đăng ký sự kiện realtime — mỗi hàm trả về unsubscribe (M8).
     const offAvail = window.api.onUpdateAvailable((p) => {

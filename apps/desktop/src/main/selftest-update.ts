@@ -173,6 +173,25 @@ export async function runUpdateSelfTest(): Promise<number> {
     ctrl.stop();
   }
 
+  // ═══ (g) [H2b] getLastAvailable PULL — 'update-available' KHÔNG rơi dù renderer/window chưa sẵn sàng ═══
+  // Tái hiện đúng race Mr.Long báo (20/7): check() chạy xong TRƯỚC khi renderer mount → push
+  // 'update-available' bắn vào getWindow()=null (renderer chưa có) → send() no-op im lặng. Trước fix,
+  // banner mất VĨNH VIỄN tới lần check kế (60'). Sau fix: main giữ lastAvailable, renderer PULL lúc mount.
+  {
+    const m = makeMockUpdater();
+    const ctrl = startUpdater({ updater: m, getWindow: nullWindow, isPackaged: true, markerFile, intervalMs: 3_600_000 });
+    ok('(g) chưa có bản mới → getLastAvailable=null', ctrl.getLastAvailable() === null);
+    m.emit('update-available', { version: '0.2.59' }); // window=null → send() rơi, giống renderer chưa mount
+    ok(
+      '(g) push rơi (window null) nhưng PULL vẫn thấy bản mới — chống race H2b',
+      ctrl.getLastAvailable()?.version === '0.2.59',
+      ctrl.getLastAvailable()
+    );
+    // "Mount" muộn (renderer mở app sau khi check() đã xong) — PULL vẫn trả đúng, không one-shot-tiêu-thụ.
+    ok('(g) PULL lại lần 2 vẫn còn (không bị xoá sau đọc — khác boot marker)', ctrl.getLastAvailable()?.version === '0.2.59');
+    ctrl.stop();
+  }
+
   // eslint-disable-next-line no-console
   console.log(`UPDATE23 SUMMARY | pass=${pass} fail=${fail}`);
   return fail === 0 ? 0 : 1;

@@ -1936,6 +1936,8 @@ export interface GlbApi {
   installUpdateNow(): Promise<void>;
   /** [H2] Kết quả cập nhật lúc khởi động — PULL lúc mount (null nếu không có / đã tiêu thụ). */
   getUpdateBootResult(): Promise<UpdateBootResult | null>;
+  /** [H2b] Bản mới nhất đã biết — PULL lúc mount (chống rơi push 'update-available' race lúc boot). */
+  getLastAvailableUpdate(): Promise<{ version: string } | null>;
   /** Đăng ký sự kiện realtime; trả hàm hủy đăng ký để gọi lúc unmount ([M8]). */
   onUpdateAvailable(cb: (p: { version: string }) => void): () => void;
   onDownloadProgress(cb: (p: { percent: number }) => void): () => void;

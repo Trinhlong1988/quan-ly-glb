@@ -627,9 +627,28 @@ export function resolveDatabaseUrl(): string {
   );
 }
 
-/** True nếu tiến trình này là MÁY CHỦ (được phép seed/migrate). Mặc định = client (fail-safe). */
+// B83 (Mr.Long báo 20/7, "sao không sao lưu được"): GLB_ROLE là biến môi trường TIẾN TRÌNH — chỉ
+// selftest (harness tự set) mới đặt được. App đóng gói mở bằng icon thường KHÔNG có cách nào tự đặt
+// biến này, nên trên chính máy chủ thật, isServerRole() luôn false → mọi gate (backup/statfs) chặn
+// nhầm CẢ máy chủ. Fix: thêm marker FILE bền (ProgramData, sống qua reboot/đổi user/quirk kế thừa env
+// của Explorer) — 1 lần đánh dấu "máy này là máy chủ" (Admin tạo lúc setup máy chủ), KHÔNG phụ thuộc
+// biến môi trường mỗi lần mở app. GLB_ROLE vẫn ưu tiên (giữ tương thích selftest hiện có).
+function serverRoleMarkerPath(): string {
+  // Override cho test (tránh chạm ProgramData thật). Production: %ProgramData%\GLB\role-server.flag
+  // (thư mục dùng chung mọi user trên máy, không như userData vốn theo-từng-user).
+  if (process.env['GLB_ROLE_MARKER']) return process.env['GLB_ROLE_MARKER'] as string;
+  const base = process.env['ProgramData'] || 'C:/ProgramData';
+  return join(base, 'GLB', 'role-server.flag');
+}
+
+/** True nếu tiến trình này là MÁY CHỦ (được phép seed/migrate/backup). Mặc định = client (fail-safe). */
 export function isServerRole(): boolean {
-  return process.env['GLB_ROLE'] === 'server';
+  if (process.env['GLB_ROLE'] === 'server') return true;
+  try {
+    return existsSync(serverRoleMarkerPath());
+  } catch {
+    return false;
+  }
 }
 
 export function getDb(): Db {

@@ -339,6 +339,9 @@ const api = {
   installUpdateNow: () => ipcRenderer.invoke('update:installNow'),
   // [H2] Kết quả BOOT (success/failed) lấy bằng PULL lúc mount (KHÔNG nghe push — push rơi trước mount).
   getUpdateBootResult: () => ipcRenderer.invoke('update:getBootResult'),
+  // [H2b] Bản mới nhất đã biết — cùng lý do H2: push 'update-available' có thể bắn trước khi renderer
+  // kịp đăng ký listener (race check() ngay lúc boot vs React mount). PULL lúc mount để không bỏ lỡ.
+  getLastAvailableUpdate: () => ipcRenderer.invoke('update:getLastAvailable'),
   // Sự kiện realtime (main → renderer). Trả hàm hủy đăng ký để cleanup lúc unmount ([M8]).
   onUpdateAvailable: (cb: (p: { version: string }) => void) => {
     const h = (_e: unknown, p: { version: string }): void => cb(p);

@@ -7,6 +7,8 @@
 //   • systemBackupIfDue: lần đầu chạy, lần 2 trong chu kỳ → KHÔNG chạy lại.
 //   • systemStorageCheck: ngưỡng 1% → vượt → thông báo Admin 1 lần, lần 2 trong 24h → không lặp.
 //   • Phân quyền STORAGE_VIEW / STORAGE_CLEANUP.
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { login, logout } from './auth-service.js';
 import { getDb } from './db.js';
 import * as userSvc from './user-service.js';
@@ -101,12 +103,17 @@ export async function runStorageSelfTest(): Promise<number> {
   // ═══════════ E1b) #3 (audit 0.2.57): MÁY TRẠM KHÔNG ĐO Ổ ĐĨA ═══════════
   // `SHOW data_directory` là đường dẫn TRÊN MÁY CHỦ PG. Máy trạm (GLB_ROLE≠server) statfs đường đó = đo NHẦM
   // ổ máy trạm → cảnh báo sai. Fix: máy trạm trả disk*=null (thành thật), nhưng dbBytes (pg_database_size) vẫn đúng.
+  // B83 (20/7): isServerRole() có fallback marker FILE — cô lập ca "máy trạm" khỏi marker thật của máy
+  // chạy selftest (vd chính máy chủ) bằng cách trỏ GLB_ROLE_MARKER sang đường chắc chắn không tồn tại.
   const savedRole3 = process.env['GLB_ROLE'];
+  const savedMarker3 = process.env['GLB_ROLE_MARKER'];
   delete process.env['GLB_ROLE'];
+  process.env['GLB_ROLE_MARKER'] = join(tmpdir(), '__glb_no_such_marker__.flag');
   const cliStatus = await getStorageStatus();
   ok('#3: máy trạm → disk*=null (không đo nhầm ổ) + over=false', cliStatus.ok === true && cliStatus.data!.diskFreeBytes === null && cliStatus.data!.diskTotalBytes === null && cliStatus.data!.diskUsedPct === null && cliStatus.data!.over === false, cliStatus.data);
   ok('#3: máy trạm vẫn đọc được dbBytes qua pg_database_size', cliStatus.ok === true && (cliStatus.data!.dbBytes ?? 0) > 0, { dbBytes: cliStatus.data?.dbBytes });
   if (savedRole3 === undefined) delete process.env['GLB_ROLE']; else process.env['GLB_ROLE'] = savedRole3;
+  if (savedMarker3 === undefined) delete process.env['GLB_ROLE_MARKER']; else process.env['GLB_ROLE_MARKER'] = savedMarker3;
 
   // ═══════════ E2) BẢO TRÌ ĐỊNH KỲ (thứ/giờ/bật-tắt/auto-purge + VACUUM) ═══════════
   // Tạo lại dữ liệu quá hạn để weekly auto-purge có việc để làm.
