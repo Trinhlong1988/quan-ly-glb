@@ -287,8 +287,28 @@ export async function registerUpdateService(deps: RegisterDeps): Promise<void> {
   if (deps.isPackaged) {
     let updater: UpdaterLike;
     try {
-      const mod = (await import('electron-updater')) as unknown as { autoUpdater: UpdaterLike };
-      updater = mod.autoUpdater;
+      // B85 (Mr.Long yêu cầu "mở lên xem bằng chứng" 22/7 — bắt được CRASH THẬT trên bản đóng gói,
+      // không phải suy luận): electron-updater là CommonJS, xuất `autoUpdater` qua
+      // `Object.defineProperty(exports,'autoUpdater',{get(){...}})` (getter, KHÔNG phải gán thường
+      // `exports.autoUpdater = ...`). Bộ dựng CJS→ESM (rollup/commonjs-plugin trong electron-vite,
+      // cả cjs-module-lexer của Node) phân tích TĨNH mã nguồn để suy named-export — kiểu getter này
+      // là điểm mù kinh điển, nên `mod.autoUpdater` ra `undefined` trên BẢN ĐÓNG GÓI (dù `import()`
+      // không ném lỗi — module vẫn nạp được, chỉ thiếu đúng named export). Code cũ gán thẳng
+      // `updater = mod.autoUpdater` (undefined) KHÔNG ném ở đây → registerUpdateService() crash Ở
+      // NGOÀI try/catch này (dòng `updater.autoDownload = false` trong startUpdater) → toàn bộ
+      // wireIpc() KHÔNG chạy → mọi IPC update:* mất trắng, banner/backup-boot-marker câm lặng vĩnh
+      // viễn. selftest=23 KHÔNG bắt được vì luôn bơm mock updater (H3), chưa từng import package thật.
+      // Fix: thử CẢ 2 hình dạng interop có thể có (`mod.autoUpdater` lẫn `mod.default.autoUpdater`),
+      // ném lỗi rõ ràng NGAY TẠI ĐÂY nếu cả 2 đều thiếu (để nhánh catch xử lý, không crash ra ngoài).
+      const mod = (await import('electron-updater')) as unknown as {
+        autoUpdater?: UpdaterLike;
+        default?: { autoUpdater?: UpdaterLike };
+      };
+      const resolved = mod.autoUpdater ?? mod.default?.autoUpdater;
+      if (!resolved) {
+        throw new Error(`electron-updater module không có autoUpdater (khóa nạp được: ${Object.keys(mod).join(',')})`);
+      }
+      updater = resolved;
     } catch (err) {
       // Không nạp được electron-updater → app vẫn chạy (offline-safe cực đoan).
       // eslint-disable-next-line no-console
