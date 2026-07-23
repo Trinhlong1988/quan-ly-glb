@@ -319,12 +319,12 @@ export async function setFeeRate(input: SetFeeRateInput): Promise<MutationResult
   const phiCaiMay = pctToMilli(input.phiCaiMay);
   if (phiMua === null) return { ok: false, error: 'VALIDATION', message: 'Phí mua không hợp lệ (≥0, tối đa 3 số thập phân).' };
   if (phiCaiMay === null) return { ok: false, error: 'VALIDATION', message: 'Phí cài máy không hợp lệ (≥0, tối đa 3 số thập phân).' };
-  // R48 Pha 3 — chặn chênh ÂM: CL_NCC = phiMua−phiCaiMay ≥ 0 (giống nhau mọi loại phí).
-  if (phiMua < phiCaiMay) return { ok: false, error: 'VALIDATION', message: 'Phí mua phải ≥ phí cài máy (chênh đối tác không được âm).' };
   // Phí bán niêm yết BẮT BUỘC cấu hình cho ≥1 loại phí (danh mục ≥3 loại — UI gửi hết loại phí active).
   if (!Array.isArray(input.sellQuotes) || input.sellQuotes.length === 0)
     return { ok: false, error: 'VALIDATION', message: 'Vui lòng nhập phí bán niêm yết cho ít nhất một loại phí.' };
-  // Validate từng phí bán niêm yết: %≥0 ≤3 thập phân + KHÔNG < phí cài máy (chênh bán không được âm, B45).
+  // B86 (Mr.Long 23/7, sửa B45 suy luận sai): phí cài máy KHÔNG ràng buộc với phí mua/phí bán (spec
+  // IMS_SPEC dòng 1170 chỉ yêu cầu hiển thị âm màu đỏ trong ngoặc, không chặn lưu). Ràng buộc DUY NHẤT
+  // trong toàn hệ thống phí: phí bán (niêm yết + thực tế) KHÔNG được thấp hơn phí mua — thấp hơn là bán lỗ.
   const quotesMilli: { feeTypeId: number; phiBan: number }[] = [];
   const seenFeeType = new Set<number>();
   for (const q of input.sellQuotes) {
@@ -333,7 +333,7 @@ export async function setFeeRate(input: SetFeeRateInput): Promise<MutationResult
     seenFeeType.add(q.feeTypeId);
     const phiBan = pctToMilli(q.phiBan);
     if (phiBan === null) return { ok: false, error: 'VALIDATION', message: 'Phí bán niêm yết không hợp lệ (≥0, tối đa 3 số thập phân).' };
-    if (phiBan < phiCaiMay) return { ok: false, error: 'VALIDATION', message: 'Mỗi phí bán niêm yết phải ≥ phí cài máy (chênh bán không được âm).' };
+    if (phiBan < phiMua) return { ok: false, error: 'VALIDATION', message: 'Phí bán niêm yết phải ≥ phí mua (bán thấp hơn mua là lỗ).' };
     quotesMilli.push({ feeTypeId: q.feeTypeId, phiBan });
   }
   const effRaw = input.effectiveFrom !== undefined ? parseDate(input.effectiveFrom) : new Date();

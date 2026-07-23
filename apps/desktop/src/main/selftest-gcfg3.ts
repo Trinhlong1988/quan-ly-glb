@@ -127,8 +127,9 @@ export async function runFeeConfigSelfTest(): Promise<number> {
   ok('SAI set phí sellQuotes RỖNG → VALIDATION', (await fee.setFeeRate({ ...base, sellQuotes: [] })).error === 'VALIDATION');
   ok('SAI set phí niêm yết thiếu loại phí → VALIDATION', (await fee.setFeeRate({ ...base, sellQuotes: [{ feeTypeId: 0, phiBan: 1 }] })).error === 'VALIDATION');
   ok('SAI set phí niêm yết loại phí không tồn tại → NOT_FOUND', (await fee.setFeeRate({ ...base, sellQuotes: [{ feeTypeId: 999009, phiBan: 1 }] })).error === 'NOT_FOUND');
-  ok('SAI set phí niêm yết < phí cài máy → VALIDATION', (await fee.setFeeRate({ ...base, phiMua: 2, phiCaiMay: 1.5, sellQuotes: [{ feeTypeId: ft0, phiBan: 1.0 }] })).error === 'VALIDATION');
-  ok('SAI phí mua < phí cài máy → VALIDATION', (await fee.setFeeRate({ ...base, phiMua: 0.5, phiCaiMay: 1.0 })).error === 'VALIDATION');
+  // B86 (Mr.Long 23/7): phí cài máy KHÔNG ràng buộc với phí mua/phí bán — chỉ còn 1 rule: phí bán ≥ phí mua.
+  ok('SAI set phí bán niêm yết < phí mua → VALIDATION', (await fee.setFeeRate({ ...base, phiMua: 2, phiCaiMay: 1.5, sellQuotes: [{ feeTypeId: ft0, phiBan: 1.0 }] })).error === 'VALIDATION');
+  ok('ĐÚNG phí mua > phí cài máy (không ràng buộc) → ok', (await fee.setFeeRate({ ...base, phiMua: 0.5, phiCaiMay: 1.0, sellQuotes: [{ feeTypeId: ft0, phiBan: 0.8 }] })).ok === true);
   ok('SAI set phí thiếu đối tác → VALIDATION', (await fee.setFeeRate({ ...base, partnerId: 0 })).error === 'VALIDATION');
   ok('SAI set phí thiếu loại thẻ → VALIDATION', (await fee.setFeeRate({ ...base, cardTypeId: 0 })).error === 'VALIDATION');
   ok('SAI phí mua âm → VALIDATION', (await fee.setFeeRate({ ...base, phiMua: -1 })).error === 'VALIDATION');

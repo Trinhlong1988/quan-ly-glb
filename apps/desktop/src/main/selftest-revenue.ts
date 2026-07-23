@@ -239,35 +239,35 @@ export async function runRevenueSelfTest(): Promise<number> {
   await db.partnerBank.create({ data: { partnerId: kyPartner.id, bankId: kyBank.id } });
   const kyTid = await db.tid.create({ data: { tid: 'TIDKY1', mid: 'MIDKY', hkdName: 'HKD Giá Kỳ', bankId: kyBank.id, partnerId: kyPartner.id, customerId: cust.id } });
 
-  // (1) Kỳ K1 hiệu lực 2026-01-01: phiMua 3% / phiCaiMay 1% / phiBan 2.5% → margin đối tác 2%, bán 1.5%.
-  const setK1 = await setFeeRate({ partnerId: kyPartner.id, cardTypeId: kyCard.id, phiMua: 3, phiCaiMay: 1, effectiveFrom: '2026-01-01T00:00:00.000Z', sellQuotes: [{ feeTypeId: ft.id, phiBan: 2.5 }] });
+  // (1) Kỳ K1 hiệu lực 2026-01-01: phiMua 3% / phiCaiMay 1% / phiBan 3.5% (B86: phiBan≥phiMua) → margin đối tác 2%, bán 2.5%.
+  const setK1 = await setFeeRate({ partnerId: kyPartner.id, cardTypeId: kyCard.id, phiMua: 3, phiCaiMay: 1, effectiveFrom: '2026-01-01T00:00:00.000Z', sellQuotes: [{ feeTypeId: ft.id, phiBan: 3.5 }] });
   ok('lập kỳ K1 (2026-01-01) → ok', setK1.ok === true, setK1);
-  // (2) Kỳ K2 hiệu lực 2026-07-01: phiMua 5% / phiCaiMay 1% / phiBan 4% → margin đối tác 4%, bán 3%. KHÔNG xóa K1.
-  const setK2 = await setFeeRate({ partnerId: kyPartner.id, cardTypeId: kyCard.id, phiMua: 5, phiCaiMay: 1, effectiveFrom: '2026-07-01T00:00:00.000Z', sellQuotes: [{ feeTypeId: ft.id, phiBan: 4 }] });
+  // (2) Kỳ K2 hiệu lực 2026-07-01: phiMua 5% / phiCaiMay 1% / phiBan 5.5% (B86: phiBan≥phiMua) → margin đối tác 4%, bán 4.5%. KHÔNG xóa K1.
+  const setK2 = await setFeeRate({ partnerId: kyPartner.id, cardTypeId: kyCard.id, phiMua: 5, phiCaiMay: 1, effectiveFrom: '2026-07-01T00:00:00.000Z', sellQuotes: [{ feeTypeId: ft.id, phiBan: 5.5 }] });
   ok('lập kỳ K2 (2026-07-01) → ok, KHÔNG xóa K1', setK2.ok === true && setK1.id !== setK2.id, { k1: setK1.id, k2: setK2.id });
   const kyRates = await listFeeRates({ partnerId: kyPartner.id });
   ok('2 KỲ giá cùng tồn tại cho tổ hợp', kyRates.data?.length === 2, { len: kyRates.data?.length });
   ok('kỳ đang hiệu lực HÔM NAY = K2 (2026-07-01)', kyRates.data?.find((r) => r.isCurrent)?.id === setK2.id, kyRates.data?.map((r) => ({ id: r.id, eff: r.effectiveFrom, cur: r.isCurrent })));
 
-  // (3) GD txnDate 2026-06-15 (trong K1) → PHẢI ăn giá K1 (margin 2% & 1.5%), tổng 350.000.
+  // (3) GD txnDate 2026-06-15 (trong K1) → PHẢI ăn giá K1 (margin 2% & 2.5%), tổng 450.000.
   const gK1 = await createTransaction({ feeTypeId: ft.id, tidId: kyTid.id, cardTypeId: kyCard.id, amount: 10_000_000, txnDate: '2026-06-15T00:00:00.000Z' });
   ok('GD 2026-06-15 → ok', gK1.ok === true, gK1);
   const tK1 = await db.transaction.findUnique({ where: { id: gK1.id! } });
-  ok('GD 2026-06-15 ăn giá K1: margin 2000/1500', tK1?.partnerMarginMilli === 2000 && tK1?.sellMarginMilli === 1500, { p: tK1?.partnerMarginMilli, s: tK1?.sellMarginMilli });
-  ok('GD 2026-06-15 doanh thu = 200.000 + 150.000 = 350.000', Number(tK1?.revenueAmount) === 350_000, { got: tK1?.revenueAmount });
+  ok('GD 2026-06-15 ăn giá K1: margin 2000/2500', tK1?.partnerMarginMilli === 2000 && tK1?.sellMarginMilli === 2500, { p: tK1?.partnerMarginMilli, s: tK1?.sellMarginMilli });
+  ok('GD 2026-06-15 doanh thu = 200.000 + 250.000 = 450.000', Number(tK1?.revenueAmount) === 450_000, { got: tK1?.revenueAmount });
 
-  // (4) GD txnDate 2026-07-10 (trong K2) → PHẢI ăn giá K2 (margin 4% & 3%), tổng 700.000.
+  // (4) GD txnDate 2026-07-10 (trong K2) → PHẢI ăn giá K2 (margin 4% & 4.5%), tổng 850.000.
   const gK2 = await createTransaction({ feeTypeId: ft.id, tidId: kyTid.id, cardTypeId: kyCard.id, amount: 10_000_000, txnDate: '2026-07-10T00:00:00.000Z' });
   ok('GD 2026-07-10 → ok', gK2.ok === true, gK2);
   const tK2 = await db.transaction.findUnique({ where: { id: gK2.id! } });
-  ok('GD 2026-07-10 ăn giá K2: margin 4000/3000', tK2?.partnerMarginMilli === 4000 && tK2?.sellMarginMilli === 3000, { p: tK2?.partnerMarginMilli, s: tK2?.sellMarginMilli });
-  ok('GD 2026-07-10 doanh thu = 400.000 + 300.000 = 700.000', Number(tK2?.revenueAmount) === 700_000, { got: tK2?.revenueAmount });
+  ok('GD 2026-07-10 ăn giá K2: margin 4000/4500', tK2?.partnerMarginMilli === 4000 && tK2?.sellMarginMilli === 4500, { p: tK2?.partnerMarginMilli, s: tK2?.sellMarginMilli });
+  ok('GD 2026-07-10 doanh thu = 400.000 + 450.000 = 850.000', Number(tK2?.revenueAmount) === 850_000, { got: tK2?.revenueAmount });
 
   // (5) GD BACKDATE txnDate 2026-03-01 (lập SAU khi K2 đã tồn tại) → vẫn ăn K1 (I-P2).
   const gBack = await createTransaction({ feeTypeId: ft.id, tidId: kyTid.id, cardTypeId: kyCard.id, amount: 10_000_000, txnDate: '2026-03-01T00:00:00.000Z' });
   ok('GD backdate 2026-03-01 → ok', gBack.ok === true, gBack);
   const tBack = await db.transaction.findUnique({ where: { id: gBack.id! } });
-  ok('GD backdate 2026-03-01 vẫn ăn K1 (margin 2000/1500) — I-P2', tBack?.partnerMarginMilli === 2000 && tBack?.sellMarginMilli === 1500, { p: tBack?.partnerMarginMilli, s: tBack?.sellMarginMilli });
+  ok('GD backdate 2026-03-01 vẫn ăn K1 (margin 2000/2500) — I-P2', tBack?.partnerMarginMilli === 2000 && tBack?.sellMarginMilli === 2500, { p: tBack?.partnerMarginMilli, s: tBack?.sellMarginMilli });
 
   // (6) GD txnDate 2025-12-31 (trước MỌI kỳ) → NO_FEE_RATE (I-P3, không lấy đại kỳ tương lai).
   const gNone = await createTransaction({ feeTypeId: ft.id, tidId: kyTid.id, cardTypeId: kyCard.id, amount: 10_000_000, txnDate: '2025-12-31T00:00:00.000Z' });
@@ -281,9 +281,9 @@ export async function runRevenueSelfTest(): Promise<number> {
   const tK1After = await db.transaction.findUnique({ where: { id: gK1.id! } });
   const tBackAfter = await db.transaction.findUnique({ where: { id: gBack.id! } });
   const tK2After = await db.transaction.findUnique({ where: { id: gK2.id! } });
-  ok('I-P1: bill K1 (2026-06-15) GIỮ doanh thu 350.000 sau khi đổi giá K1', tK1After?.revenueAmount === revK1Before && Number(tK1After?.revenueAmount) === 350_000, { before: revK1Before, after: tK1After?.revenueAmount });
-  ok('I-P1: bill backdate (2026-03-01) GIỮ doanh thu 350.000 sau khi đổi giá K1', tBackAfter?.revenueAmount === revBackBefore && Number(tBackAfter?.revenueAmount) === 350_000, { before: revBackBefore, after: tBackAfter?.revenueAmount });
-  ok('I-P1: bill K2 (2026-07-10) GIỮ doanh thu 700.000 (không đụng)', tK2After?.revenueAmount === revK2Before && Number(tK2After?.revenueAmount) === 700_000, { before: revK2Before, after: tK2After?.revenueAmount });
+  ok('I-P1: bill K1 (2026-06-15) GIỮ doanh thu 450.000 sau khi đổi giá K1', tK1After?.revenueAmount === revK1Before && Number(tK1After?.revenueAmount) === 450_000, { before: revK1Before, after: tK1After?.revenueAmount });
+  ok('I-P1: bill backdate (2026-03-01) GIỮ doanh thu 450.000 sau khi đổi giá K1', tBackAfter?.revenueAmount === revBackBefore && Number(tBackAfter?.revenueAmount) === 450_000, { before: revBackBefore, after: tBackAfter?.revenueAmount });
+  ok('I-P1: bill K2 (2026-07-10) GIỮ doanh thu 850.000 (không đụng)', tK2After?.revenueAmount === revK2Before && Number(tK2After?.revenueAmount) === 850_000, { before: revK2Before, after: tK2After?.revenueAmount });
 
   // ═══════════ L) GIÁ THEO KỲ — ĐƯỜNG UI (B16/F1) — parse-LOCAL, KHÔNG 'Z' ═══════════
   // Điểm mù cũ (thất bại quy trình test): mọi ca GIÁ THEO KỲ ở trên dùng ISO có 'Z' (UTC thuần) → KHÔNG
@@ -296,13 +296,13 @@ export async function runRevenueSelfTest(): Promise<number> {
   await db.partnerBank.create({ data: { partnerId: uiPartner.id, bankId: uiBank.id } });
   const uiTid = await db.tid.create({ data: { tid: 'TIDUI1', mid: 'MIDUI', hkdName: 'HKD UI Ngày', bankId: uiBank.id, partnerId: uiPartner.id, customerId: cust.id } });
 
-  // Kỳ TRƯỚC hiệu lực 2026-07-01 (đường UI local): margin đối tác 2%, bán 1.5%.
+  // Kỳ TRƯỚC hiệu lực 2026-07-01 (đường UI local): margin đối tác 2%, bán 2.5% (B86: phiBan≥phiMua).
   const uiPrevEff = new Date('2026-07-01T00:00:00').toISOString(); // LOCAL parse (KHÔNG 'Z') — như UI gửi
-  const setUiPrev = await setFeeRate({ partnerId: uiPartner.id, cardTypeId: uiCard.id, phiMua: 3, phiCaiMay: 1, effectiveFrom: uiPrevEff, sellQuotes: [{ feeTypeId: ft.id, phiBan: 2.5 }] });
+  const setUiPrev = await setFeeRate({ partnerId: uiPartner.id, cardTypeId: uiCard.id, phiMua: 3, phiCaiMay: 1, effectiveFrom: uiPrevEff, sellQuotes: [{ feeTypeId: ft.id, phiBan: 3.5 }] });
   ok('UI-path: lập kỳ 01/07 (parse local) → ok', setUiPrev.ok === true, setUiPrev);
-  // Kỳ 2026-08-01 (đường UI local): margin đối tác 4%, bán 3%.
+  // Kỳ 2026-08-01 (đường UI local): margin đối tác 4%, bán 4.5% (B86: phiBan≥phiMua).
   const uiAugEff = new Date('2026-08-01T00:00:00').toISOString(); // LOCAL parse (KHÔNG 'Z') — như UI gửi
-  const setUiAug = await setFeeRate({ partnerId: uiPartner.id, cardTypeId: uiCard.id, phiMua: 5, phiCaiMay: 1, effectiveFrom: uiAugEff, sellQuotes: [{ feeTypeId: ft.id, phiBan: 4 }] });
+  const setUiAug = await setFeeRate({ partnerId: uiPartner.id, cardTypeId: uiCard.id, phiMua: 5, phiCaiMay: 1, effectiveFrom: uiAugEff, sellQuotes: [{ feeTypeId: ft.id, phiBan: 5.5 }] });
   ok('UI-path: lập kỳ 01/08 (parse local) → ok', setUiAug.ok === true, setUiAug);
 
   // ✦ ASSERT LÕI B16/F1: ngày HIỂN THỊ = đúng ngày user nhập (không lệch −1 ngày trên UTC+7).
@@ -316,18 +316,18 @@ export async function runRevenueSelfTest(): Promise<number> {
   const gUiAug = await createTransaction({ feeTypeId: ft.id, tidId: uiTid.id, cardTypeId: uiCard.id, amount: 10_000_000, txnDate: new Date('2026-08-01T00:00:00').toISOString() });
   ok('UI-path: GD local 2026-08-01 → ok', gUiAug.ok === true, gUiAug);
   const tUiAug = await db.transaction.findUnique({ where: { id: gUiAug.id! } });
-  ok('UI-path: GD 2026-08-01 ăn kỳ 01/08 (margin 4000/3000)', tUiAug?.partnerMarginMilli === 4000 && tUiAug?.sellMarginMilli === 3000, { p: tUiAug?.partnerMarginMilli, s: tUiAug?.sellMarginMilli });
-  // ✦ GD đường UI: txnDate local 2026-07-31 → KHÔNG ăn kỳ 01/08, ăn kỳ trước 01/07 (margin 2000/1500).
+  ok('UI-path: GD 2026-08-01 ăn kỳ 01/08 (margin 4000/4500)', tUiAug?.partnerMarginMilli === 4000 && tUiAug?.sellMarginMilli === 4500, { p: tUiAug?.partnerMarginMilli, s: tUiAug?.sellMarginMilli });
+  // ✦ GD đường UI: txnDate local 2026-07-31 → KHÔNG ăn kỳ 01/08, ăn kỳ trước 01/07 (margin 2000/2500).
   const gUiJul = await createTransaction({ feeTypeId: ft.id, tidId: uiTid.id, cardTypeId: uiCard.id, amount: 10_000_000, txnDate: new Date('2026-07-31T00:00:00').toISOString() });
   ok('UI-path: GD local 2026-07-31 → ok', gUiJul.ok === true, gUiJul);
   const tUiJul = await db.transaction.findUnique({ where: { id: gUiJul.id! } });
-  ok('UI-path: GD 2026-07-31 KHÔNG ăn kỳ 01/08 — ăn kỳ 01/07 (margin 2000/1500)', tUiJul?.partnerMarginMilli === 2000 && tUiJul?.sellMarginMilli === 1500, { p: tUiJul?.partnerMarginMilli, s: tUiJul?.sellMarginMilli });
+  ok('UI-path: GD 2026-07-31 KHÔNG ăn kỳ 01/08 — ăn kỳ 01/07 (margin 2000/2500)', tUiJul?.partnerMarginMilli === 2000 && tUiJul?.sellMarginMilli === 2500, { p: tUiJul?.partnerMarginMilli, s: tUiJul?.sellMarginMilli });
 
   // ═══════════ M) FEE_MODEL — LOẠI PHÍ CHỈ ĐỔI PHÍ BÁN: chênh BÁN khác, chênh MUA GIỐNG ═══════════
   // Entities RIÊNG (không đụng đếm khối trên). 1 đối tác × 1 thẻ. Phí mua/cài CỐ ĐỊNH (phiMua 5%, phiCài 1%
-  // → CL_NCC 4% = 400.000 cho MỌI loại phí). Phí bán NIÊM YẾT KHÁC nhau theo loại phí:
-  //   • loại phí X: phiBán niêm yết 2.5% → CL_KH 1.5% (150.000) → doanh thu 400.000 + 150.000 = 550.000
-  //   • loại phí Y: phiBán niêm yết 4%   → CL_KH 3%   (300.000) → doanh thu 400.000 + 300.000 = 700.000
+  // → CL_NCC 4% = 400.000 cho MỌI loại phí). Phí bán NIÊM YẾT KHÁC nhau theo loại phí (B86: phiBan≥phiMua 5%):
+  //   • loại phí X: phiBán niêm yết 5.5% → CL_KH 4.5% (450.000) → doanh thu 400.000 + 450.000 = 850.000
+  //   • loại phí Y: phiBán niêm yết 6.5% → CL_KH 5.5% (550.000) → doanh thu 400.000 + 550.000 = 950.000
   const mBank = await db.bank.create({ data: { name: 'NH Loại Phí', code: 'MFTBANK' } });
   const mCard = await db.cardType.create({ data: { name: 'Thẻ Loại Phí', code: 'MFTND', bankId: mBank.id } });
   const mPartner = await db.partner.create({ data: { name: 'Đối tác Loại Phí', code: 'MFTP' } });
@@ -336,40 +336,40 @@ export async function runRevenueSelfTest(): Promise<number> {
   const ftX = await db.feeType.create({ data: { name: 'Ủy quyền MFT' } });
   const ftY = await db.feeType.create({ data: { name: 'Tiền chờ MFT' } });
   // 1 biểu phí: phí mua/cài CỐ ĐỊNH + 2 phí bán niêm yết (X=2.5, Y=4) — CÙNG (đối tác × thẻ × kỳ).
-  const setMFT = await setFeeRate({ partnerId: mPartner.id, cardTypeId: mCard.id, phiMua: 5, phiCaiMay: 1, effectiveFrom: '2026-01-01T00:00:00.000Z', sellQuotes: [{ feeTypeId: ftX.id, phiBan: 2.5 }, { feeTypeId: ftY.id, phiBan: 4 }] });
+  const setMFT = await setFeeRate({ partnerId: mPartner.id, cardTypeId: mCard.id, phiMua: 5, phiCaiMay: 1, effectiveFrom: '2026-01-01T00:00:00.000Z', sellQuotes: [{ feeTypeId: ftX.id, phiBan: 5.5 }, { feeTypeId: ftY.id, phiBan: 6.5 }] });
   ok('lập biểu phí (mua/cài cố định + 2 phí bán niêm yết X/Y) → ok', setMFT.ok === true, setMFT);
   // 2 GD CÙNG (đối tác × thẻ), KHÁC loại phí → chênh MUA GIỐNG (4000), chênh BÁN KHÁC.
   const gX = await createTransaction({ feeTypeId: ftX.id, tidId: mTid.id, cardTypeId: mCard.id, amount: 10_000_000, txnDate: '2026-06-15T00:00:00.000Z' });
   const gY = await createTransaction({ feeTypeId: ftY.id, tidId: mTid.id, cardTypeId: mCard.id, amount: 10_000_000, txnDate: '2026-06-15T00:00:00.000Z' });
   const tX = await db.transaction.findUnique({ where: { id: gX.id! } });
   const tY = await db.transaction.findUnique({ where: { id: gY.id! } });
-  ok('GD loại phí X: chênh MUA 4000, chênh BÁN 1500 → doanh thu 550.000', tX?.partnerMarginMilli === 4000 && tX?.sellMarginMilli === 1500 && Number(tX?.revenueAmount) === 550_000, { p: tX?.partnerMarginMilli, s: tX?.sellMarginMilli, rev: tX?.revenueAmount });
-  ok('GD loại phí Y: chênh MUA 4000 (GIỐNG X), chênh BÁN 3000 (KHÁC) → doanh thu 700.000', tY?.partnerMarginMilli === 4000 && tY?.sellMarginMilli === 3000 && Number(tY?.revenueAmount) === 700_000, { p: tY?.partnerMarginMilli, s: tY?.sellMarginMilli, rev: tY?.revenueAmount });
+  ok('GD loại phí X: chênh MUA 4000, chênh BÁN 4500 → doanh thu 850.000', tX?.partnerMarginMilli === 4000 && tX?.sellMarginMilli === 4500 && Number(tX?.revenueAmount) === 850_000, { p: tX?.partnerMarginMilli, s: tX?.sellMarginMilli, rev: tX?.revenueAmount });
+  ok('GD loại phí Y: chênh MUA 4000 (GIỐNG X), chênh BÁN 5500 (KHÁC) → doanh thu 950.000', tY?.partnerMarginMilli === 4000 && tY?.sellMarginMilli === 5500 && Number(tY?.revenueAmount) === 950_000, { p: tY?.partnerMarginMilli, s: tY?.sellMarginMilli, rev: tY?.revenueAmount });
   ok('chênh MUA của X và Y GIỐNG NHAU (loại phí không đổi phí mua)', tX?.partnerMarginMilli === tY?.partnerMarginMilli, { x: tX?.partnerMarginMilli, y: tY?.partnerMarginMilli });
   ok('GD lưu đúng feeTypeId (X/Y)', tX?.feeTypeId === ftX.id && tY?.feeTypeId === ftY.id, { x: tX?.feeTypeId, y: tY?.feeTypeId });
-  // TidSellFee override loại phí X trên mTid = 3.0% → GD X sau đó dùng override (CL_KH 2000), loại Y vẫn niêm yết.
-  const ovX = await setTidSellFees({ tidId: mTid.id, feeTypeId: ftX.id, entries: [{ cardTypeId: mCard.id, phiBan: 3.0 }] });
-  ok('override phí bán TID loại phí X = 3.0% → ok', ovX.ok === true, ovX);
+  // TidSellFee override loại phí X trên mTid = 7.0% (B86: phải ≥ phí mua 5%) → GD X sau đó dùng override (CL_KH 6000), loại Y vẫn niêm yết.
+  const ovX = await setTidSellFees({ tidId: mTid.id, feeTypeId: ftX.id, entries: [{ cardTypeId: mCard.id, phiBan: 7.0 }] });
+  ok('override phí bán TID loại phí X = 7.0% → ok', ovX.ok === true, ovX);
   const gXo = await createTransaction({ feeTypeId: ftX.id, tidId: mTid.id, cardTypeId: mCard.id, amount: 10_000_000, txnDate: '2026-06-16T00:00:00.000Z' });
   const gYo = await createTransaction({ feeTypeId: ftY.id, tidId: mTid.id, cardTypeId: mCard.id, amount: 10_000_000, txnDate: '2026-06-16T00:00:00.000Z' });
   const tXo = await db.transaction.findUnique({ where: { id: gXo.id! } });
   const tYo = await db.transaction.findUnique({ where: { id: gYo.id! } });
-  ok('GD X sau override: chênh BÁN = override 3.0−1 = 2000 (doanh thu 400.000+200.000=600.000)', tXo?.sellMarginMilli === 2000 && Number(tXo?.revenueAmount) === 600_000, { s: tXo?.sellMarginMilli, rev: tXo?.revenueAmount });
-  ok('GD Y KHÔNG override → vẫn niêm yết (chênh BÁN 3000)', tYo?.sellMarginMilli === 3000, { s: tYo?.sellMarginMilli });
-  // BÁO CÁO TÁCH THEO LOẠI PHÍ: lọc theo TID này → 2 dòng. X = 550k + 600k = 1.150.000; Y = 700k + 700k = 1.400.000.
+  ok('GD X sau override: chênh BÁN = override 7.0−1 = 6000 (doanh thu 400.000+600.000=1.000.000)', tXo?.sellMarginMilli === 6000 && Number(tXo?.revenueAmount) === 1_000_000, { s: tXo?.sellMarginMilli, rev: tXo?.revenueAmount });
+  ok('GD Y KHÔNG override → vẫn niêm yết (chênh BÁN 5500)', tYo?.sellMarginMilli === 5500, { s: tYo?.sellMarginMilli });
+  // BÁO CÁO TÁCH THEO LOẠI PHÍ: lọc theo TID này → 2 dòng. X = 850k + 1.000k = 1.850.000; Y = 950k + 950k = 1.900.000.
   const bft = await revenueByFeeType({ tidId: mTid.id });
   ok('revenueByFeeType → ok, 2 dòng (2 loại phí)', bft.ok === true && bft.data?.length === 2, bft.data);
   const rowX = bft.data?.find((r) => r.feeTypeId === ftX.id);
   const rowY = bft.data?.find((r) => r.feeTypeId === ftY.id);
-  ok('breakdown loại phí X: 2 GD, doanh thu 1.150.000, tên đúng', rowX?.count === 2 && rowX?.totalRevenue === 1_150_000 && rowX?.feeTypeName === 'Ủy quyền MFT', rowX);
-  ok('breakdown loại phí Y: 2 GD, doanh thu 1.400.000, tên đúng', rowY?.count === 2 && rowY?.totalRevenue === 1_400_000 && rowY?.feeTypeName === 'Tiền chờ MFT', rowY);
-  ok('breakdown sắp doanh thu giảm dần: Y (1.4tr) đứng trước X (1.15tr)', bft.data?.[0]?.feeTypeId === ftY.id, bft.data?.map((r) => r.feeTypeId));
+  ok('breakdown loại phí X: 2 GD, doanh thu 1.850.000, tên đúng', rowX?.count === 2 && rowX?.totalRevenue === 1_850_000 && rowX?.feeTypeName === 'Ủy quyền MFT', rowX);
+  ok('breakdown loại phí Y: 2 GD, doanh thu 1.900.000, tên đúng', rowY?.count === 2 && rowY?.totalRevenue === 1_900_000 && rowY?.feeTypeName === 'Tiền chờ MFT', rowY);
+  ok('breakdown sắp doanh thu giảm dần: Y (1.9tr) đứng trước X (1.85tr)', bft.data?.[0]?.feeTypeId === ftY.id, bft.data?.map((r) => r.feeTypeId));
   // LỌC report theo 1 loại phí → chỉ dòng đó.
   const bftX = await revenueByFeeType({ tidId: mTid.id, feeTypeId: ftX.id });
   ok('revenueByFeeType lọc loại phí X → 1 dòng đúng loại X', bftX.data?.length === 1 && bftX.data?.[0]?.feeTypeId === ftX.id, bftX.data);
-  // LỌC danh sách GD theo loại phí Y → 2 GD Y (doanh thu 1.400.000).
+  // LỌC danh sách GD theo loại phí Y → 2 GD Y (doanh thu 1.900.000).
   const listY = await listTransactions({ tidId: mTid.id, feeTypeId: ftY.id });
-  ok('listTransactions lọc loại phí Y → 2 GD, doanh thu 1.400.000', listY.data?.length === 2 && listY.summary?.totalRevenue === 1_400_000 && listY.data?.[0]?.feeTypeName === 'Tiền chờ MFT', { len: listY.data?.length, sum: listY.summary?.totalRevenue });
+  ok('listTransactions lọc loại phí Y → 2 GD, doanh thu 1.900.000', listY.data?.length === 2 && listY.summary?.totalRevenue === 1_900_000 && listY.data?.[0]?.feeTypeName === 'Tiền chờ MFT', { len: listY.data?.length, sum: listY.summary?.totalRevenue });
 
   // ═══════════ I) PHÂN QUYỀN ═══════════
   await userSvc.createUser({ fullName: 'KH ngoài rev', username: 'custnorev', password: 'Cust@12345', roleCodes: ['CUSTOMER'] }).catch(() => undefined);

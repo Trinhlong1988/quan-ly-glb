@@ -346,13 +346,12 @@ function RateForm({ existing, partners, banks, feeTypes, onClose, onSaved }: { e
     for (const [label, v] of [['Phí mua', phiMua], ['Phí cài máy', phiCaiMay]] as const) {
       if (!validPct(v)) return toast.alert(`${label} không hợp lệ (≥ 0, tối đa 3 số thập phân).`, 'Giá trị không hợp lệ');
     }
-    if (Number(phiMua) < Number(phiCaiMay)) return toast.alert('Phí mua phải ≥ phí cài máy (chênh đối tác không được âm).', 'Giá trị không hợp lệ');
     if (feeTypes.length === 0) return toast.alert('Chưa có loại phí bán nào — thêm ở tab "Loại phí" trước khi đặt biểu phí.', 'Thiếu dữ liệu nền');
     const sellQuotes: { feeTypeId: number; phiBan: number }[] = [];
     for (const f of feeTypes) {
       const raw = (quotes[f.id] ?? '').trim();
       if (!validPct(raw)) return toast.alert(`Phí bán niêm yết loại phí "${f.name}" không hợp lệ (≥ 0, tối đa 3 số thập phân).`, 'Giá trị không hợp lệ');
-      if (Number(raw) < Number(phiCaiMay)) return toast.alert(`Phí bán niêm yết loại phí "${f.name}" phải ≥ phí cài máy (chênh bán không được âm).`, 'Giá trị không hợp lệ');
+      if (Number(raw) < Number(phiMua)) return toast.alert(`Phí bán niêm yết loại phí "${f.name}" phải ≥ phí mua (bán thấp hơn mua là lỗ).`, 'Giá trị không hợp lệ');
       sellQuotes.push({ feeTypeId: f.id, phiBan: Number(raw) });
     }
     if (!effectiveFrom) return toast.alert('Vui lòng chọn ngày hiệu lực.', 'Thiếu thông tin');
